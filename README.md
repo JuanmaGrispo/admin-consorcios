@@ -38,16 +38,20 @@ Atajos: `pnpm back <script>` y `pnpm front <script>` corren scripts de cada app
 
 ## Arquitectura del backend
 
-Capas, de afuera hacia adentro. La regla: cada capa solo conoce a la de abajo.
+Cada módulo de negocio vive en `src/modules/<nombre>/` y se compone de:
 
-| Capa | Qué hace | Qué NO hace |
-|---|---|---|
-| `controllers` | HTTP: rutas, DTOs, validación | Lógica de negocio |
-| `services` | Reglas de negocio | Hablar HTTP o SQL |
-| `repositories` | Acceso a datos (TypeORM) | Decidir negocio |
-| `clients` | APIs externas | Filtrar al resto del código |
+```
+<nombre>.module.ts       cableado del módulo
+<nombre>.controller.ts   HTTP: rutas, DTOs, validación de borde
+<nombre>.service.ts      reglas de negocio
+<nombre>.repository.ts   acceso a datos (TypeORM) — si tiene db
+<nombre>.entities.ts     entidades del módulo
+<nombre>.client.ts       API externa — si consume una
+```
 
-Cada módulo de negocio vive en `src/modules/<nombre>/` con sus capas adentro.
+La regla: el controller habla con el service, el service con el repository y
+el client. Nadie saltea capas ni hace fetch/SQL por afuera.
+
 `src/modules/consorcios/` es el ejemplo de referencia: copiá esa forma para
 cada módulo nuevo. Lo transversal (health, auth futura) va en `src/core/`.
 

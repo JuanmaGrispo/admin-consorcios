@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Consorcio } from './entities/consorcio.entity';
+import { Consorcio } from './consorcios.entities';
 
 /**
  * Única puerta a la tabla `consorcios`. El service habla con esta clase,
