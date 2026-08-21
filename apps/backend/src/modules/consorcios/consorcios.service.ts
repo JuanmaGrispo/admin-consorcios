@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConsorciosRepository } from './consorcios.repository';
 import { CreateConsorcioDto } from './dto/create-consorcio.dto';
 import { UpdateConsorcioDto } from './dto/update-consorcio.dto';
-import { Consorcio } from './entities/consorcio.entity';
+import { Consorcio } from './consorcios.entities';
 
 @Injectable()
 export class ConsorciosService {

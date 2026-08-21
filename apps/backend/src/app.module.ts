@@ -1,26 +1,27 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ClientsModule } from './clients/clients.module';
 import { CoreModule } from './core/core.module';
 import { DatabaseModule } from './database/database.module';
 import { ConsorciosModule } from './modules/consorcios/consorcios.module';
 
 /**
- * Capas del backend, de afuera hacia adentro:
+ * Cada módulo de negocio vive en `modules/<nombre>/` y se compone de:
  *
- *   controllers   HTTP: rutas, DTOs, validación de borde. No saben de negocio.
- *   services      Reglas de negocio. No saben de HTTP ni de SQL.
- *   repositories  Acceso a datos (TypeORM). No saben de negocio.
- *   clients       APIs externas. Traducen el mundo de afuera a tipos nuestros.
+ *   <nombre>.module.ts       cableado del módulo
+ *   <nombre>.controller.ts   HTTP: rutas, DTOs, validación de borde
+ *   <nombre>.service.ts      reglas de negocio
+ *   <nombre>.repository.ts   acceso a datos (TypeORM) — si tiene db
+ *   <nombre>.entities.ts     entidades del módulo
+ *   <nombre>.client.ts       API externa — si consume una
  *
- * Cada módulo de negocio vive en `modules/<nombre>/` con sus cuatro capas adentro.
+ * `consorcios/` es el ejemplo de referencia. Lo transversal (health, auth
+ * futura) va en `core/`.
  */
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
     CoreModule,
-    ClientsModule,
 
     // ── Módulos de negocio ──
     ConsorciosModule,
