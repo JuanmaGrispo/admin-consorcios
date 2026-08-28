@@ -56,6 +56,16 @@ el client. Nadie saltea capas ni hace fetch/SQL por afuera.
 `src/modules/consorcios/` es el ejemplo de referencia: copiá esa forma para
 cada módulo nuevo. Lo transversal (health, auth futura) va en `src/core/`.
 
+## Diagrama de capas
+
+[Diagrama de capas del sistema](https://app.diagrams.net/#G1MuyywLjsQhaBU75UJVVgfVFXkNM3FEkJ#%7B%22pageId%22%3A%22F38rSkYnARai5AXldVDs%22%7D)
+
+Cubre las cuatro capas (portales, controllers REST, servicios, repositorios) y
+las integraciones externas: MercadoPago para pagos y NodeMailer para
+comunicados. El archivo vive en Google Drive y se edita en draw.io, así que el
+link siempre abre la última versión. Para verlo hace falta permiso de lectura
+sobre el archivo; pedíselo a Ignacio.
+
 ## Base de datos
 
 En desarrollo, `DB_SYNC=true` sincroniza el esquema con las entidades al
