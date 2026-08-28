@@ -1,5 +1,6 @@
 # admin-consorcios
 
+Integrantes: Ignacio Alcaraz, Patricio Vecino, Juanmanuel Grispo, Felipe Vega Torre, Martin Capece
 Sistema de administración de consorcios. TP de Desarrollo de Aplicaciones 2 (UADE).
 
 Monorepo pnpm con dos apps:
