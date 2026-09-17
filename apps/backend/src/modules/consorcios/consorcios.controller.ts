@@ -33,13 +33,15 @@ export class ConsorciosController {
     return this.consorcios.findOne(id);
   }
 
-  @Roles(RolUsuario.ADMINISTRADOR)
+  // Crear, modificar y borrar consorcios es del dueño del SaaS, no de los
+  // administradores de cada edificio.
+  @Roles(RolUsuario.SUPER_ADMIN)
   @Post()
   create(@Body() dto: CreateConsorcioDto) {
     return this.consorcios.create(dto);
   }
 
-  @Roles(RolUsuario.ADMINISTRADOR)
+  @Roles(RolUsuario.SUPER_ADMIN)
   @Patch(':id')
   update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -48,7 +50,7 @@ export class ConsorciosController {
     return this.consorcios.update(id, dto);
   }
 
-  @Roles(RolUsuario.ADMINISTRADOR)
+  @Roles(RolUsuario.SUPER_ADMIN)
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string) {
