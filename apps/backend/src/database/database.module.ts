@@ -1,24 +1,36 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { buildConnectionOptions } from './database.options';
+import * as entities from './entities';
+
+/**
+ * Las entidades salen del barrel generado (`entities/index.ts`), no de
+ * `autoLoadEntities`: el esquema completo tiene que estar registrado siempre,
+ * aunque todavía no exista un módulo de negocio para cada tabla. Si sólo se
+ * cargaran las del `forFeature` de cada módulo, una relación hacia una tabla
+ * sin módulo rompería el arranque.
+ *
+ * Como el barrel se regenera desde la base, sumar una tabla allá la registra
+ * acá sin tocar este archivo.
+ */
+// El barrel exporta clases y enums mezclados; las entidades son las clases.
+const ENTIDADES = Object.values(entities).filter(
+  (exportado) => typeof exportado === 'function',
+) as Function[];
 
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        host: config.get<string>('DB_HOST', 'localhost'),
-        port: config.get<number>('DB_PORT', 5432),
-        username: config.get<string>('DB_USER', 'postgres'),
-        password: config.get<string>('DB_PASSWORD', 'postgres'),
-        database: config.get<string>('DB_NAME', 'admin_consorcios'),
-        // Las entidades se registran solas vía TypeOrmModule.forFeature en cada módulo;
-        // autoLoadEntities evita mantener una lista central que siempre queda vieja.
-        autoLoadEntities: true,
-        // synchronize solo en desarrollo. En producción el esquema se mueve con
-        // migraciones (ver data-source.ts y los scripts migration:* del package.json).
-        synchronize: config.get<string>('DB_SYNC') === 'true',
+        // Host/puerto/credenciales salen de database.options para que la app y la
+        // CLI de migraciones no puedan quedar apuntando a bases distintas.
+        ...buildConnectionOptions((key) => config.get<string>(key)),
+        entities: ENTIDADES,
+        // Siempre false: el esquema lo manda la base, no el código. Las entidades
+        // se regeneran con `pnpm back db:generate-entities`.
+        synchronize: false,
       }),
     }),
   ],
