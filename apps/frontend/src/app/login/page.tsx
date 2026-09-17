@@ -2,6 +2,17 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import { ApiError } from '@/lib/api';
 import { authService } from '@/services/auth';
 
@@ -32,63 +43,57 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-6">
+    <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-lg bg-accent" />
+        <div className="mb-6 flex items-center gap-2.5">
+          <div className="size-8 rounded-lg bg-primary" />
           <span className="text-xl font-semibold tracking-tight">Domus</span>
         </div>
 
-        <div className="rounded-xl border border-line bg-surface p-6 shadow-card">
-          <h1 className="text-lg font-semibold">Iniciar sesión</h1>
-          <p className="mt-1 text-sm text-muted">
-            Panel de administración de la plataforma
-          </p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Iniciar sesión</CardTitle>
+            <CardDescription>Panel de administración de la plataforma</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={onSubmit}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="password">Contraseña</FieldLabel>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </Field>
 
-          <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium tracking-wide text-ink-2 uppercase">
-                Email
-              </span>
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent focus:bg-surface"
-              />
-            </label>
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium tracking-wide text-ink-2 uppercase">
-                Contraseña
-              </span>
-              <input
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent focus:bg-surface"
-              />
-            </label>
-
-            {error && (
-              <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={enviando}
-              className="mt-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {enviando ? 'Ingresando…' : 'Ingresar'}
-            </button>
-          </form>
-        </div>
+                <Button type="submit" disabled={enviando} className="w-full">
+                  {enviando ? 'Ingresando…' : 'Ingresar'}
+                </Button>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </main>
   );
