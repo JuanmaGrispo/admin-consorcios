@@ -343,6 +343,8 @@ const SQL_COLS = `
     JOIN information_schema.tables t
       ON t.table_name = c.table_name AND t.table_schema = c.table_schema
    WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE'
+     -- Infraestructura de TypeORM, no dominio: no le generamos entity.
+     AND c.table_name <> 'migrations'
    ORDER BY c.table_name, c.ordinal_position`;
 
 const SQL_CONSTRAINTS = `

@@ -148,6 +148,7 @@ export enum ResultadoVotacion {
 export enum RolUsuario {
   ADMINISTRADOR = 'ADMINISTRADOR',
   VECINO = 'VECINO',
+  SUPER_ADMIN = 'SUPER_ADMIN',
 }
 
 export enum TipoAdjunto {
