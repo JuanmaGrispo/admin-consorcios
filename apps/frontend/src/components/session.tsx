@@ -8,6 +8,16 @@ import {
   useEffect,
   useState,
 } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { authService } from '@/services/auth';
 import type { Usuario } from '@/types/usuario';
 
@@ -70,28 +80,42 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
 
   if (estado === 'cargando') {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted">
-        Cargando…
+      <div className="flex min-h-screen">
+        <div className="hidden w-64 border-r p-4 md:block">
+          <Skeleton className="h-7 w-28" />
+          <Skeleton className="mt-8 h-8 w-full" />
+        </div>
+        <div className="flex-1 p-6 lg:p-8">
+          <Skeleton className="h-8 w-48" />
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+          <Skeleton className="mt-6 h-64" />
+        </div>
       </div>
     );
   }
 
   if (estado === 'sin-permiso') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
-        <div className="rounded-xl border border-line bg-surface p-8 shadow-card">
-          <h1 className="text-lg font-semibold">Sin acceso</h1>
-          <p className="mt-2 max-w-sm text-sm text-muted">
-            Este panel es exclusivo del administrador de la plataforma. Tu
-            cuenta ({usuario?.email}) no tiene ese rol.
-          </p>
-          <button
-            onClick={cerrarSesion}
-            className="mt-6 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-          >
-            Cerrar sesión
-          </button>
-        </div>
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader>
+            <CardTitle>Sin acceso</CardTitle>
+            <CardDescription>
+              Este panel es exclusivo del administrador de la plataforma. Tu
+              cuenta ({usuario?.email}) no tiene ese rol.
+            </CardDescription>
+          </CardHeader>
+          <CardContent />
+          <CardFooter>
+            <Button onClick={cerrarSesion} className="w-full">
+              Cerrar sesión
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
     );
   }

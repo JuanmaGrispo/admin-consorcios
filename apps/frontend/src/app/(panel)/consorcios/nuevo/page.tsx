@@ -17,11 +17,11 @@ export default function NuevoConsorcioPage() {
   return (
     <>
       <header>
-        <Link href="/" className="text-xs font-medium text-muted hover:text-ink">
+        <Link href="/" className="text-xs font-medium text-muted-foreground hover:text-foreground">
           ← Consorcios
         </Link>
         <h1 className="mt-2 text-2xl font-bold tracking-tight">Nuevo consorcio</h1>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-1 text-sm text-muted-foreground">
           Alta de un edificio en la plataforma: identidad, administrador
           responsable y reglas de liquidación.
         </p>
