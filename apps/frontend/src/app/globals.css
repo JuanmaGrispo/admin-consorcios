@@ -1,1 +1,133 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+/*
+ * Design system Domus sobre los tokens semánticos de shadcn.
+ *
+ * Una sola fuente de verdad: los valores del prototipo (paleta cálida y clara)
+ * viven en :root con los NOMBRES de shadcn (--background, --primary, …), y los
+ * componentes de src/components/ui los consumen tal cual. No hay tokens
+ * paralelos "de Domus": si algo del wireframe no tiene equivalente en shadcn
+ * (los estados success/warning), se agrega acá abajo con el mismo criterio.
+ *
+ * No hay modo oscuro. El producto es siempre light, a propósito.
+ */
+
+@theme inline {
+  /* Literal, no var(): @theme inline resuelve en tiempo de parseo y la variable
+     de next/font recién existe en runtime. "IBM Plex Sans Fallback" la genera
+     next/font con métricas ajustadas para que no salte el layout. */
+  --font-sans: 'IBM Plex Sans', 'IBM Plex Sans Fallback', Helvetica, sans-serif;
+  --font-heading: var(--font-sans);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Estados que el wireframe usa y shadcn no trae de fábrica. */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+
+  --shadow-card: 0 1px 2px rgba(27, 25, 23, 0.05);
+}
+
+:root {
+  /* Lienzo y superficies: fondo cálido, cards blancas. */
+  --background: #f7f6f3;
+  --foreground: #1b1917;
+  --card: #ffffff;
+  --card-foreground: #1b1917;
+  --popover: #ffffff;
+  --popover-foreground: #1b1917;
+
+  /* Un solo acento: el azul Domus. */
+  --primary: oklch(0.52 0.11 254);
+  --primary-foreground: #ffffff;
+
+  /* Superficie secundaria (surface2 del prototipo) y texto secundario. */
+  --secondary: #fbfaf8;
+  --secondary-foreground: #4a463f;
+  --muted: #fbfaf8;
+  --muted-foreground: #7a746b;
+
+  /* Accent = el azul en versión suave: item activo del menú, hover, chips. */
+  --accent: oklch(0.95 0.02 254);
+  --accent-foreground: oklch(0.52 0.11 254);
+
+  --destructive: oklch(0.53 0.16 25);
+  --destructive-foreground: #ffffff;
+  --success: oklch(0.52 0.11 155);
+  --success-foreground: #ffffff;
+  --warning: oklch(0.62 0.12 72);
+  --warning-foreground: #ffffff;
+
+  --border: #e6e3dd;
+  --input: #e6e3dd;
+  --ring: oklch(0.52 0.11 254);
+
+  --radius: 0.625rem;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1b1917;
+  --sidebar-primary: oklch(0.52 0.11 254);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: oklch(0.95 0.02 254);
+  --sidebar-accent-foreground: oklch(0.52 0.11 254);
+  --sidebar-border: #e6e3dd;
+  --sidebar-ring: oklch(0.52 0.11 254);
+
+  --chart-1: oklch(0.52 0.11 254);
+  --chart-2: oklch(0.52 0.11 155);
+  --chart-3: oklch(0.62 0.12 72);
+  --chart-4: oklch(0.53 0.16 25);
+  --chart-5: #7a746b;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
