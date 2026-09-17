@@ -1,6 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { ApiError } from '@/lib/api';
 import { usuariosService } from '@/services/usuarios';
 import type { Consorcio, ConsorcioInput, PeriodicidadMora } from '@/types/consorcio';
@@ -51,46 +70,6 @@ function desdeConsorcio(c?: Consorcio): Campos {
     quorumDefault: String(c?.quorumDefault ?? 60),
     activo: c?.activo ?? true,
   };
-}
-
-const inputCls =
-  'rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm outline-none focus:border-accent focus:bg-surface';
-
-function Campo({
-  etiqueta,
-  children,
-  ancho = '',
-}: {
-  etiqueta: string;
-  children: React.ReactNode;
-  ancho?: string;
-}) {
-  return (
-    <label className={`flex flex-col gap-1.5 ${ancho}`}>
-      <span className="text-xs font-medium tracking-wide text-ink-2 uppercase">
-        {etiqueta}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function Seccion({
-  titulo,
-  detalle,
-  children,
-}: {
-  titulo: string;
-  detalle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border border-line bg-surface p-5 shadow-card">
-      <h2 className="text-sm font-semibold">{titulo}</h2>
-      {detalle && <p className="mt-0.5 text-xs text-muted">{detalle}</p>}
-      <div className="mt-4">{children}</div>
-    </section>
-  );
 }
 
 export function ConsorcioForm({ inicial, textoBoton, onSubmit }: Props) {
@@ -178,227 +157,269 @@ export function ConsorcioForm({ inicial, textoBoton, onSubmit }: Props) {
 
   return (
     <form onSubmit={enviar} className="flex flex-col gap-4">
-      <Seccion titulo="Identidad">
-        <div className="grid grid-cols-3 gap-4">
-          <Campo etiqueta="Nombre" ancho="col-span-2">
-            <input
+      <Card>
+        <CardHeader>
+          <CardTitle>Identidad</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-3">
+          <Field className="sm:col-span-2">
+            <FieldLabel htmlFor="nombre">Nombre</FieldLabel>
+            <Input
+              id="nombre"
               required
               value={campos.nombre}
               onChange={(e) => set('nombre', e.target.value)}
               placeholder="Edificio Libertador 1234"
-              className={inputCls}
             />
-          </Campo>
-          <Campo etiqueta="Estado">
-            <button
-              type="button"
-              onClick={() => set('activo', !campos.activo)}
-              className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm font-medium ${
-                campos.activo
-                  ? 'border-line bg-ok-soft text-ok'
-                  : 'border-line bg-bad-soft text-bad'
-              }`}
-            >
-              {campos.activo ? 'Activo' : 'Inactivo'}
-              <span className="text-xs opacity-70">cambiar</span>
-            </button>
-          </Campo>
-        </div>
-      </Seccion>
+          </Field>
+          <Field orientation="horizontal" className="sm:mt-6">
+            <Switch
+              id="activo"
+              checked={campos.activo}
+              onCheckedChange={(v) => set('activo', v)}
+            />
+            <FieldLabel htmlFor="activo">{campos.activo ? 'Activo' : 'Inactivo'}</FieldLabel>
+          </Field>
+        </CardContent>
+      </Card>
 
-      <Seccion
-        titulo="Administrador"
-        detalle="El responsable del consorcio en la plataforma. Tiene que ser un usuario con rol ADMINISTRADOR."
-      >
-        <div className="grid grid-cols-3 gap-4">
-          <Campo etiqueta="Administrador asignado" ancho="col-span-2">
-            <select
-              value={campos.administradorId}
-              onChange={(e) => set('administradorId', e.target.value)}
-              className={inputCls}
-            >
-              <option value="">Elegir…</option>
-              {admins.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.apellido}, {a.nombre} · {a.email}
-                </option>
-              ))}
-            </select>
-          </Campo>
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={() => setCreandoAdmin((v) => !v)}
-              className="w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm font-medium text-ink-2 hover:bg-accent-soft hover:text-accent"
-            >
-              {creandoAdmin ? 'Cancelar' : '+ Crear administrador'}
-            </button>
-          </div>
-        </div>
-
-        {creandoAdmin && (
-          <div className="mt-4 rounded-lg border border-line-2 bg-surface-2 p-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Campo etiqueta="Nombre">
-                <input
-                  value={nuevoAdmin.nombre}
-                  onChange={(e) => setNuevoAdmin({ ...nuevoAdmin, nombre: e.target.value })}
-                  className={inputCls}
-                />
-              </Campo>
-              <Campo etiqueta="Apellido">
-                <input
-                  value={nuevoAdmin.apellido}
-                  onChange={(e) => setNuevoAdmin({ ...nuevoAdmin, apellido: e.target.value })}
-                  className={inputCls}
-                />
-              </Campo>
-              <Campo etiqueta="Email">
-                <input
-                  type="email"
-                  value={nuevoAdmin.email}
-                  onChange={(e) => setNuevoAdmin({ ...nuevoAdmin, email: e.target.value })}
-                  className={inputCls}
-                />
-              </Campo>
-              <Campo etiqueta="Contraseña (mín. 8)">
-                <input
-                  type="password"
-                  value={nuevoAdmin.password}
-                  onChange={(e) => setNuevoAdmin({ ...nuevoAdmin, password: e.target.value })}
-                  className={inputCls}
-                />
-              </Campo>
+      <Card>
+        <CardHeader>
+          <CardTitle>Administrador</CardTitle>
+          <CardDescription>
+            El responsable del consorcio en la plataforma. Tiene que ser un
+            usuario con rol ADMINISTRADOR.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field className="sm:col-span-2">
+              <FieldLabel htmlFor="administrador">Administrador asignado</FieldLabel>
+              <Select
+                value={campos.administradorId}
+                onValueChange={(v) => set('administradorId', v)}
+              >
+                <SelectTrigger id="administrador" className="w-full">
+                  <SelectValue placeholder="Elegir…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {admins.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.apellido}, {a.nombre} · {a.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <div className="flex sm:items-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => setCreandoAdmin((v) => !v)}
+              >
+                {creandoAdmin ? 'Cancelar' : '+ Crear administrador'}
+              </Button>
             </div>
-            {errorAdmin && <p className="mt-3 text-sm text-bad">{errorAdmin}</p>}
-            <button
-              type="button"
-              onClick={crearAdmin}
-              disabled={guardandoAdmin}
-              className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-            >
-              {guardandoAdmin ? 'Creando…' : 'Crear y asignar'}
-            </button>
           </div>
-        )}
-      </Seccion>
 
-      <Seccion titulo="Domicilio">
-        <div className="grid grid-cols-6 gap-4">
-          <Campo etiqueta="Calle" ancho="col-span-3">
-            <input value={campos.calle} onChange={(e) => set('calle', e.target.value)} className={inputCls} />
-          </Campo>
-          <Campo etiqueta="Número">
-            <input value={campos.numero} onChange={(e) => set('numero', e.target.value)} className={inputCls} />
-          </Campo>
-          <Campo etiqueta="Barrio" ancho="col-span-2">
-            <input value={campos.barrio} onChange={(e) => set('barrio', e.target.value)} className={inputCls} />
-          </Campo>
-          <Campo etiqueta="Ciudad" ancho="col-span-2">
-            <input value={campos.ciudad} onChange={(e) => set('ciudad', e.target.value)} className={inputCls} />
-          </Campo>
-          <Campo etiqueta="Provincia" ancho="col-span-2">
-            <input value={campos.provincia} onChange={(e) => set('provincia', e.target.value)} className={inputCls} />
-          </Campo>
-          <Campo etiqueta="Código postal" ancho="col-span-2">
-            <input value={campos.cp} onChange={(e) => set('cp', e.target.value)} className={inputCls} />
-          </Campo>
-        </div>
-      </Seccion>
+          {creandoAdmin && (
+            <div className="rounded-lg bg-muted p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="adm-nombre">Nombre</FieldLabel>
+                  <Input
+                    id="adm-nombre"
+                    value={nuevoAdmin.nombre}
+                    onChange={(e) => setNuevoAdmin({ ...nuevoAdmin, nombre: e.target.value })}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="adm-apellido">Apellido</FieldLabel>
+                  <Input
+                    id="adm-apellido"
+                    value={nuevoAdmin.apellido}
+                    onChange={(e) => setNuevoAdmin({ ...nuevoAdmin, apellido: e.target.value })}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="adm-email">Email</FieldLabel>
+                  <Input
+                    id="adm-email"
+                    type="email"
+                    value={nuevoAdmin.email}
+                    onChange={(e) => setNuevoAdmin({ ...nuevoAdmin, email: e.target.value })}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="adm-password">Contraseña</FieldLabel>
+                  <Input
+                    id="adm-password"
+                    type="password"
+                    value={nuevoAdmin.password}
+                    onChange={(e) => setNuevoAdmin({ ...nuevoAdmin, password: e.target.value })}
+                  />
+                  <FieldDescription>Mínimo 8 caracteres.</FieldDescription>
+                </Field>
+              </div>
+              {errorAdmin && (
+                <Alert variant="destructive" className="mt-3">
+                  <AlertDescription>{errorAdmin}</AlertDescription>
+                </Alert>
+              )}
+              <Button
+                type="button"
+                onClick={crearAdmin}
+                disabled={guardandoAdmin}
+                className="mt-3"
+              >
+                {guardandoAdmin ? 'Creando…' : 'Crear y asignar'}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      <Seccion titulo="Datos fiscales">
-        <div className="grid grid-cols-2 gap-4">
-          <Campo etiqueta="CUIT">
-            <input
+      <Card>
+        <CardHeader>
+          <CardTitle>Domicilio</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+          <Field className="sm:col-span-2 lg:col-span-3">
+            <FieldLabel htmlFor="calle">Calle</FieldLabel>
+            <Input id="calle" value={campos.calle} onChange={(e) => set('calle', e.target.value)} />
+          </Field>
+          <Field className="lg:col-span-1">
+            <FieldLabel htmlFor="numero">Número</FieldLabel>
+            <Input id="numero" value={campos.numero} onChange={(e) => set('numero', e.target.value)} />
+          </Field>
+          <Field className="lg:col-span-2">
+            <FieldLabel htmlFor="barrio">Barrio</FieldLabel>
+            <Input id="barrio" value={campos.barrio} onChange={(e) => set('barrio', e.target.value)} />
+          </Field>
+          <Field className="lg:col-span-2">
+            <FieldLabel htmlFor="ciudad">Ciudad</FieldLabel>
+            <Input id="ciudad" value={campos.ciudad} onChange={(e) => set('ciudad', e.target.value)} />
+          </Field>
+          <Field className="lg:col-span-2">
+            <FieldLabel htmlFor="provincia">Provincia</FieldLabel>
+            <Input id="provincia" value={campos.provincia} onChange={(e) => set('provincia', e.target.value)} />
+          </Field>
+          <Field className="lg:col-span-2">
+            <FieldLabel htmlFor="cp">Código postal</FieldLabel>
+            <Input id="cp" value={campos.cp} onChange={(e) => set('cp', e.target.value)} />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Datos fiscales</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Field>
+            <FieldLabel htmlFor="cuit">CUIT</FieldLabel>
+            <Input
+              id="cuit"
               value={campos.cuit}
               onChange={(e) => set('cuit', e.target.value)}
               placeholder="30-12345678-9"
-              className={inputCls}
             />
-          </Campo>
-          <Campo etiqueta="CBU (cuenta del consorcio)">
-            <input
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="cbu">CBU (cuenta del consorcio)</FieldLabel>
+            <Input
+              id="cbu"
               value={campos.cbu}
               onChange={(e) => set('cbu', e.target.value)}
               maxLength={22}
-              className={inputCls}
             />
-          </Campo>
-        </div>
-      </Seccion>
+          </Field>
+        </CardContent>
+      </Card>
 
-      <Seccion
-        titulo="Reglas de liquidación"
-        detalle="Parámetros con los que se emiten las expensas de este consorcio."
-      >
-        <div className="grid grid-cols-5 gap-4">
-          <Campo etiqueta="Día de vencimiento">
-            <input
+      <Card>
+        <CardHeader>
+          <CardTitle>Reglas de liquidación</CardTitle>
+          <CardDescription>
+            Parámetros con los que se emiten las expensas de este consorcio.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <Field>
+            <FieldLabel htmlFor="vencimiento">Día de vencimiento</FieldLabel>
+            <Input
+              id="vencimiento"
               type="number"
               min={1}
               max={31}
               value={campos.diaVencimiento}
               onChange={(e) => set('diaVencimiento', e.target.value)}
-              className={inputCls}
             />
-          </Campo>
-          <Campo etiqueta="Interés por mora (%)">
-            <input
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="mora">Interés por mora (%)</FieldLabel>
+            <Input
+              id="mora"
               type="number"
               min={0}
               step="0.01"
               value={campos.tasaInteresMora}
               onChange={(e) => set('tasaInteresMora', e.target.value)}
-              className={inputCls}
             />
-          </Campo>
-          <Campo etiqueta="Periodicidad de mora">
-            <select
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="periodicidad">Periodicidad de mora</FieldLabel>
+            <Select
               value={campos.periodicidadMora}
-              onChange={(e) => set('periodicidadMora', e.target.value as PeriodicidadMora)}
-              className={inputCls}
+              onValueChange={(v) => set('periodicidadMora', v as PeriodicidadMora)}
             >
-              <option value="MENSUAL">Mensual</option>
-              <option value="DIARIA">Diaria</option>
-            </select>
-          </Campo>
-          <Campo etiqueta="Fondo de reserva (%)">
-            <input
+              <SelectTrigger id="periodicidad" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="MENSUAL">Mensual</SelectItem>
+                <SelectItem value="DIARIA">Diaria</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="reserva">Fondo de reserva (%)</FieldLabel>
+            <Input
+              id="reserva"
               type="number"
               min={0}
               max={100}
               step="0.01"
               value={campos.porcentajeFondoReserva}
               onChange={(e) => set('porcentajeFondoReserva', e.target.value)}
-              className={inputCls}
             />
-          </Campo>
-          <Campo etiqueta="Quórum asambleas (%)">
-            <input
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="quorum">Quórum asambleas (%)</FieldLabel>
+            <Input
+              id="quorum"
               type="number"
               min={0}
               max={100}
               step="0.01"
               value={campos.quorumDefault}
               onChange={(e) => set('quorumDefault', e.target.value)}
-              className={inputCls}
             />
-          </Campo>
-        </div>
-      </Seccion>
+          </Field>
+        </CardContent>
+      </Card>
 
       {error && (
-        <p className="rounded-lg bg-bad-soft px-4 py-3 text-sm text-bad">{error}</p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={enviando}
-          className="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-        >
+        <Button type="submit" disabled={enviando} className="w-full sm:w-auto">
           {enviando ? 'Guardando…' : textoBoton}
-        </button>
+        </Button>
       </div>
     </form>
   );
