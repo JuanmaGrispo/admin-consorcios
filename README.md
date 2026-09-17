@@ -229,9 +229,14 @@ peguen al instante.
 
 ## Panel superadmin (frontend)
 
-`apps/frontend` es hoy el panel del dueño de la plataforma, con el design
-system **Domus** del prototipo (IBM Plex Sans, paleta clara cálida, sin modo
-oscuro). Cubre el ciclo completo de un consorcio:
+`apps/frontend` es hoy el panel del dueño de la plataforma. Está construido
+con **shadcn/ui** (Radix + Tailwind 4) y el design system **Domus** del
+prototipo mapeado sobre los tokens de shadcn: IBM Plex Sans, paleta clara
+cálida, un solo acento azul, sin modo oscuro. Es responsive: en mobile la
+sidebar se vuelve un Sheet y los grids colapsan a una columna. Las reglas de
+UI (qué componente usar, qué tokens, qué no hacer) están en
+[`apps/frontend/CLAUDE.md`](apps/frontend/CLAUDE.md). Cubre el ciclo completo
+de un consorcio:
 
 - **Login** con cookie httpOnly. `src/proxy.ts` redirige a `/login` si no hay
   cookie; la validación real (firma, expiración, rol) la hace el backend en
