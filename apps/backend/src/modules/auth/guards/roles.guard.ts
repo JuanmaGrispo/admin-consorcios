@@ -5,7 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { RolUsuario } from '../../../database/entities';
+import { RolUsuario } from '../../../database/entities';
 import type { UsuarioActual } from '../auth.types';
 import { IS_PUBLIC } from '../decorators/public.decorator';
 import { ROLES } from '../decorators/roles.decorator';
@@ -34,6 +34,10 @@ export class RolesGuard implements CanActivate {
     const { user } = context
       .switchToHttp()
       .getRequest<{ user?: UsuarioActual }>();
+
+    // El superadmin pasa cualquier chequeo de rol: es el dueño de la
+    // plataforma. La jerarquía vive acá, no en la base.
+    if (user?.rol === RolUsuario.SUPER_ADMIN) return true;
 
     if (!user || !permitidos.includes(user.rol)) {
       throw new ForbiddenException('No tenés permiso para esta operación');
