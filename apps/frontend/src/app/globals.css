@@ -1,1 +1,33 @@
 @import 'tailwindcss';
+
+/*
+ * Tokens del design system Domus, extraídos del prototipo. Paleta cálida,
+ * clara, sin modo oscuro: el producto es siempre light.
+ */
+@theme {
+  --color-canvas: #f7f6f3;
+  --color-surface: #ffffff;
+  --color-surface-2: #fbfaf8;
+  --color-line: #e6e3dd;
+  --color-line-2: #efede8;
+  --color-ink: #1b1917;
+  --color-ink-2: #4a463f;
+  --color-muted: #7a746b;
+  --color-accent: oklch(0.52 0.11 254);
+  --color-accent-soft: oklch(0.95 0.02 254);
+  --color-ok: oklch(0.52 0.11 155);
+  --color-ok-soft: oklch(0.95 0.03 155);
+  --color-warn: oklch(0.62 0.12 72);
+  --color-warn-soft: oklch(0.95 0.04 82);
+  --color-bad: oklch(0.53 0.16 25);
+  --color-bad-soft: oklch(0.95 0.03 25);
+
+  --font-sans: var(--font-plex), 'IBM Plex Sans', Helvetica, sans-serif;
+
+  --shadow-card: 0 1px 2px rgba(27, 25, 23, 0.05);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
