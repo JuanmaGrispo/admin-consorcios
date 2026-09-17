@@ -4,15 +4,35 @@
  */
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
 
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
+    // La sesión vive en una cookie httpOnly: sin esto el navegador no la manda.
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...init?.headers },
   });
 
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`API ${res.status} en ${path}${body ? `: ${body}` : ''}`);
+    // El backend manda { message } en los errores; si no, el texto crudo.
+    let message = `Error ${res.status}`;
+    try {
+      const body = await res.json();
+      message = Array.isArray(body.message)
+        ? body.message.join('. ')
+        : (body.message ?? message);
+    } catch {
+      /* body no-JSON: queda el genérico */
+    }
+    throw new ApiError(res.status, message);
   }
 
   // 204 No Content no trae body.

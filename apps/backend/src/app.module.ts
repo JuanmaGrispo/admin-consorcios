@@ -9,6 +9,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { ConsorciosModule } from './modules/consorcios/consorcios.module';
 import { ReclamosModule } from './modules/reclamos/reclamos.module';
+import { UsuariosModule } from './modules/usuarios/usuarios.module';
 
 /**
  * Cada módulo de negocio vive en `modules/<nombre>/` y se compone de:
@@ -35,6 +36,7 @@ import { ReclamosModule } from './modules/reclamos/reclamos.module';
 
     // ── Módulos de negocio ──
     AuthModule,
+    UsuariosModule,
     ConsorciosModule,
     ReclamosModule,
   ],

@@ -2,10 +2,16 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // La sesión viaja en una cookie httpOnly, así que el guard necesita las
+  // cookies parseadas antes de llegar a cualquier ruta. Acá no se firma nada:
+  // lo firmado es el JWT que va adentro.
+  app.use(cookieParser());
 
   // Validación de borde. `forbidNonWhitelisted` hace que un campo inesperado sea un
   // error y no algo ignorado en silencio — un typo en un cliente tiene que hacer ruido.
