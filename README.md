@@ -111,10 +111,16 @@ El flujo para cambiar el esquema es:
 `db:verify` está para CI o para correr antes de un commit: si alguien cambió la
 base y no regeneró, salta ahí y no en runtime.
 
-Por eso **no hay `DB_SYNC` ni migraciones de TypeORM**: `synchronize` está fijo
-en `false`. Si TypeORM pudiera escribir DDL, una entidad desactualizada
-alteraría las tablas del grupo para que coincidan con el código — justo al
-revés de lo que queremos.
+Por eso **no hay `DB_SYNC`**: `synchronize` está fijo en `false`. Si TypeORM
+pudiera escribir DDL, una entidad desactualizada alteraría las tablas del grupo
+para que coincidan con el código — justo al revés de lo que queremos.
+
+**Excepción: migraciones puntuales.** Cuando un cambio de esquema nace del
+código y tiene que quedar versionado (ej.: sumar `SUPER_ADMIN` al enum de
+roles), va como migración en `src/database/migrations/` y se aplica con
+`pnpm back migration:run`. Después se regenera igual que siempre
+(`db:generate-entities`). La tabla `migrations` que TypeORM crea para llevar el
+registro es infraestructura: el generador de entities la ignora.
 
 ### Detalles del mapeo
 
@@ -145,21 +151,43 @@ JWT propio contra la tabla `usuario` (que ya tiene `password_hash`, `rol` y
 `activo`). No usamos Supabase Auth: el esquema define los usuarios, así que la
 sesión se arma sobre eso.
 
+Para el navegador la sesión viaja en una **cookie httpOnly** (`domus_session`):
+el login la setea, el logout la borra y el JS del frontend nunca la ve — eso
+neutraliza el robo de token por XSS. El header `Authorization: Bearer` sigue
+funcionando en paralelo para Swagger, scripts y clientes sin cookies.
+
+### Roles
+
+| Rol | Qué es |
+|---|---|
+| `SUPER_ADMIN` | El dueño de la plataforma. Crea consorcios, los asigna y da de alta administradores. Pasa cualquier chequeo de `@Roles()`. |
+| `ADMINISTRADOR` | Administra su(s) consorcio(s): expensas, reclamos, vecinos. |
+| `VECINO` | Opera sobre sus unidades. |
+
+La jerarquía vive en `RolesGuard`, no en la base: la base solo conoce el enum.
+
 ### Crear el primer usuario
 
 No hay endpoint de registro — dejarlo abierto permitiría que cualquiera se dé de
 alta como administrador. Los usuarios se crean por CLI:
 
 ```bash
-pnpm back usuario:crear <email> <password> [ADMINISTRADOR|VECINO] [nombre] [apellido]
+pnpm back usuario:crear <email> <password> [SUPER_ADMIN|ADMINISTRADOR|VECINO] [nombre] [apellido]
 ```
+
+El **superadmin solo se crea así**: la API no permite darse de alta con ese
+rol. Los administradores, en cambio, los crea el superadmin desde el panel
+(o por `POST /usuarios`).
 
 ### Endpoints
 
-| Método | Ruta         | Quién puede            |
-|--------|--------------|------------------------|
-| POST   | `/auth/login`| cualquiera             |
-| GET    | `/auth/me`   | con token              |
+| Método | Ruta           | Quién puede                          |
+|--------|----------------|--------------------------------------|
+| POST   | `/auth/login`  | cualquiera — deja la cookie de sesión |
+| POST   | `/auth/logout` | cualquiera — borra la cookie          |
+| GET    | `/auth/me`     | con sesión (cookie o bearer)          |
+| GET    | `/usuarios`    | superadmin (filtro `?rol=`)           |
+| POST   | `/usuarios`    | superadmin (crea ADMINISTRADOR/VECINO)|
 
 ```bash
 curl -X POST localhost:4000/api/auth/login \
@@ -182,8 +210,8 @@ explícita.
 ```
 
 Sin `@Roles()`, alcanza con estar logueado. En `consorcios` está aplicado como
-referencia: leer es para cualquier usuario, crear/editar/borrar es de
-administradores.
+referencia: leer es para cualquier usuario logueado, crear/editar/borrar es del
+superadmin.
 
 Config en `.env`: `JWT_SECRET` (obligatorio, la app no arranca sin él) y
 `JWT_EXPIRES_IN` (default `1d`). Generar el secreto con:
@@ -198,6 +226,26 @@ enumerar cuentas), siempre corre un bcrypt aunque el email no exista (si no, el
 tiempo de respuesta delata qué usuarios hay), y cada request autenticado relee
 el usuario en vez de confiar en el token, para que una baja o un cambio de rol
 peguen al instante.
+
+## Panel superadmin (frontend)
+
+`apps/frontend` es hoy el panel del dueño de la plataforma, con el design
+system **Domus** del prototipo (IBM Plex Sans, paleta clara cálida, sin modo
+oscuro). Cubre el ciclo completo de un consorcio:
+
+- **Login** con cookie httpOnly. `src/proxy.ts` redirige a `/login` si no hay
+  cookie; la validación real (firma, expiración, rol) la hace el backend en
+  cada request.
+- **Solo superadmin**: cualquier otro rol ve "Sin acceso". El backend además
+  rechaza con 403, así que saltarse la pantalla no sirve de nada.
+- **Consorcios**: listado con administrador y unidades, alta, edición y
+  parametrización (domicilio, fiscal, reglas de liquidación).
+- **Administradores**: se crean inline desde el form del consorcio y se
+  asignan ahí mismo.
+
+Capas del frontend: los componentes usan `src/services/`, los services usan
+`src/lib/api.ts` (único `fetch`, siempre con `credentials: 'include'`), y los
+tipos espejan lo que devuelve el backend en `src/types/`.
 
 ## Reclamos
 
@@ -279,3 +327,8 @@ avisar al grupo.
 | `vecino3@domus.test`| VECINO        | 2º A   |
 
 La password de todos es `Domus.2026`.
+
+Además del seed existe `superadmin@domus.app` (rol `SUPER_ADMIN`, misma
+password), creado por CLI para el panel de la plataforma. También hay un
+administrador de prueba sin consorcio, `julian.sosa@domus.test`, útil para
+probar la asignación.
