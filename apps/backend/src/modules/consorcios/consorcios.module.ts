@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConsorciosController } from './consorcios.controller';
 import { ConsorciosRepository } from './consorcios.repository';
 import { ConsorciosService } from './consorcios.service';
-import { Consorcio } from './consorcios.entities';
+import { Consorcio } from '../../database/entities';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Consorcio])],
