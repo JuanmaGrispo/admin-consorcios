@@ -10,12 +10,15 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { RolUsuario } from '../../database/entities';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { ConsorciosService } from './consorcios.service';
 import { CreateConsorcioDto } from './dto/create-consorcio.dto';
 import { UpdateConsorcioDto } from './dto/update-consorcio.dto';
 
 @ApiTags('consorcios')
+@ApiBearerAuth()
 @Controller('consorcios')
 export class ConsorciosController {
   constructor(private readonly consorcios: ConsorciosService) {}
@@ -30,11 +33,15 @@ export class ConsorciosController {
     return this.consorcios.findOne(id);
   }
 
+  // Crear, modificar y borrar consorcios es del dueño del SaaS, no de los
+  // administradores de cada edificio.
+  @Roles(RolUsuario.SUPER_ADMIN)
   @Post()
   create(@Body() dto: CreateConsorcioDto) {
     return this.consorcios.create(dto);
   }
 
+  @Roles(RolUsuario.SUPER_ADMIN)
   @Patch(':id')
   update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -43,6 +50,7 @@ export class ConsorciosController {
     return this.consorcios.update(id, dto);
   }
 
+  @Roles(RolUsuario.SUPER_ADMIN)
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string) {

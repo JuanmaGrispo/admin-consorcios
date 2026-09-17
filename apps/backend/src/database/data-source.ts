@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
+import { buildConnectionOptions } from './database.options';
 
 /**
  * DataSource para la CLI de TypeORM (migraciones). La app NO usa este archivo:
@@ -7,12 +8,7 @@ import { DataSource } from 'typeorm';
  * así que apuntan siempre a la misma base.
  */
 export default new DataSource({
-  type: 'postgres',
-  host: process.env.DB_HOST ?? 'localhost',
-  port: Number(process.env.DB_PORT ?? 5432),
-  username: process.env.DB_USER ?? 'postgres',
-  password: process.env.DB_PASSWORD ?? 'postgres',
-  database: process.env.DB_NAME ?? 'admin_consorcios',
-  entities: ['src/**/*.entity.ts'],
+  ...buildConnectionOptions((key) => process.env[key]),
+  entities: ['src/database/entities/*.entity.ts'],
   migrations: ['src/database/migrations/*.ts'],
 });
