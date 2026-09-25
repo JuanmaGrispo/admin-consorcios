@@ -7,6 +7,8 @@ import {
   Unidad,
   UnidadUsuario,
 } from '../../database/entities';
+import { CategoriasReclamoModule } from '../categorias-reclamo/categorias-reclamo.module';
+import { ProveedoresModule } from '../proveedores/proveedores.module';
 import { ReclamosController } from './reclamos.controller';
 import { ReclamosRepository } from './reclamos.repository';
 import { ReclamosService } from './reclamos.service';
@@ -21,6 +23,9 @@ import { ReclamosService } from './reclamos.service';
       UnidadUsuario,
       Unidad,
     ]),
+    // Para validar que la categoría y el proveedor correspondan al consorcio.
+    CategoriasReclamoModule,
+    ProveedoresModule,
   ],
   controllers: [ReclamosController],
   providers: [ReclamosService, ReclamosRepository],
