@@ -255,6 +255,96 @@ Capas del frontend: los componentes usan `src/services/`, los services usan
 `src/lib/api.ts` (único `fetch`, siempre con `credentials: 'include'`), y los
 tipos espejan lo que devuelve el backend en `src/types/`.
 
+## Catálogos: unidades, proveedores y categorías
+
+Los datos de base que usan los demás módulos: reclamos se abre sobre una
+unidad, con una categoría, y se asigna a un proveedor; expensas liquida sobre
+las unidades y carga gastos de los proveedores. Los rubros de gasto, que son
+el catálogo propio de expensas, se documentan en [Expensas](#expensas).
+
+Dos criterios comunes:
+
+- **Unidades y proveedores no se borran, se dan de baja** (`activa`/`activo:
+  false` por `PATCH`). Boletas, pagos, gastos y reclamos los referencian con
+  FK `RESTRICT`: borrarlos rompería la historia.
+- **Proveedores y categorías pueden ser compartidos.** Con `consorcio_id`
+  vacío aparecen en todos los consorcios, así que sólo el **superadmin** los
+  crea o edita; un administrador que lo intenta recibe 403 y tiene que indicar
+  `consorcioId`. Filtrar por consorcio devuelve los suyos más los compartidos.
+
+### Unidades
+
+| Método | Ruta                                  | Quién |
+|--------|---------------------------------------|-------|
+| GET    | `/unidades`                           | admin: todas · vecino: las suyas |
+| GET    | `/unidades/:id`                       | admin: cualquiera · vecino: sólo las suyas (404 si no) |
+| POST   | `/unidades`                           | administrador |
+| PATCH  | `/unidades/:id`                       | administrador (`activa: false` la da de baja) |
+| GET    | `/unidades/:id/vinculos`              | administrador |
+| POST   | `/unidades/:id/vinculos`              | administrador: vincula un vecino |
+| DELETE | `/unidades/:id/vinculos/:vinculoId`   | administrador: termina el vínculo |
+
+Filtros de `GET /unidades`: `consorcioId`, `incluirInactivas`. Cada unidad trae
+`cantidadVecinos` (vínculos vigentes). `GET /unidades/:id/vinculos` acepta
+`incluirTerminados=true` para ver el historial.
+
+Reglas:
+
+- La **etiqueta** (`3º B`) es única dentro del consorcio (UNIQUE en la base).
+- Los **coeficientes** de las unidades activas de un consorcio no pueden pasar
+  el 100%: reparten las expensas, y pasarse cobraría más de lo gastado.
+  Quedarse corto se permite porque las unidades se cargan de a una. El tope se
+  revisa en el alta, al cambiar el coeficiente y al reactivar una unidad.
+- El **consorcio de una unidad no se cambia**: arrastraría boletas y reclamos
+  del otro edificio.
+- Un **vínculo** une a un usuario con rol `VECINO` y una unidad activa, como
+  `PROPIETARIO` o `INQUILINO`. Vincular a un administrador lo haría pasar por
+  vecino en reclamos.
+- Hay **un solo titular vigente** por unidad: es a quien se le emite la boleta.
+- **Terminar un vínculo** le pone `hasta` = hoy y lo deja en el historial
+  (quién vivía cuando se abrió un reclamo). Si todavía no había empezado a
+  regir, se borra: no hay historia que cuidar, y la base exige `hasta > desde`.
+  "Hoy" sale de la base (`CURRENT_DATE`), no del reloj de la app, para que no
+  choque con el default de `desde`.
+
+### Proveedores
+
+| Método | Ruta               | Quién |
+|--------|--------------------|-------|
+| GET    | `/proveedores`     | administrador |
+| GET    | `/proveedores/:id` | administrador |
+| POST   | `/proveedores`     | administrador (compartido: superadmin) |
+| PATCH  | `/proveedores/:id` | administrador (`activo: false` lo da de baja) |
+
+Filtros de `GET /proveedores`: `consorcioId`, `buscar` (razón social y rubro),
+`incluirInactivos`. El CUIT va con guiones (`30-12345678-9`): la columna es
+`varchar(13)`.
+
+### Categorías de reclamo
+
+| Método | Ruta                       | Quién |
+|--------|----------------------------|-------|
+| GET    | `/categorias-reclamo`      | cualquier logueado (el vecino las usa en el alta de reclamo) |
+| GET    | `/categorias-reclamo/:id`  | cualquier logueado |
+| POST   | `/categorias-reclamo`      | administrador (compartida: superadmin) |
+| PATCH  | `/categorias-reclamo/:id`  | administrador |
+| DELETE | `/categorias-reclamo/:id`  | administrador; 409 si algún reclamo la usa |
+
+`GET /categorias-reclamo?consorcioId=` devuelve las del consorcio más las
+compartidas. El **nombre no se repite** (sin distinguir mayúsculas) entre las
+que aparecen en la misma lista: una de consorcio no puede llamarse igual que
+una compartida. El `icono` es un nombre de Material Symbols (`plumbing`,
+`bolt`).
+
+### Tests
+
+Las reglas de cada service tienen tests unitarios con repositorios en memoria
+(`*.service.spec.ts`), así que no tocan la base compartida:
+
+```bash
+pnpm back test
+```
+
 ## Reclamos
 
 El vecino abre el reclamo con categoría, descripción y fotos; el administrador
@@ -295,6 +385,11 @@ Las tres primeras las impone la base y el código las respeta, no las duplica:
   que ese reclamo existe.
 - Asignar proveedor sobre un reclamo en `NUEVO` lo pasa a `EN_CURSO`.
 - Un reclamo `RESUELTO` no acepta mensajes: hay que reabrirlo.
+- La **categoría** tiene que ser del consorcio del reclamo o compartida, y el
+  **proveedor** además tiene que estar activo. La FK sólo garantiza que
+  existan; una categoría o un proveedor de otro edificio devuelve 400.
+- Donde dice "administrador" vale también para el **superadmin**: ve todos los
+  reclamos, las notas internas y puede gestionarlos.
 
 ### Línea de tiempo
 
@@ -319,6 +414,135 @@ nunca corta la operación: si el aviso falla, la respuesta ya quedó guardada.
 El diseño de ese módulo (eventos de dominio publicados en RabbitMQ y
 consumidos por email y el muro de novedades) está en
 [`docs/mensajeria.md`](docs/mensajeria.md).
+
+## Expensas
+
+El administrador abre la liquidación de un período, carga los gastos del mes,
+previsualiza las boletas, las ajusta si hace falta y las emite. Emitir las
+convierte en deuda de cada unidad y avisa a los vecinos.
+
+### Ciclo de una liquidación
+
+```
+BORRADOR ──previsualizar──▶ PREVISUALIZACION ──emitir──▶ EMITIDA ──cerrar──▶ CERRADA
+    ▲                            │
+    └── se borra el último gasto ┘
+```
+
+- **BORRADOR**: se cargan, editan y borran gastos. Todavía no hay boletas.
+- **PREVISUALIZACION**: las boletas están calculadas y el administrador las
+  revisa. Cambiar un gasto, el criterio o el vencimiento **recalcula en el
+  momento**, así que lo que se ve es siempre lo que se emitiría. Cada
+  recálculo reemplaza las boletas (cambian sus ids), pero conserva los
+  ajustes manuales.
+- **EMITIDA**: las boletas quedan congeladas y el vecino las ve. No se puede
+  deshacer: son deuda, y corregirlas va por ajuste en la liquidación
+  siguiente.
+- **CERRADA**: el período se da por terminado. Sus boletas siguen contando
+  como deuda.
+
+El estado `PRORRATEO` del enum no se usa.
+
+### Endpoints
+
+| Método | Ruta                                        | Quién |
+|--------|---------------------------------------------|-------|
+| GET    | `/liquidaciones`                            | administrador (filtros `consorcioId`, `estado`) |
+| GET    | `/liquidaciones/:id`                        | administrador: con sus gastos |
+| POST   | `/liquidaciones`                            | administrador: `{ consorcioId, periodo: "2026-09" }` |
+| PATCH  | `/liquidaciones/:id`                        | administrador: criterio de prorrateo o vencimiento |
+| DELETE | `/liquidaciones/:id`                        | administrador: sólo sin emitir |
+| POST   | `/liquidaciones/:id/gastos`                 | administrador |
+| PATCH  | `/liquidaciones/:id/gastos/:gastoId`        | administrador |
+| DELETE | `/liquidaciones/:id/gastos/:gastoId`        | administrador |
+| POST   | `/liquidaciones/:id/previsualizar`          | administrador |
+| POST   | `/liquidaciones/:id/emitir`                 | administrador |
+| POST   | `/liquidaciones/:id/cerrar`                 | administrador |
+| GET    | `/boletas`                                  | admin: todas · vecino: las emitidas de sus unidades |
+| GET    | `/boletas/:id`                              | con el detalle línea por línea; al vecino, 404 si no es suya o no se emitió |
+| PATCH  | `/boletas/:id/ajuste`                       | administrador, sólo en previsualización |
+| GET    | `/rubros-gasto`                             | cualquier logueado (`?consorcioId=`: los suyos más los compartidos) |
+| POST · PATCH · DELETE | `/rubros-gasto[/:id]`        | administrador (compartido: superadmin); 409 al borrar uno con gastos |
+
+Filtros de `GET /boletas`: `liquidacionId`, `unidadId`, `estado`.
+
+### Cómo se calcula una boleta
+
+El cálculo vive en `modules/expensas/prorrateo.ts`, separado del service: son
+funciones puras, sin base, testeadas con números a mano.
+
+```
+ordinarias       = su parte de cada gasto ORDINARIO
+extraordinarias  = su parte de cada gasto EXTRAORDINARIO
+fondo de reserva = su parte de cada gasto FONDO_RESERVA
+                 + porcentaje_fondo_reserva del consorcio × sus ordinarias
+saldo anterior   = lo que quedó impago de su boleta anterior
+intereses mora   = interés simple sobre ese saldo
+ajuste manual    = lo que cargue el administrador
+total            = la suma de todo
+```
+
+- **La parte de cada gasto** sale del coeficiente de la unidad o, con
+  `PARTES_IGUALES`, de dividir por la cantidad de unidades activas. Por
+  coeficiente, los de las unidades activas tienen que **sumar exactamente
+  100%** para poder previsualizar. El alta de unidades no deja pasarse, pero
+  sí quedarse corto mientras se cargan.
+- **Centavos exactos.** Todo se calcula en centavos enteros. Los centavos que
+  sobran de redondear se reparten de a uno entre las unidades con mayor resto
+  (método del resto mayor). Por eso la suma de las boletas es exactamente el
+  total de los gastos: $1.000 en tres partes da 333,34 + 333,33 + 333,33, no
+  999,99.
+- **Deuda.** Se toma la última boleta emitida de la unidad (anterior a este
+  período) y se le restan los pagos `APROBADO`. Sólo la última, porque su
+  total ya arrastra la deuda de las anteriores.
+- **Mora.** `tasa_interes_mora` del consorcio por los días desde el
+  vencimiento de esa boleta hasta hoy. Si `periodicidad_mora` es `MENSUAL`, la
+  tasa se prorratea por día (30 días = 1 mes), para que una semana de atraso
+  no cobre el mes entero. "Hoy" sale de la base, igual que en los vínculos.
+- **Detalle.** Cada boleta lleva una línea por gasto (con su `gasto_id`) y una
+  línea por fondo, saldo, mora y ajuste cuando no son 0. Es lo que el vecino
+  ve desglosado.
+
+### Reglas
+
+- **Una liquidación por consorcio y período** (UNIQUE en la base). El período
+  se recibe como `AAAA-MM` y se guarda como el primer día del mes.
+- **Vencimiento por defecto**: el `dia_vencimiento` del consorcio en el mes
+  siguiente al período, o el último día si el mes es más corto (un 31 en
+  febrero cae el 28). Tiene que ser posterior al inicio del período.
+- **En orden.** No se abre un período igual o anterior al último emitido, y no
+  se emite si queda un período anterior sin emitir. Si no, la deuda se
+  arrastraría desde una boleta que todavía no existe.
+- **Emitir recalcula por última vez.** Entre la previsualización y la emisión
+  puede entrar un pago o cambiar una unidad, y lo emitido tiene que reflejar
+  el estado de ese momento. `total_emitido` es la suma de las boletas.
+- **Gastos.** El rubro y el proveedor tienen que ser del consorcio o
+  compartidos, y el proveedor además tiene que estar activo. Sin
+  `naturaleza`, el gasto toma la del rubro: un gasto de "Mantenimiento" puede
+  ser extraordinario si es una obra puntual. `cuotaNumero` y `cuotaTotal` van
+  juntos. `total_gastos` se recalcula desde los gastos en cada cambio.
+- **Ajuste manual.** Positivo suma, negativo descuenta y 0 lo quita. Lleva
+  motivo obligatorio, porque el vecino lo ve en la boleta, y no puede dejar el
+  total negativo.
+- **Rubros.** Tienen la misma lógica que las categorías de reclamo:
+  compartidos (sólo superadmin) o por consorcio, sin nombres repetidos en la
+  misma lista, y no se borran si tienen gastos. Cambiar la naturaleza de un
+  rubro no toca los gastos ya cargados.
+
+### Avisos al emitir
+
+Cada vecino vinculado hoy a cada unidad recibe un aviso con el total y el
+vencimiento, por el mismo `Notificador` que usa reclamos. Si un aviso falla,
+queda en el log y la emisión sigue.
+
+### Pendiente
+
+- **Pagos.** El estado de la boleta (`PENDIENTE` → `PARCIAL` / `PAGADA` /
+  `VENCIDA`) lo va a mover el módulo de pagos. La deuda ya descuenta los pagos
+  `APROBADO` de la tabla `pago`.
+- **PDF de la boleta** (`pdf_url`) y marca de envío (`enviada_at`).
+- **Vínculo de un gasto con una votación o un reclamo** (`votacion_id`,
+  `reclamo_id`): las columnas existen, pero la API todavía no las carga.
 
 ## Datos de demo
 
