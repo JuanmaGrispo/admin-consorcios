@@ -11,6 +11,9 @@ apps/
 └── frontend/   Next.js 16 + Tailwind 4            → :3000
 ```
 
+Más documentación en [`docs/`](docs/): [visión del producto](docs/producto.md)
+y [diseño de mensajería](docs/mensajeria.md).
+
 ## Requisitos
 
 - Node >= 22
@@ -312,6 +315,10 @@ El service llama a `Notificador` (`core/notificaciones/`), que por ahora sólo
 deja registro en el log. Cuando exista el módulo de notificaciones con
 NodeMailer detrás, implementa esa misma interfaz y reclamos no se toca. Avisar
 nunca corta la operación: si el aviso falla, la respuesta ya quedó guardada.
+
+El diseño de ese módulo (eventos de dominio publicados en RabbitMQ y
+consumidos por email y el muro de novedades) está en
+[`docs/mensajeria.md`](docs/mensajeria.md).
 
 ## Datos de demo
 
