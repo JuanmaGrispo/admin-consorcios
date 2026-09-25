@@ -31,6 +31,15 @@ nuevo tiene que saber antes de tocar código.
 - **Commits atómicos** con mensaje que explique el porqué, no el qué.
 - **Nunca** credenciales en el código ni en PRs: van en `.env` (gitignoreado).
 
+## Documentación
+
+| Archivo | Qué tiene |
+|---|---|
+| [README.md](README.md) | Arranque, base de datos, auth y detalle de cada módulo |
+| [apps/frontend/CLAUDE.md](apps/frontend/CLAUDE.md) | Reglas de UI |
+| [docs/producto.md](docs/producto.md) | Visión del producto: funcionalidades, roles, integraciones y flujos |
+| [docs/mensajeria.md](docs/mensajeria.md) | Diseño de notificaciones pub/sub con RabbitMQ: eventos, bindings, sobre del mensaje |
+
 ## Frontend
 
 Todo lo de UI está en [apps/frontend/CLAUDE.md](apps/frontend/CLAUDE.md):
