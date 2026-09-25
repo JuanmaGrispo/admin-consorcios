@@ -14,6 +14,8 @@ import {
   TipoEventoReclamo,
 } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
+import { CategoriasReclamoService } from '../categorias-reclamo/categorias-reclamo.service';
+import { ProveedoresService } from '../proveedores/proveedores.service';
 import { AsignarProveedorDto } from './dto/asignar-proveedor.dto';
 import { CambiarEstadoDto } from './dto/cambiar-estado.dto';
 import { CrearReclamoDto } from './dto/crear-reclamo.dto';
@@ -21,13 +23,22 @@ import { ListarReclamosQuery } from './dto/listar-reclamos.query';
 import { MensajeReclamoDto } from './dto/mensaje-reclamo.dto';
 import { ReclamosRepository } from './reclamos.repository';
 
-const esAdmin = (usuario: UsuarioActual) => usuario.rol === RolUsuario.ADMINISTRADOR;
+/**
+ * Quién gestiona reclamos: el administrador y el superadmin, que tiene todos
+ * los permisos de un administrador (la misma jerarquía que aplica RolesGuard).
+ * Sin él, el superadmin quedaba tratado como un vecino sin unidades y no veía
+ * ningún reclamo.
+ */
+const esAdmin = (usuario: UsuarioActual) =>
+  usuario.rol === RolUsuario.ADMINISTRADOR || usuario.rol === RolUsuario.SUPER_ADMIN;
 
 @Injectable()
 export class ReclamosService {
   constructor(
     private readonly reclamos: ReclamosRepository,
     private readonly notificador: Notificador,
+    private readonly categorias: CategoriasReclamoService,
+    private readonly proveedores: ProveedoresService,
   ) {}
 
   // ── Lectura ────────────────────────────────────────────────────────────────
@@ -64,6 +75,8 @@ export class ReclamosService {
 
     const unidad = await this.reclamos.findUnidad(unidadId);
     if (!unidad) throw new NotFoundException(`La unidad ${unidadId} no existe`);
+
+    await this.categorias.exigirUsable(dto.categoriaId, unidad.consorcioId);
 
     // La prioridad la fija quien administra. Si la pudiera elegir el vecino,
     // todos los reclamos entrarían en ALTA y el orden dejaría de significar algo.
@@ -144,6 +157,7 @@ export class ReclamosService {
       );
     }
 
+    await this.proveedores.exigirAsignable(dto.proveedorId, reclamo.consorcioId);
     reclamo.proveedorId = dto.proveedorId;
 
     // Asignar un proveedor es, en los hechos, ponerlo en marcha: si seguía en
