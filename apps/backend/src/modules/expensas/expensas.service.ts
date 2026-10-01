@@ -9,14 +9,17 @@ import { Notificador } from '../../core/notificaciones/notificador';
 import {
   Boleta,
   CriterioProrrateo,
+  EstadoBoleta,
   EstadoLiquidacion,
   Gasto,
   Liquidacion,
+  ResultadoVotacion,
   RolUsuario,
 } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
+import { ReclamosService } from '../reclamos/reclamos.service';
 import { RubrosGastoService } from '../rubros-gasto/rubros-gasto.service';
 import { AjustarBoletaDto } from './dto/ajustar-boleta.dto';
 import { CreateGastoDto } from './dto/create-gasto.dto';
@@ -25,6 +28,8 @@ import { ListarBoletasQuery } from './dto/listar-boletas.query';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
 import { UpdateLiquidacionDto } from './dto/update-liquidacion.dto';
+import { generarBoletaPdf } from './boleta-pdf';
+import { estadoBoleta } from './estado-boleta';
 import { ExpensasRepository } from './expensas.repository';
 import {
   aCentavos,
@@ -40,6 +45,9 @@ import {
  * son deuda de los vecinos y no se reescriben.
  */
 const EDITABLES = [EstadoLiquidacion.BORRADOR, EstadoLiquidacion.PREVISUALIZACION];
+
+/** Ya salieron: sus boletas son deuda real, el vecino las ve y se pagan. */
+const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
 
 const esVecino = (usuario: UsuarioActual) => usuario.rol === RolUsuario.VECINO;
 
@@ -71,6 +79,7 @@ export class ExpensasService {
     private readonly consorcios: ConsorciosService,
     private readonly rubros: RubrosGastoService,
     private readonly proveedores: ProveedoresService,
+    private readonly reclamos: ReclamosService,
     private readonly notificador: Notificador,
   ) {}
 
@@ -142,6 +151,7 @@ export class ExpensasService {
     if (dto.proveedorId) {
       await this.proveedores.exigirAsignable(dto.proveedorId, liquidacion.consorcioId);
     }
+    await this.exigirOrigenValido(dto, liquidacion.consorcioId);
     this.exigirCuotasValidas(dto.cuotaNumero, dto.cuotaTotal);
 
     const gasto = await this.expensas.crearGasto({
@@ -169,6 +179,13 @@ export class ExpensasService {
     if (dto.proveedorId && dto.proveedorId !== gasto.proveedorId) {
       await this.proveedores.exigirAsignable(dto.proveedorId, liquidacion.consorcioId);
     }
+    await this.exigirOrigenValido(
+      {
+        reclamoId: dto.reclamoId !== gasto.reclamoId ? dto.reclamoId : undefined,
+        votacionId: dto.votacionId !== gasto.votacionId ? dto.votacionId : undefined,
+      },
+      liquidacion.consorcioId,
+    );
     this.exigirCuotasValidas(
       dto.cuotaNumero ?? gasto.cuotaNumero ?? undefined,
       dto.cuotaTotal ?? gasto.cuotaTotal ?? undefined,
@@ -248,6 +265,7 @@ export class ExpensasService {
 
   /** El administrador ve todas; el vecino, las emitidas de sus unidades. */
   async listarBoletas(usuario: UsuarioActual, query: ListarBoletasQuery): Promise<Boleta[]> {
+    await this.expensas.marcarVencidas();
     if (!esVecino(usuario)) {
       return this.expensas.listarBoletas(query, { soloEmitidas: false });
     }
@@ -258,16 +276,25 @@ export class ExpensasService {
   }
 
   async findBoleta(usuario: UsuarioActual, id: string): Promise<Boleta> {
+    await this.expensas.marcarVencidas();
     const boleta = await this.expensas.findBoleta(id);
     const visible =
       boleta &&
       (!esVecino(usuario) ||
-        ((boleta.liquidacion.estado === EstadoLiquidacion.EMITIDA ||
-          boleta.liquidacion.estado === EstadoLiquidacion.CERRADA) &&
+        (EMITIDAS.includes(boleta.liquidacion.estado) &&
           (await this.expensas.unidadesDelUsuario(usuario.id)).includes(boleta.unidadId)));
     // Al vecino, una boleta ajena o sin emitir le da 404: un 403 confirmaría que existe.
     if (!visible) throw new NotFoundException(`La boleta ${id} no existe`);
     return boleta;
+  }
+
+  /** La boleta en PDF, con los mismos permisos que leerla. Se genera al vuelo. */
+  async pdfBoleta(usuario: UsuarioActual, id: string): Promise<{ buffer: Buffer; nombre: string }> {
+    const boleta = await this.findBoleta(usuario, id);
+    const consorcio = await this.consorcios.findOne(boleta.liquidacion.consorcioId);
+    const buffer = await generarBoletaPdf(boleta, consorcio, await this.expensas.pagadoDe(id));
+    const etiqueta = boleta.unidad.etiqueta.replace(/[^\w-]+/g, '');
+    return { buffer, nombre: `expensas-${boleta.liquidacion.periodo.slice(0, 7)}-${etiqueta}.pdf` };
   }
 
   /**
@@ -304,6 +331,64 @@ export class ExpensasService {
         : { concepto: conceptoAjuste(motivo), monto: dto.ajusteManual },
     );
     return (await this.expensas.findBoleta(id))!;
+  }
+
+  // ── Para pagos ─────────────────────────────────────────────────────────────
+
+  /**
+   * La boleta a la que se le puede imputar un pago y cuánto le falta. Sólo la
+   * última emitida de la unidad: las anteriores ya viajaron como saldo
+   * anterior, y pagarlas cobraría dos veces la misma deuda.
+   */
+  async boletaPagable(
+    usuario: UsuarioActual,
+    id: string,
+  ): Promise<{ boleta: Boleta; saldo: number }> {
+    // Mismos permisos que leerla: al vecino, una ajena le da 404.
+    const boleta = await this.findBoleta(usuario, id);
+    if (!EMITIDAS.includes(boleta.liquidacion.estado)) {
+      throw new BadRequestException('La boleta todavía no se emitió');
+    }
+    if ((await this.expensas.ultimaBoletaEmitida(boleta.unidadId)) !== boleta.id) {
+      throw new BadRequestException(
+        'Esta deuda ya está incluida en la boleta más reciente de la unidad: pagá esa',
+      );
+    }
+
+    const saldo = aCentavos(boleta.total) - aCentavos(await this.expensas.pagadoDe(id));
+    if (saldo <= 0) throw new BadRequestException('La boleta ya está pagada');
+    return { boleta, saldo: aPesos(saldo) };
+  }
+
+  /** Las unidades que ve un vecino; `undefined` para quien administra (ve todo). */
+  async unidadesVisibles(usuario: UsuarioActual): Promise<string[] | undefined> {
+    return esVecino(usuario) ? this.expensas.unidadesDelUsuario(usuario.id) : undefined;
+  }
+
+  /** A quién avisarle algo de una unidad: los vecinos vinculados hoy. */
+  async vecinosDe(unidadId: string): Promise<string[]> {
+    return (await this.expensas.vecinosPorUnidad([unidadId])).get(unidadId) ?? [];
+  }
+
+  /**
+   * Recalcula el estado desde los pagos. Lo llama pagos después de cada cambio
+   * (un pago nuevo, una aprobación o un reintegro de Mercado Pago).
+   */
+  async sincronizarEstado(boletaId: string): Promise<Boleta> {
+    const boleta = await this.expensas.findBoleta(boletaId);
+    if (!boleta) throw new NotFoundException(`La boleta ${boletaId} no existe`);
+
+    const estado = estadoBoleta(
+      boleta.total,
+      await this.expensas.pagadoDe(boletaId),
+      boleta.liquidacion.fechaVencimiento,
+      await this.expensas.hoy(),
+    );
+    await this.expensas.actualizarEstado(boletaId, estado);
+    if (estado === EstadoBoleta.PAGADA) {
+      await this.expensas.saldarAnteriores(boleta.unidadId, boleta.liquidacion.periodo);
+    }
+    return { ...boleta, estado };
   }
 
   // ── Auxiliares ─────────────────────────────────────────────────────────────
@@ -441,6 +526,28 @@ export class ExpensasService {
       throw new NotFoundException(`El gasto ${gastoId} no existe en esta liquidación`);
     }
     return gasto;
+  }
+
+  /**
+   * El reclamo o la votación de donde sale un gasto tienen que ser del mismo
+   * consorcio. La votación, además, aprobada: un gasto "aprobado en asamblea"
+   * que se rechazó no se puede cobrar.
+   */
+  private async exigirOrigenValido(
+    origen: { reclamoId?: string | null; votacionId?: string | null },
+    consorcioId: string,
+  ): Promise<void> {
+    if (origen.reclamoId) await this.reclamos.exigirVinculable(origen.reclamoId, consorcioId);
+    if (!origen.votacionId) return;
+
+    const votacion = await this.expensas.findVotacion(origen.votacionId);
+    if (!votacion) throw new BadRequestException(`La votación ${origen.votacionId} no existe`);
+    if (votacion.consorcioId !== consorcioId) {
+      throw new BadRequestException(`La votación "${votacion.titulo}" es de otro consorcio`);
+    }
+    if (votacion.resultado !== ResultadoVotacion.APROBADA) {
+      throw new BadRequestException(`La votación "${votacion.titulo}" no está aprobada`);
+    }
   }
 
   /** Vencer antes de que empiece el período no tiene sentido. */

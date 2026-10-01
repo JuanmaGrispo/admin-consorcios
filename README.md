@@ -460,6 +460,7 @@ El estado `PRORRATEO` del enum no se usa.
 | POST   | `/liquidaciones/:id/cerrar`                 | administrador |
 | GET    | `/boletas`                                  | admin: todas · vecino: las emitidas de sus unidades |
 | GET    | `/boletas/:id`                              | con el detalle línea por línea; al vecino, 404 si no es suya o no se emitió |
+| GET    | `/boletas/:id/pdf`                          | la boleta en PDF, mismos permisos que el detalle |
 | PATCH  | `/boletas/:id/ajuste`                       | administrador, sólo en previsualización |
 | GET    | `/rubros-gasto`                             | cualquier logueado (`?consorcioId=`: los suyos más los compartidos) |
 | POST · PATCH · DELETE | `/rubros-gasto[/:id]`        | administrador (compartido: superadmin); 409 al borrar uno con gastos |
@@ -521,6 +522,9 @@ total            = la suma de todo
   `naturaleza`, el gasto toma la del rubro: un gasto de "Mantenimiento" puede
   ser extraordinario si es una obra puntual. `cuotaNumero` y `cuotaTotal` van
   juntos. `total_gastos` se recalcula desde los gastos en cada cambio.
+- **Origen del gasto.** `reclamoId` y `votacionId` (opcionales; `null`
+  desvincula) dicen de dónde salió. Tienen que ser del mismo consorcio, y la
+  votación además `APROBADA`: no se cobra lo que la asamblea rechazó.
 - **Ajuste manual.** Positivo suma, negativo descuenta y 0 lo quita. Lleva
   motivo obligatorio, porque el vecino lo ve en la boleta, y no puede dejar el
   total negativo.
@@ -535,14 +539,68 @@ Cada vecino vinculado hoy a cada unidad recibe un aviso con el total y el
 vencimiento, por el mismo `Notificador` que usa reclamos. Si un aviso falla,
 queda en el log y la emisión sigue.
 
+### PDF de la boleta
+
+`GET /boletas/:id/pdf` la genera al vuelo con `pdfkit`, con los mismos
+permisos que el detalle. No se guarda: así siempre muestra el estado y el
+saldo de hoy, y `pdf_url` queda sin usar.
+
 ### Pendiente
 
-- **Pagos.** El estado de la boleta (`PENDIENTE` → `PARCIAL` / `PAGADA` /
-  `VENCIDA`) lo va a mover el módulo de pagos. La deuda ya descuenta los pagos
-  `APROBADO` de la tabla `pago`.
-- **PDF de la boleta** (`pdf_url`) y marca de envío (`enviada_at`).
-- **Vínculo de un gasto con una votación o un reclamo** (`votacion_id`,
-  `reclamo_id`): las columnas existen, pero la API todavía no las carga.
+- Marca de envío (`enviada_at`): es del módulo de notificaciones.
+- Importe en letras en el PDF (el servicio SOAP de [producto.md](docs/producto.md)).
+
+## Pagos
+
+El estado de una boleta emitida sale de sus pagos `APROBADO` y del
+vencimiento (`modules/expensas/estado-boleta.ts`, función pura):
+
+```
+pagado ≥ total                  → PAGADA
+con saldo y pasó el vencimiento → VENCIDA
+con algún pago                  → PARCIAL
+si no                           → PENDIENTE
+```
+
+Pagos registra el pago y le pide a expensas que recalcule la boleta: la boleta
+es de expensas y pagos no toca sus tablas. `VENCIDA` se marca con un `UPDATE`
+antes de cada lectura de boletas, sin cron.
+
+### Endpoints
+
+| Método | Ruta                              | Quién |
+|--------|-----------------------------------|-------|
+| GET    | `/pagos`                          | admin: todos · vecino: los de sus unidades (filtros `boletaId`, `unidadId`, `estado`) |
+| POST   | `/pagos`                          | administrador: pago manual `{ boletaId, monto, medio, fechaPago? }` |
+| POST   | `/pagos/mercadopago/preferencia`  | dueño de la boleta o administrador: `{ boletaId }` → `{ pagoId, initPoint }` |
+| POST   | `/pagos/webhook/mercadopago`      | público, protegido por firma: lo llama Mercado Pago |
+
+### Reglas
+
+- **Sólo se paga la última boleta emitida de la unidad.** Las anteriores ya
+  viajaron como saldo anterior; pagarlas cobraría dos veces la misma deuda.
+  Cuando la última queda `PAGADA`, las anteriores impagas de la unidad pasan a
+  `PAGADA` también.
+- **No más que el saldo.** El prorrateo no arrastra saldo a favor.
+- **Manual** (`TRANSFERENCIA`, `EFECTIVO`, `OTRO`): lo carga el administrador
+  ya verificado y nace `APROBADO`. `MERCADO_PAGO` sólo entra por su flujo.
+- **Mercado Pago.** La preferencia crea un pago `PENDIENTE` por el saldo, con
+  su id como `external_reference`. El webhook valida la firma `x-signature`,
+  le pide el pago a la API (el cuerpo no se usa) y actualiza el estado:
+  `approved` → `APROBADO`, `rejected`/`cancelled` → `RECHAZADO`,
+  `refunded`/`charged_back` → `REINTEGRADO`. Es idempotente, y un intento
+  rechazado que llega tarde no pisa uno aprobado. Un reintegro vuelve la
+  boleta atrás.
+- Al aprobarse un pago se avisa a los vecinos de la unidad por `Notificador`;
+  si el aviso falla, el pago queda igual.
+
+### Configurar Mercado Pago
+
+En `apps/backend/.env`, con credenciales **de prueba**: `MP_ACCESS_TOKEN`,
+`MP_WEBHOOK_SECRET`, `MP_NOTIFICATION_URL` y `FRONTEND_URL` (ver
+`.env.example`). En local, el webhook necesita una URL pública: un túnel a
+`http://localhost:4000/api/pagos/webhook/mercadopago`. Sin token, la
+preferencia responde 503 y el resto de la app anda igual.
 
 ## Datos de demo
 

@@ -13,6 +13,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import { NaturalezaGasto } from '../../../database/entities';
 
@@ -29,6 +30,19 @@ export class CreateGastoDto {
   @IsOptional()
   @IsUUID()
   proveedorId?: string;
+
+  // `null` desvincula desde el PATCH; sin el campo, no se toca.
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, description: 'Reclamo que originó el gasto' })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsUUID()
+  reclamoId?: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true, description: 'Votación que aprobó el gasto' })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsUUID()
+  votacionId?: string | null;
 
   @ApiProperty({ example: 'Abono mensual ascensores' })
   @Transform(recortar)
