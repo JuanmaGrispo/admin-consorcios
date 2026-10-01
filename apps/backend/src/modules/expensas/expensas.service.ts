@@ -28,6 +28,7 @@ import { ListarBoletasQuery } from './dto/listar-boletas.query';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
 import { UpdateLiquidacionDto } from './dto/update-liquidacion.dto';
+import { generarBoletaPdf } from './boleta-pdf';
 import { estadoBoleta } from './estado-boleta';
 import { ExpensasRepository } from './expensas.repository';
 import {
@@ -285,6 +286,15 @@ export class ExpensasService {
     // Al vecino, una boleta ajena o sin emitir le da 404: un 403 confirmaría que existe.
     if (!visible) throw new NotFoundException(`La boleta ${id} no existe`);
     return boleta;
+  }
+
+  /** La boleta en PDF, con los mismos permisos que leerla. Se genera al vuelo. */
+  async pdfBoleta(usuario: UsuarioActual, id: string): Promise<{ buffer: Buffer; nombre: string }> {
+    const boleta = await this.findBoleta(usuario, id);
+    const consorcio = await this.consorcios.findOne(boleta.liquidacion.consorcioId);
+    const buffer = await generarBoletaPdf(boleta, consorcio, await this.expensas.pagadoDe(id));
+    const etiqueta = boleta.unidad.etiqueta.replace(/[^\w-]+/g, '');
+    return { buffer, nombre: `expensas-${boleta.liquidacion.periodo.slice(0, 7)}-${etiqueta}.pdf` };
   }
 
   /**
