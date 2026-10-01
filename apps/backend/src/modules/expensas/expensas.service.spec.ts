@@ -5,6 +5,7 @@ import type { Aviso, Notificador } from '../../core/notificaciones/notificador';
 import {
   Boleta,
   CriterioProrrateo,
+  EstadoBoleta,
   EstadoLiquidacion,
   Gasto,
   Liquidacion,
@@ -56,6 +57,10 @@ function crearEntorno() {
       { id: 'vt-rechazada', consorcioId: 'c1', titulo: 'Pileta', resultado: ResultadoVotacion.RECHAZADA },
       { id: 'vt-ajena', consorcioId: 'c2', titulo: 'Otra', resultado: ResultadoVotacion.APROBADA },
     ] as Votacion[],
+    pagado: 0,
+    ultimaBoleta: 'b1',
+    estados: new Map<string, EstadoBoleta>(),
+    saldadas: null as [string, string] | null,
   };
 
   const liq = (id: string) => db.liquidaciones.find((l) => l.id === id) ?? null;
@@ -115,6 +120,13 @@ function crearEntorno() {
     findBoleta: async () => db.boletaGuardada,
     aplicarAjuste: async (...args: unknown[]) => {
       db.ajusteAplicado = args;
+    },
+    marcarVencidas: async () => undefined,
+    pagadoDe: async () => db.pagado,
+    ultimaBoletaEmitida: async () => db.ultimaBoleta,
+    actualizarEstado: async (id: string, estado: EstadoBoleta) => void db.estados.set(id, estado),
+    saldarAnteriores: async (unidadId: string, periodo: string) => {
+      db.saldadas = [unidadId, periodo];
     },
     unidadesDelUsuario: async () => db.unidadesDelVecino,
     vecinosPorUnidad: async () => db.vecinos,
@@ -440,6 +452,52 @@ describe('ExpensasService', () => {
         service.ajustarBoleta('b1', { ajusteManual: 10, motivoAjuste: 'x' }),
         BadRequestException,
       );
+    });
+
+    describe('para pagos', () => {
+      const emitida = (datos: Partial<Boleta> = {}) =>
+        ({
+          ...boleta(EstadoLiquidacion.EMITIDA),
+          liquidacion: { estado: EstadoLiquidacion.EMITIDA, periodo: '2026-10-01', fechaVencimiento: '2026-11-10' },
+          ...datos,
+        }) as Boleta;
+
+      it('devuelve el saldo de la última boleta de la unidad', async () => {
+        db.boletaGuardada = emitida();
+        db.pagado = 150;
+        assert.equal((await service.boletaPagable(vecino, 'b1')).saldo, 250);
+      });
+
+      it('no deja pagar una boleta vieja: su deuda ya está en la nueva', async () => {
+        db.boletaGuardada = emitida();
+        db.ultimaBoleta = 'b2';
+        await assert.rejects(service.boletaPagable(admin, 'b1'), /más reciente/);
+      });
+
+      it('ni una ya pagada, ni una sin emitir', async () => {
+        db.boletaGuardada = emitida();
+        db.pagado = 400;
+        await assert.rejects(service.boletaPagable(admin, 'b1'), /ya está pagada/);
+        db.boletaGuardada = boleta(EstadoLiquidacion.PREVISUALIZACION);
+        await assert.rejects(service.boletaPagable(admin, 'b1'), /no se emitió/);
+      });
+
+      it('al vecino, una boleta ajena le da 404', async () => {
+        db.boletaGuardada = emitida({ unidadId: 'u2' });
+        await assert.rejects(service.boletaPagable(vecino, 'b1'), NotFoundException);
+      });
+
+      it('sincroniza el estado y, si queda pagada, salda las anteriores', async () => {
+        db.boletaGuardada = emitida();
+        db.pagado = 100;
+        assert.equal((await service.sincronizarEstado('b1')).estado, EstadoBoleta.PARCIAL);
+        assert.equal(db.saldadas, null);
+
+        db.pagado = 400;
+        assert.equal((await service.sincronizarEstado('b1')).estado, EstadoBoleta.PAGADA);
+        assert.deepEqual(db.estados.get('b1'), EstadoBoleta.PAGADA);
+        assert.deepEqual(db.saldadas, ['u1', '2026-10-01']);
+      });
     });
   });
 });
