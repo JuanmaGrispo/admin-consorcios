@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Pago } from '../../database/entities';
 import { ExpensasModule } from '../expensas/expensas.module';
+import { MercadoPagoClient } from './mercado-pago.client';
 import { PagosController } from './pagos.controller';
 import { PagosRepository } from './pagos.repository';
 import { PagosService } from './pagos.service';
@@ -13,6 +14,6 @@ import { PagosService } from './pagos.service';
     ExpensasModule,
   ],
   controllers: [PagosController],
-  providers: [PagosService, PagosRepository],
+  providers: [PagosService, PagosRepository, MercadoPagoClient],
 })
 export class PagosModule {}
