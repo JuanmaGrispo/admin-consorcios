@@ -12,11 +12,13 @@ import {
   EstadoLiquidacion,
   Gasto,
   Liquidacion,
+  ResultadoVotacion,
   RolUsuario,
 } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
+import { ReclamosService } from '../reclamos/reclamos.service';
 import { RubrosGastoService } from '../rubros-gasto/rubros-gasto.service';
 import { AjustarBoletaDto } from './dto/ajustar-boleta.dto';
 import { CreateGastoDto } from './dto/create-gasto.dto';
@@ -71,6 +73,7 @@ export class ExpensasService {
     private readonly consorcios: ConsorciosService,
     private readonly rubros: RubrosGastoService,
     private readonly proveedores: ProveedoresService,
+    private readonly reclamos: ReclamosService,
     private readonly notificador: Notificador,
   ) {}
 
@@ -142,6 +145,7 @@ export class ExpensasService {
     if (dto.proveedorId) {
       await this.proveedores.exigirAsignable(dto.proveedorId, liquidacion.consorcioId);
     }
+    await this.exigirOrigenValido(dto, liquidacion.consorcioId);
     this.exigirCuotasValidas(dto.cuotaNumero, dto.cuotaTotal);
 
     const gasto = await this.expensas.crearGasto({
@@ -169,6 +173,13 @@ export class ExpensasService {
     if (dto.proveedorId && dto.proveedorId !== gasto.proveedorId) {
       await this.proveedores.exigirAsignable(dto.proveedorId, liquidacion.consorcioId);
     }
+    await this.exigirOrigenValido(
+      {
+        reclamoId: dto.reclamoId !== gasto.reclamoId ? dto.reclamoId : undefined,
+        votacionId: dto.votacionId !== gasto.votacionId ? dto.votacionId : undefined,
+      },
+      liquidacion.consorcioId,
+    );
     this.exigirCuotasValidas(
       dto.cuotaNumero ?? gasto.cuotaNumero ?? undefined,
       dto.cuotaTotal ?? gasto.cuotaTotal ?? undefined,
@@ -441,6 +452,28 @@ export class ExpensasService {
       throw new NotFoundException(`El gasto ${gastoId} no existe en esta liquidación`);
     }
     return gasto;
+  }
+
+  /**
+   * El reclamo o la votación de donde sale un gasto tienen que ser del mismo
+   * consorcio. La votación, además, aprobada: un gasto "aprobado en asamblea"
+   * que se rechazó no se puede cobrar.
+   */
+  private async exigirOrigenValido(
+    origen: { reclamoId?: string | null; votacionId?: string | null },
+    consorcioId: string,
+  ): Promise<void> {
+    if (origen.reclamoId) await this.reclamos.exigirVinculable(origen.reclamoId, consorcioId);
+    if (!origen.votacionId) return;
+
+    const votacion = await this.expensas.findVotacion(origen.votacionId);
+    if (!votacion) throw new BadRequestException(`La votación ${origen.votacionId} no existe`);
+    if (votacion.consorcioId !== consorcioId) {
+      throw new BadRequestException(`La votación "${votacion.titulo}" es de otro consorcio`);
+    }
+    if (votacion.resultado !== ResultadoVotacion.APROBADA) {
+      throw new BadRequestException(`La votación "${votacion.titulo}" no está aprobada`);
+    }
   }
 
   /** Vencer antes de que empiece el período no tiene sentido. */
