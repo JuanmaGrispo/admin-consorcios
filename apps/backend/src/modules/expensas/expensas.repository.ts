@@ -9,6 +9,7 @@ import {
   Liquidacion,
   Unidad,
   UnidadUsuario,
+  Votacion,
 } from '../../database/entities';
 import { ListarBoletasQuery } from './dto/listar-boletas.query';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
@@ -16,6 +17,9 @@ import { PREFIJO_AJUSTE, type BoletaCalculada } from './prorrateo';
 
 /** Las liquidaciones que ya salieron: sus boletas son deuda real y el vecino las ve. */
 const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
+
+/** Lo que se muestra de un gasto: rubro, proveedor y de dónde salió. */
+const RELACIONES_GASTO = { rubro: true, proveedor: true, reclamo: true, votacion: true } as const;
 
 /** Mismo criterio de vigencia que usan reclamos y unidades. */
 const VINCULO_VIGENTE = new Brackets((qb) =>
@@ -35,6 +39,8 @@ export class ExpensasRepository {
     private readonly unidades: Repository<Unidad>,
     @InjectRepository(UnidadUsuario)
     private readonly vinculos: Repository<UnidadUsuario>,
+    @InjectRepository(Votacion)
+    private readonly votaciones: Repository<Votacion>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -59,7 +65,7 @@ export class ExpensasRepository {
   findConGastos(id: string): Promise<Liquidacion | null> {
     return this.liquidaciones.findOne({
       where: { id },
-      relations: { gastos: { rubro: true, proveedor: true } },
+      relations: { gastos: RELACIONES_GASTO },
       order: { gastos: { createdAt: 'ASC' } },
     });
   }
@@ -110,7 +116,7 @@ export class ExpensasRepository {
   }
 
   findGasto(id: string): Promise<Gasto | null> {
-    return this.gastos.findOne({ where: { id }, relations: { rubro: true, proveedor: true } });
+    return this.gastos.findOne({ where: { id }, relations: RELACIONES_GASTO });
   }
 
   async crearGasto(data: Partial<Gasto>): Promise<Gasto> {
@@ -120,13 +126,24 @@ export class ExpensasRepository {
 
   async actualizarGasto(gasto: Gasto, data: Partial<Gasto>): Promise<Gasto> {
     // Sin las relaciones: si no, TypeORM toma el rubro cargado y pisa el rubroId nuevo.
-    const { rubro: _r, proveedor: _p, liquidacion: _l, ...columnas } = gasto;
+    const {
+      rubro: _r,
+      proveedor: _p,
+      liquidacion: _l,
+      reclamo: _rc,
+      votacion: _v,
+      ...columnas
+    } = gasto;
     await this.gastos.save({ ...columnas, ...data });
     return (await this.findGasto(gasto.id))!;
   }
 
   async borrarGasto(id: string): Promise<void> {
     await this.gastos.delete({ id });
+  }
+
+  findVotacion(id: string): Promise<Votacion | null> {
+    return this.votaciones.findOneBy({ id });
   }
 
   /** `total_gastos` es un resumen: se recalcula desde los gastos, no se suma a mano. */

@@ -236,6 +236,21 @@ export class ReclamosService {
     return actualizado;
   }
 
+  // ── Para otros módulos ─────────────────────────────────────────────────────
+
+  /**
+   * Para gastos: el reclamo que originó un gasto tiene que ser del mismo
+   * consorcio que la liquidación. La FK sólo garantiza que exista.
+   */
+  async exigirVinculable(reclamoId: string, consorcioId: string): Promise<Reclamo> {
+    const reclamo = await this.reclamos.findById(reclamoId);
+    if (!reclamo) throw new BadRequestException(`El reclamo ${reclamoId} no existe`);
+    if (reclamo.consorcioId !== consorcioId) {
+      throw new BadRequestException(`El reclamo ${reclamo.codigo} es de otro consorcio`);
+    }
+    return reclamo;
+  }
+
   // ── Auxiliares ─────────────────────────────────────────────────────────────
 
   /**
