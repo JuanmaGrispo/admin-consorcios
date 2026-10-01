@@ -4,11 +4,13 @@ import { Brackets, DataSource, IsNull, Like, Repository } from 'typeorm';
 import {
   Boleta,
   BoletaDetalle,
+  EstadoBoleta,
   EstadoLiquidacion,
   Gasto,
   Liquidacion,
   Unidad,
   UnidadUsuario,
+  Votacion,
 } from '../../database/entities';
 import { ListarBoletasQuery } from './dto/listar-boletas.query';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
@@ -16,6 +18,9 @@ import { PREFIJO_AJUSTE, type BoletaCalculada } from './prorrateo';
 
 /** Las liquidaciones que ya salieron: sus boletas son deuda real y el vecino las ve. */
 const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
+
+/** Lo que se muestra de un gasto: rubro, proveedor y de dónde salió. */
+const RELACIONES_GASTO = { rubro: true, proveedor: true, reclamo: true, votacion: true } as const;
 
 /** Mismo criterio de vigencia que usan reclamos y unidades. */
 const VINCULO_VIGENTE = new Brackets((qb) =>
@@ -35,6 +40,8 @@ export class ExpensasRepository {
     private readonly unidades: Repository<Unidad>,
     @InjectRepository(UnidadUsuario)
     private readonly vinculos: Repository<UnidadUsuario>,
+    @InjectRepository(Votacion)
+    private readonly votaciones: Repository<Votacion>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -59,7 +66,7 @@ export class ExpensasRepository {
   findConGastos(id: string): Promise<Liquidacion | null> {
     return this.liquidaciones.findOne({
       where: { id },
-      relations: { gastos: { rubro: true, proveedor: true } },
+      relations: { gastos: RELACIONES_GASTO },
       order: { gastos: { createdAt: 'ASC' } },
     });
   }
@@ -110,7 +117,7 @@ export class ExpensasRepository {
   }
 
   findGasto(id: string): Promise<Gasto | null> {
-    return this.gastos.findOne({ where: { id }, relations: { rubro: true, proveedor: true } });
+    return this.gastos.findOne({ where: { id }, relations: RELACIONES_GASTO });
   }
 
   async crearGasto(data: Partial<Gasto>): Promise<Gasto> {
@@ -120,13 +127,24 @@ export class ExpensasRepository {
 
   async actualizarGasto(gasto: Gasto, data: Partial<Gasto>): Promise<Gasto> {
     // Sin las relaciones: si no, TypeORM toma el rubro cargado y pisa el rubroId nuevo.
-    const { rubro: _r, proveedor: _p, liquidacion: _l, ...columnas } = gasto;
+    const {
+      rubro: _r,
+      proveedor: _p,
+      liquidacion: _l,
+      reclamo: _rc,
+      votacion: _v,
+      ...columnas
+    } = gasto;
     await this.gastos.save({ ...columnas, ...data });
     return (await this.findGasto(gasto.id))!;
   }
 
   async borrarGasto(id: string): Promise<void> {
     await this.gastos.delete({ id });
+  }
+
+  findVotacion(id: string): Promise<Votacion | null> {
+    return this.votaciones.findOneBy({ id });
   }
 
   /** `total_gastos` es un resumen: se recalcula desde los gastos, no se suma a mano. */
@@ -287,6 +305,70 @@ export class ExpensasRepository {
         await m.save(m.create(BoletaDetalle, { boletaId, gastoId: null, ...linea }));
       }
     });
+  }
+
+  // ── Estado de las boletas ──────────────────────────────────────────────────
+
+  /**
+   * Pasa a VENCIDA las boletas emitidas con saldo cuyo vencimiento ya pasó.
+   * Corre antes de cada lectura de boletas: así no hace falta un cron.
+   */
+  async marcarVencidas(): Promise<void> {
+    await this.dataSource.query(
+      `UPDATE boleta b
+          SET estado = 'VENCIDA', updated_at = now()
+         FROM liquidacion l
+        WHERE l.id = b.liquidacion_id
+          AND l.estado IN ('EMITIDA', 'CERRADA')
+          AND b.estado IN ('PENDIENTE', 'PARCIAL')
+          AND l.fecha_vencimiento < CURRENT_DATE`,
+    );
+  }
+
+  /** Suma de los pagos APROBADO de la boleta: el mismo criterio que la deuda. */
+  async pagadoDe(boletaId: string): Promise<number> {
+    const [fila] = await this.dataSource.query(
+      `SELECT coalesce(sum(monto), 0)::text AS pagado
+         FROM pago WHERE boleta_id = $1 AND estado = 'APROBADO'`,
+      [boletaId],
+    );
+    return Number((fila as { pagado: string }).pagado);
+  }
+
+  /** La boleta emitida más reciente de la unidad: la única que se paga. */
+  async ultimaBoletaEmitida(unidadId: string): Promise<string | null> {
+    const fila = await this.boletas
+      .createQueryBuilder('b')
+      .innerJoin('b.liquidacion', 'l')
+      .select('b.id', 'id')
+      .where('b.unidadId = :unidadId', { unidadId })
+      .andWhere('l.estado IN (:...emitidas)', { emitidas: EMITIDAS })
+      .orderBy('l.periodo', 'DESC')
+      .limit(1)
+      .getRawOne<{ id: string }>();
+    return fila?.id ?? null;
+  }
+
+  async actualizarEstado(boletaId: string, estado: EstadoBoleta): Promise<void> {
+    await this.boletas.update({ id: boletaId }, { estado });
+  }
+
+  /**
+   * Las boletas anteriores de la unidad que quedaron impagas: su deuda viajó
+   * como saldo anterior a la última, así que pagar esa las salda también.
+   */
+  async saldarAnteriores(unidadId: string, periodo: string): Promise<void> {
+    await this.dataSource.query(
+      `UPDATE boleta b
+          SET estado = 'PAGADA', updated_at = now()
+         FROM liquidacion l
+        WHERE l.id = b.liquidacion_id
+          AND b.unidad_id = $1
+          AND l.periodo < $2
+          AND l.estado IN ('EMITIDA', 'CERRADA')
+          AND b.estado <> 'PAGADA'`,
+      [unidadId, periodo],
+    );
   }
 
   // ── Vecinos ────────────────────────────────────────────────────────────────

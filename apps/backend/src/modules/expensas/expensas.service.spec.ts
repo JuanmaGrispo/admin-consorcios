@@ -5,17 +5,21 @@ import type { Aviso, Notificador } from '../../core/notificaciones/notificador';
 import {
   Boleta,
   CriterioProrrateo,
+  EstadoBoleta,
   EstadoLiquidacion,
   Gasto,
   Liquidacion,
   NaturalezaGasto,
   PeriodicidadMora,
+  ResultadoVotacion,
   RolUsuario,
   Unidad,
+  Votacion,
 } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { ProveedoresService } from '../proveedores/proveedores.service';
+import type { ReclamosService } from '../reclamos/reclamos.service';
 import type { RubrosGastoService } from '../rubros-gasto/rubros-gasto.service';
 import type { ExpensasRepository } from './expensas.repository';
 import { ExpensasService, vencimientoPorDefecto } from './expensas.service';
@@ -48,6 +52,15 @@ function crearEntorno() {
     vecinos: new Map([['u1', ['v1']], ['u2', ['v2', 'v3']]]),
     unidadesDelVecino: ['u1'],
     hoy: '2026-11-09',
+    votaciones: [
+      { id: 'vt1', consorcioId: 'c1', titulo: 'Pintura', resultado: ResultadoVotacion.APROBADA },
+      { id: 'vt-rechazada', consorcioId: 'c1', titulo: 'Pileta', resultado: ResultadoVotacion.RECHAZADA },
+      { id: 'vt-ajena', consorcioId: 'c2', titulo: 'Otra', resultado: ResultadoVotacion.APROBADA },
+    ] as Votacion[],
+    pagado: 0,
+    ultimaBoleta: 'b1',
+    estados: new Map<string, EstadoBoleta>(),
+    saldadas: null as [string, string] | null,
   };
 
   const liq = (id: string) => db.liquidaciones.find((l) => l.id === id) ?? null;
@@ -94,6 +107,7 @@ function crearEntorno() {
     borrarGasto: async (id: string) => {
       db.gastos = db.gastos.filter((g) => g.id !== id);
     },
+    findVotacion: async (id: string) => db.votaciones.find((v) => v.id === id) ?? null,
     recalcularTotalGastos: async () => undefined,
     unidadesActivas: async () => db.unidades.filter((u) => u.activa),
     deudasAnteriores: async () => db.deudas,
@@ -106,6 +120,13 @@ function crearEntorno() {
     findBoleta: async () => db.boletaGuardada,
     aplicarAjuste: async (...args: unknown[]) => {
       db.ajusteAplicado = args;
+    },
+    marcarVencidas: async () => undefined,
+    pagadoDe: async () => db.pagado,
+    ultimaBoletaEmitida: async () => db.ultimaBoleta,
+    actualizarEstado: async (id: string, estado: EstadoBoleta) => void db.estados.set(id, estado),
+    saldarAnteriores: async (unidadId: string, periodo: string) => {
+      db.saldadas = [unidadId, periodo];
     },
     unidadesDelUsuario: async () => db.unidadesDelVecino,
     vecinosPorUnidad: async () => db.vecinos,
@@ -126,6 +147,12 @@ function crearEntorno() {
       exigirUsable: async () => ({ id: 'r1', naturaleza: NaturalezaGasto.ORDINARIO }),
     } as unknown as RubrosGastoService,
     { exigirAsignable: async () => ({}) } as unknown as ProveedoresService,
+    {
+      exigirVinculable: async (id: string) => {
+        if (id !== 'rc1') throw new BadRequestException('otro consorcio');
+        return { id };
+      },
+    } as unknown as ReclamosService,
     notificador,
   );
 
@@ -237,6 +264,42 @@ describe('ExpensasService', () => {
       const otra = await service.create(admin, { consorcioId: 'c1', periodo: '2026-11' });
       await assert.rejects(service.borrarGasto(otra.id, 'g1'), NotFoundException);
       assert.equal(l.id, 'l1');
+    });
+
+    describe('origen: reclamo o votación', () => {
+      const gasto = { rubroId: 'r1', descripcion: 'Arreglo', monto: 100 };
+
+      it('vincula un reclamo y una votación aprobada del consorcio', async () => {
+        const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
+        const g = await service.agregarGasto(l.id, { ...gasto, reclamoId: 'rc1', votacionId: 'vt1' });
+        assert.equal(g.reclamoId, 'rc1');
+        assert.equal(g.votacionId, 'vt1');
+      });
+
+      it('rechaza un reclamo de otro consorcio', async () => {
+        const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
+        await assert.rejects(
+          service.agregarGasto(l.id, { ...gasto, reclamoId: 'rc-ajeno' }),
+          BadRequestException,
+        );
+      });
+
+      it('rechaza una votación no aprobada o de otro consorcio', async () => {
+        const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
+        for (const votacionId of ['vt-rechazada', 'vt-ajena', 'vt-inexistente']) {
+          await assert.rejects(
+            service.agregarGasto(l.id, { ...gasto, votacionId }),
+            BadRequestException,
+          );
+        }
+      });
+
+      it('null desvincula sin validar', async () => {
+        const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
+        const g = await service.agregarGasto(l.id, { ...gasto, reclamoId: 'rc1' });
+        const actualizado = await service.actualizarGasto(l.id, g.id, { reclamoId: null });
+        assert.equal(actualizado.reclamoId, null);
+      });
     });
   });
 
@@ -389,6 +452,52 @@ describe('ExpensasService', () => {
         service.ajustarBoleta('b1', { ajusteManual: 10, motivoAjuste: 'x' }),
         BadRequestException,
       );
+    });
+
+    describe('para pagos', () => {
+      const emitida = (datos: Partial<Boleta> = {}) =>
+        ({
+          ...boleta(EstadoLiquidacion.EMITIDA),
+          liquidacion: { estado: EstadoLiquidacion.EMITIDA, periodo: '2026-10-01', fechaVencimiento: '2026-11-10' },
+          ...datos,
+        }) as Boleta;
+
+      it('devuelve el saldo de la última boleta de la unidad', async () => {
+        db.boletaGuardada = emitida();
+        db.pagado = 150;
+        assert.equal((await service.boletaPagable(vecino, 'b1')).saldo, 250);
+      });
+
+      it('no deja pagar una boleta vieja: su deuda ya está en la nueva', async () => {
+        db.boletaGuardada = emitida();
+        db.ultimaBoleta = 'b2';
+        await assert.rejects(service.boletaPagable(admin, 'b1'), /más reciente/);
+      });
+
+      it('ni una ya pagada, ni una sin emitir', async () => {
+        db.boletaGuardada = emitida();
+        db.pagado = 400;
+        await assert.rejects(service.boletaPagable(admin, 'b1'), /ya está pagada/);
+        db.boletaGuardada = boleta(EstadoLiquidacion.PREVISUALIZACION);
+        await assert.rejects(service.boletaPagable(admin, 'b1'), /no se emitió/);
+      });
+
+      it('al vecino, una boleta ajena le da 404', async () => {
+        db.boletaGuardada = emitida({ unidadId: 'u2' });
+        await assert.rejects(service.boletaPagable(vecino, 'b1'), NotFoundException);
+      });
+
+      it('sincroniza el estado y, si queda pagada, salda las anteriores', async () => {
+        db.boletaGuardada = emitida();
+        db.pagado = 100;
+        assert.equal((await service.sincronizarEstado('b1')).estado, EstadoBoleta.PARCIAL);
+        assert.equal(db.saldadas, null);
+
+        db.pagado = 400;
+        assert.equal((await service.sincronizarEstado('b1')).estado, EstadoBoleta.PAGADA);
+        assert.deepEqual(db.estados.get('b1'), EstadoBoleta.PAGADA);
+        assert.deepEqual(db.saldadas, ['u1', '2026-10-01']);
+      });
     });
   });
 });
