@@ -350,6 +350,16 @@ export class ExpensasService {
     return { boleta, saldo: aPesos(saldo) };
   }
 
+  /** Las unidades que ve un vecino; `undefined` para quien administra (ve todo). */
+  async unidadesVisibles(usuario: UsuarioActual): Promise<string[] | undefined> {
+    return esVecino(usuario) ? this.expensas.unidadesDelUsuario(usuario.id) : undefined;
+  }
+
+  /** A quién avisarle algo de una unidad: los vecinos vinculados hoy. */
+  async vecinosDe(unidadId: string): Promise<string[]> {
+    return (await this.expensas.vecinosPorUnidad([unidadId])).get(unidadId) ?? [];
+  }
+
   /**
    * Recalcula el estado desde los pagos. Lo llama pagos después de cada cambio
    * (un pago nuevo, una aprobación o un reintegro de Mercado Pago).
