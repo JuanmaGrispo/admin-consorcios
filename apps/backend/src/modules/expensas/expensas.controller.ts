@@ -10,8 +10,9 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { RolUsuario } from '../../database/entities';
 import type { UsuarioActual as Usuario } from '../auth/auth.types';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -161,6 +162,17 @@ export class ExpensasController {
   @ApiResponse({ status: 404, description: 'No existe, no es suya o no se emitió' })
   findBoleta(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
     return this.expensas.findBoleta(usuario, id);
+  }
+
+  @Get('boletas/:id/pdf')
+  @ApiOperation({ summary: 'Boleta en PDF', description: 'Mismos permisos que el detalle.' })
+  @ApiProduces('application/pdf')
+  async pdfBoleta(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    const { buffer, nombre } = await this.expensas.pdfBoleta(usuario, id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `inline; filename="${nombre}"`,
+    });
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
