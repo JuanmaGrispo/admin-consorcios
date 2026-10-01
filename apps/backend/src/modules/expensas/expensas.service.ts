@@ -9,6 +9,7 @@ import { Notificador } from '../../core/notificaciones/notificador';
 import {
   Boleta,
   CriterioProrrateo,
+  EstadoBoleta,
   EstadoLiquidacion,
   Gasto,
   Liquidacion,
@@ -27,6 +28,7 @@ import { ListarBoletasQuery } from './dto/listar-boletas.query';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
 import { UpdateLiquidacionDto } from './dto/update-liquidacion.dto';
+import { estadoBoleta } from './estado-boleta';
 import { ExpensasRepository } from './expensas.repository';
 import {
   aCentavos,
@@ -42,6 +44,9 @@ import {
  * son deuda de los vecinos y no se reescriben.
  */
 const EDITABLES = [EstadoLiquidacion.BORRADOR, EstadoLiquidacion.PREVISUALIZACION];
+
+/** Ya salieron: sus boletas son deuda real, el vecino las ve y se pagan. */
+const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
 
 const esVecino = (usuario: UsuarioActual) => usuario.rol === RolUsuario.VECINO;
 
@@ -259,6 +264,7 @@ export class ExpensasService {
 
   /** El administrador ve todas; el vecino, las emitidas de sus unidades. */
   async listarBoletas(usuario: UsuarioActual, query: ListarBoletasQuery): Promise<Boleta[]> {
+    await this.expensas.marcarVencidas();
     if (!esVecino(usuario)) {
       return this.expensas.listarBoletas(query, { soloEmitidas: false });
     }
@@ -269,12 +275,12 @@ export class ExpensasService {
   }
 
   async findBoleta(usuario: UsuarioActual, id: string): Promise<Boleta> {
+    await this.expensas.marcarVencidas();
     const boleta = await this.expensas.findBoleta(id);
     const visible =
       boleta &&
       (!esVecino(usuario) ||
-        ((boleta.liquidacion.estado === EstadoLiquidacion.EMITIDA ||
-          boleta.liquidacion.estado === EstadoLiquidacion.CERRADA) &&
+        (EMITIDAS.includes(boleta.liquidacion.estado) &&
           (await this.expensas.unidadesDelUsuario(usuario.id)).includes(boleta.unidadId)));
     // Al vecino, una boleta ajena o sin emitir le da 404: un 403 confirmaría que existe.
     if (!visible) throw new NotFoundException(`La boleta ${id} no existe`);
@@ -315,6 +321,54 @@ export class ExpensasService {
         : { concepto: conceptoAjuste(motivo), monto: dto.ajusteManual },
     );
     return (await this.expensas.findBoleta(id))!;
+  }
+
+  // ── Para pagos ─────────────────────────────────────────────────────────────
+
+  /**
+   * La boleta a la que se le puede imputar un pago y cuánto le falta. Sólo la
+   * última emitida de la unidad: las anteriores ya viajaron como saldo
+   * anterior, y pagarlas cobraría dos veces la misma deuda.
+   */
+  async boletaPagable(
+    usuario: UsuarioActual,
+    id: string,
+  ): Promise<{ boleta: Boleta; saldo: number }> {
+    // Mismos permisos que leerla: al vecino, una ajena le da 404.
+    const boleta = await this.findBoleta(usuario, id);
+    if (!EMITIDAS.includes(boleta.liquidacion.estado)) {
+      throw new BadRequestException('La boleta todavía no se emitió');
+    }
+    if ((await this.expensas.ultimaBoletaEmitida(boleta.unidadId)) !== boleta.id) {
+      throw new BadRequestException(
+        'Esta deuda ya está incluida en la boleta más reciente de la unidad: pagá esa',
+      );
+    }
+
+    const saldo = aCentavos(boleta.total) - aCentavos(await this.expensas.pagadoDe(id));
+    if (saldo <= 0) throw new BadRequestException('La boleta ya está pagada');
+    return { boleta, saldo: aPesos(saldo) };
+  }
+
+  /**
+   * Recalcula el estado desde los pagos. Lo llama pagos después de cada cambio
+   * (un pago nuevo, una aprobación o un reintegro de Mercado Pago).
+   */
+  async sincronizarEstado(boletaId: string): Promise<Boleta> {
+    const boleta = await this.expensas.findBoleta(boletaId);
+    if (!boleta) throw new NotFoundException(`La boleta ${boletaId} no existe`);
+
+    const estado = estadoBoleta(
+      boleta.total,
+      await this.expensas.pagadoDe(boletaId),
+      boleta.liquidacion.fechaVencimiento,
+      await this.expensas.hoy(),
+    );
+    await this.expensas.actualizarEstado(boletaId, estado);
+    if (estado === EstadoBoleta.PAGADA) {
+      await this.expensas.saldarAnteriores(boleta.unidadId, boleta.liquidacion.periodo);
+    }
+    return { ...boleta, estado };
   }
 
   // ── Auxiliares ─────────────────────────────────────────────────────────────

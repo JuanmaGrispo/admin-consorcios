@@ -4,6 +4,7 @@ import { Brackets, DataSource, IsNull, Like, Repository } from 'typeorm';
 import {
   Boleta,
   BoletaDetalle,
+  EstadoBoleta,
   EstadoLiquidacion,
   Gasto,
   Liquidacion,
@@ -304,6 +305,70 @@ export class ExpensasRepository {
         await m.save(m.create(BoletaDetalle, { boletaId, gastoId: null, ...linea }));
       }
     });
+  }
+
+  // ── Estado de las boletas ──────────────────────────────────────────────────
+
+  /**
+   * Pasa a VENCIDA las boletas emitidas con saldo cuyo vencimiento ya pasó.
+   * Corre antes de cada lectura de boletas: así no hace falta un cron.
+   */
+  async marcarVencidas(): Promise<void> {
+    await this.dataSource.query(
+      `UPDATE boleta b
+          SET estado = 'VENCIDA', updated_at = now()
+         FROM liquidacion l
+        WHERE l.id = b.liquidacion_id
+          AND l.estado IN ('EMITIDA', 'CERRADA')
+          AND b.estado IN ('PENDIENTE', 'PARCIAL')
+          AND l.fecha_vencimiento < CURRENT_DATE`,
+    );
+  }
+
+  /** Suma de los pagos APROBADO de la boleta: el mismo criterio que la deuda. */
+  async pagadoDe(boletaId: string): Promise<number> {
+    const [fila] = await this.dataSource.query(
+      `SELECT coalesce(sum(monto), 0)::text AS pagado
+         FROM pago WHERE boleta_id = $1 AND estado = 'APROBADO'`,
+      [boletaId],
+    );
+    return Number((fila as { pagado: string }).pagado);
+  }
+
+  /** La boleta emitida más reciente de la unidad: la única que se paga. */
+  async ultimaBoletaEmitida(unidadId: string): Promise<string | null> {
+    const fila = await this.boletas
+      .createQueryBuilder('b')
+      .innerJoin('b.liquidacion', 'l')
+      .select('b.id', 'id')
+      .where('b.unidadId = :unidadId', { unidadId })
+      .andWhere('l.estado IN (:...emitidas)', { emitidas: EMITIDAS })
+      .orderBy('l.periodo', 'DESC')
+      .limit(1)
+      .getRawOne<{ id: string }>();
+    return fila?.id ?? null;
+  }
+
+  async actualizarEstado(boletaId: string, estado: EstadoBoleta): Promise<void> {
+    await this.boletas.update({ id: boletaId }, { estado });
+  }
+
+  /**
+   * Las boletas anteriores de la unidad que quedaron impagas: su deuda viajó
+   * como saldo anterior a la última, así que pagar esa las salda también.
+   */
+  async saldarAnteriores(unidadId: string, periodo: string): Promise<void> {
+    await this.dataSource.query(
+      `UPDATE boleta b
+          SET estado = 'PAGADA', updated_at = now()
+         FROM liquidacion l
+        WHERE l.id = b.liquidacion_id
+          AND b.unidad_id = $1
+          AND l.periodo < $2
+          AND l.estado IN ('EMITIDA', 'CERRADA')
+          AND b.estado <> 'PAGADA'`,
+      [unidadId, periodo],
+    );
   }
 
   // ── Vecinos ────────────────────────────────────────────────────────────────
