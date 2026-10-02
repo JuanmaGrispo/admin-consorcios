@@ -102,6 +102,24 @@ export class UnidadesRepository {
     return filas.map((f) => f.unidadId);
   }
 
+  /**
+   * Los vínculos vigentes de un vecino, con la unidad y su consorcio. Es lo
+   * que necesita la pantalla de inicio para decir "Rivadavia 4820 · Unidad
+   * 5º C" sin pedir cada cosa por separado.
+   */
+  vinculosDelUsuario(usuarioId: string): Promise<UnidadUsuario[]> {
+    return this.vinculos
+      .createQueryBuilder('v')
+      .innerJoinAndSelect('v.unidad', 'unidad')
+      .innerJoinAndSelect('unidad.consorcio', 'consorcio')
+      .where('v.usuarioId = :usuarioId', { usuarioId })
+      .andWhere(VIGENTE)
+      .andWhere('unidad.activa = true')
+      .orderBy('v.esTitular', 'DESC')
+      .addOrderBy('unidad.etiqueta', 'ASC')
+      .getMany();
+  }
+
   listarVinculos(unidadId: string, incluirTerminados: boolean): Promise<UnidadUsuario[]> {
     const qb = this.vinculos
       .createQueryBuilder('v')

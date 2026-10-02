@@ -20,6 +20,7 @@ import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import { AjustarBoletaDto } from './dto/ajustar-boleta.dto';
 import { CreateGastoDto } from './dto/create-gasto.dto';
 import { CreateLiquidacionDto } from './dto/create-liquidacion.dto';
+import { EnviarRecordatoriosDto } from './dto/enviar-recordatorios.dto';
 import { ListarBoletasQuery } from './dto/listar-boletas.query';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
@@ -150,11 +151,53 @@ export class ExpensasController {
 
   @Get('boletas')
   @ApiOperation({
-    summary: 'Lista boletas',
-    description: 'El administrador ve todas; el vecino, las emitidas de sus unidades.',
+    summary: 'Grilla de cobranzas',
+    description:
+      'Paginada. Cada fila trae lo pagado, el saldo, el medio del último pago y —para quien administra— los ocupantes de la unidad. El administrador ve todas las boletas; el vecino, las emitidas de sus unidades.',
   })
   listarBoletas(@UsuarioActual() usuario: Usuario, @Query() query: ListarBoletasQuery) {
     return this.expensas.listarBoletas(usuario, query);
+  }
+
+  // Antes de `boletas/:id`: si no, Nest intentaría leer "resumen" como un id.
+  @Get('boletas/resumen')
+  @ApiOperation({
+    summary: 'Totales de cobranza del alcance',
+    description:
+      'Emitido, cobrado, saldo pendiente e intereses, más el conteo de cada solapa. Toma los mismos filtros que la grilla, salvo `estado` y `situacion`.',
+  })
+  resumenCobranzas(@UsuarioActual() usuario: Usuario, @Query() query: ListarBoletasQuery) {
+    return this.expensas.resumenCobranzas(usuario, query);
+  }
+
+  @Get('boletas/exportar')
+  @ApiOperation({
+    summary: 'La grilla en CSV',
+    description:
+      'Mismos filtros que la grilla, sin paginar. CSV con `;` y BOM: Excel en español lo abre en columnas sin pasar por el asistente.',
+  })
+  @ApiProduces('text/csv')
+  async exportarCobranzas(
+    @UsuarioActual() usuario: Usuario,
+    @Query() query: ListarBoletasQuery,
+  ) {
+    const { csv, nombre } = await this.expensas.exportarCobranzas(usuario, query);
+    return new StreamableFile(Buffer.from(csv, 'utf8'), {
+      type: 'text/csv; charset=utf-8',
+      disposition: `attachment; filename="${nombre}"`,
+    });
+  }
+
+  @Roles(RolUsuario.ADMINISTRADOR)
+  @Post('boletas/recordatorios')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Avisa a quienes deben',
+    description:
+      'Un aviso por vecino de cada boleta con saldo del alcance. Nunca a quien ya pagó. Devuelve cuántos avisos salieron.',
+  })
+  enviarRecordatorios(@UsuarioActual() usuario: Usuario, @Body() dto: EnviarRecordatoriosDto) {
+    return this.expensas.enviarRecordatorios(usuario, dto);
   }
 
   @Get('boletas/:id')

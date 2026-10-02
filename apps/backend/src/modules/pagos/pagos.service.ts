@@ -1,13 +1,22 @@
-import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Notificador } from '../../core/notificaciones/notificador';
 import { ConceptoPago, EstadoPago, MedioPago, Pago } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
+import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ExpensasService } from '../expensas/expensas.service';
 import { aCentavos } from '../expensas/prorrateo';
 import { ListarPagosQuery } from './dto/listar-pagos.query';
 import { RegistrarPagoDto } from './dto/registrar-pago.dto';
 import { MercadoPagoClient } from './mercado-pago.client';
 import { PagosRepository } from './pagos.repository';
+import { formatearNumeroRecibo } from './recibo';
+import { generarReciboPdf } from './recibo-pdf';
 
 /** Lo que no es aprobado, rechazado ni devuelto sigue en curso. */
 export function estadoSegunMercadoPago(status: string): EstadoPago {
@@ -36,12 +45,52 @@ export class PagosService {
   constructor(
     private readonly pagos: PagosRepository,
     private readonly expensas: ExpensasService,
+    private readonly consorcios: ConsorciosService,
     private readonly mercadoPago: MercadoPagoClient,
     private readonly notificador: Notificador,
   ) {}
 
   async listar(usuario: UsuarioActual, query: ListarPagosQuery): Promise<Pago[]> {
     return this.pagos.listar(query, await this.expensas.unidadesVisibles(usuario));
+  }
+
+  /**
+   * Un pago con su unidad y su boleta: es la pantalla de "pago aprobado" o
+   * "pago rechazado" que el vecino ve al volver de Mercado Pago.
+   */
+  async findOne(usuario: UsuarioActual, id: string): Promise<Pago> {
+    const pago = await this.pagos.findConRelaciones(id);
+    const visibles = await this.expensas.unidadesVisibles(usuario);
+    // Un pago ajeno le da 404 y no 403: un 403 confirmaría que existe.
+    if (!pago || (visibles && !visibles.includes(pago.unidadId))) {
+      throw new NotFoundException(`El pago ${id} no existe`);
+    }
+    return pago;
+  }
+
+  /**
+   * El recibo en PDF, con los mismos permisos que el detalle. Sólo de un pago
+   * aprobado: dar comprobante de algo que el banco rechazó sería mentir.
+   * Se genera al vuelo, como la boleta, así que `recibo_url` queda sin usar.
+   */
+  async reciboPdf(
+    usuario: UsuarioActual,
+    id: string,
+  ): Promise<{ buffer: Buffer; nombre: string }> {
+    const pago = await this.findOne(usuario, id);
+    if (pago.estado !== EstadoPago.APROBADO) {
+      throw new BadRequestException(`El pago está ${pago.estado}: todavía no hay recibo`);
+    }
+
+    const consorcio = await this.consorcios.findOne(pago.unidad.consorcioId);
+    const buffer = await generarReciboPdf({
+      pago,
+      etiquetaUnidad: pago.unidad.etiqueta,
+      periodo: pago.boleta?.liquidacion?.periodo ?? null,
+      consorcio,
+    });
+    const numero = (pago.reciboNumero ?? pago.id).replace(/[^\w-]+/g, '');
+    return { buffer, nombre: `recibo-${numero}.pdf` };
   }
 
   /** Transferencia, efectivo u otro medio que el administrador ya verificó. */
@@ -152,8 +201,12 @@ export class PagosService {
     else await this.expensas.sincronizarEstado(actualizado.boletaId!);
   }
 
-  /** Mueve el estado de la boleta y avisa. El aviso nunca corta el pago. */
+  /**
+   * Le da número de recibo, mueve el estado de la boleta y avisa. El aviso
+   * nunca corta el pago.
+   */
   private async alAprobarse(pago: Pago): Promise<void> {
+    const conRecibo = await this.numerarRecibo(pago);
     const boleta = await this.expensas.sincronizarEstado(pago.boletaId!);
 
     for (const destinatarioId of await this.expensas.vecinosDe(pago.unidadId)) {
@@ -161,12 +214,25 @@ export class PagosService {
         await this.notificador.enviar({
           destinatarioId,
           asunto: 'Recibimos tu pago',
-          cuerpo: `Registramos un pago de $${pago.monto.toFixed(2)}. Tu boleta quedó ${boleta.estado}.`,
+          cuerpo: `Registramos un pago de $${pago.monto.toFixed(2)} (recibo ${conRecibo.reciboNumero}). Tu boleta quedó ${boleta.estado}.`,
           origen: `pago:${pago.id}`,
         });
       } catch (error) {
         this.logger.warn(`No se pudo avisar a ${destinatarioId}: ${String(error)}`);
       }
     }
+  }
+
+  /**
+   * Numera el recibo la primera vez que el pago queda aprobado. Si ya tiene
+   * número, se conserva: el webhook de Mercado Pago reintenta, y un recibo que
+   * cambia de número cada vez que llega un aviso no sirve como comprobante.
+   */
+  private async numerarRecibo(pago: Pago): Promise<Pago> {
+    if (pago.reciboNumero) return pago;
+    const correlativo = await this.pagos.siguienteCorrelativoRecibo();
+    return this.pagos.actualizar(pago.id, {
+      reciboNumero: formatearNumeroRecibo(correlativo),
+    });
   }
 }

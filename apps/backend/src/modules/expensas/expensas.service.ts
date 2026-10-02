@@ -15,6 +15,8 @@ import {
   Liquidacion,
   ResultadoVotacion,
   RolUsuario,
+  UnidadUsuario,
+  Usuario,
 } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
@@ -24,13 +26,25 @@ import { RubrosGastoService } from '../rubros-gasto/rubros-gasto.service';
 import { AjustarBoletaDto } from './dto/ajustar-boleta.dto';
 import { CreateGastoDto } from './dto/create-gasto.dto';
 import { CreateLiquidacionDto } from './dto/create-liquidacion.dto';
+import { EnviarRecordatoriosDto } from './dto/enviar-recordatorios.dto';
 import { ListarBoletasQuery } from './dto/listar-boletas.query';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
 import { UpdateLiquidacionDto } from './dto/update-liquidacion.dto';
 import { generarBoletaPdf } from './boleta-pdf';
+import {
+  aCsv,
+  elegirOcupantes,
+  estadosDe,
+  type FilaCobranza,
+  type VecinoDeFila,
+} from './cobranzas';
 import { estadoBoleta } from './estado-boleta';
-import { ExpensasRepository } from './expensas.repository';
+import {
+  ExpensasRepository,
+  type AlcanceBoletas,
+  type ResumenCobranzas,
+} from './expensas.repository';
 import {
   aCentavos,
   aPesos,
@@ -50,6 +64,36 @@ const EDITABLES = [EstadoLiquidacion.BORRADOR, EstadoLiquidacion.PREVISUALIZACIO
 const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
 
 const esVecino = (usuario: UsuarioActual) => usuario.rol === RolUsuario.VECINO;
+
+/**
+ * Tope de filas para lo que no se pagina (exportación y recordatorios). Un
+ * consorcio grande con varios años de boletas no tiene por qué entrar entero
+ * en memoria de una: con un alcance razonable —un período— nunca se llega.
+ */
+const TOPE_EXPORTACION = 5_000;
+
+/** El vecino como sale en la grilla: nunca el hash de su password. */
+const aVecinoDeFila = (usuario: Usuario): VecinoDeFila => ({
+  id: usuario.id,
+  nombre: usuario.nombre,
+  apellido: usuario.apellido,
+  email: usuario.email,
+  telefono: usuario.telefono,
+});
+
+/** Lo que una unidad debe hoy: la cabecera de la pantalla del vecino. */
+export interface SaldoDeUnidad {
+  boletaId: string;
+  /** AAAA-MM. */
+  periodo: string;
+  fechaVencimiento: string;
+  total: number;
+  pagado: number;
+  saldo: number;
+  estado: EstadoBoleta;
+  /** Negativo si ya venció. */
+  diasParaVencer: number;
+}
 
 const MS_POR_DIA = 86_400_000;
 /** Días entre dos fechas ISO (YYYY-MM-DD). */
@@ -263,16 +307,159 @@ export class ExpensasService {
 
   // ── Boletas ────────────────────────────────────────────────────────────────
 
-  /** El administrador ve todas; el vecino, las emitidas de sus unidades. */
-  async listarBoletas(usuario: UsuarioActual, query: ListarBoletasQuery): Promise<Boleta[]> {
+  /**
+   * La grilla de cobranzas. El administrador ve todas las boletas; el vecino,
+   * las emitidas de sus unidades. Cada fila viaja con lo pagado, el saldo y
+   * quién vive en la unidad: la boleta sola no alcanza para decidir a quién
+   * reclamarle.
+   */
+  async listarBoletas(
+    usuario: UsuarioActual,
+    query: ListarBoletasQuery,
+  ): Promise<{ items: FilaCobranza[]; total: number; pagina: number; paginas: number }> {
     await this.expensas.marcarVencidas();
-    if (!esVecino(usuario)) {
-      return this.expensas.listarBoletas(query, { soloEmitidas: false });
+    const pagina = query.pagina ?? 1;
+    const limite = query.limite ?? 20;
+
+    const { items, total } = await this.expensas.listarBoletas(
+      await this.alcanceDe(usuario, query),
+      { pagina, limite },
+    );
+
+    return {
+      items: await this.aFilas(items, { conOcupantes: !esVecino(usuario) }),
+      total,
+      pagina,
+      paginas: Math.ceil(total / limite) || 1,
+    };
+  }
+
+  /**
+   * Los totales de la cabecera de cobranzas, sobre el mismo alcance que la
+   * grilla, más los conteos de cada solapa.
+   */
+  async resumenCobranzas(
+    usuario: UsuarioActual,
+    query: ListarBoletasQuery,
+  ): Promise<ResumenCobranzas> {
+    await this.expensas.marcarVencidas();
+    // El resumen de la cabecera no se recorta por solapa: muestra el total del
+    // período, y los conteos son justamente los de cada solapa.
+    const { situacion: _s, estado: _e, ...alcance } = query;
+    return this.expensas.resumenCobranzas(await this.alcanceDe(usuario, alcance));
+  }
+
+  /** La grilla completa como CSV, con los filtros que se estén viendo. */
+  async exportarCobranzas(
+    usuario: UsuarioActual,
+    query: ListarBoletasQuery,
+  ): Promise<{ csv: string; nombre: string }> {
+    await this.expensas.marcarVencidas();
+    const boletas = await this.expensas.listarBoletasCompletas(
+      await this.alcanceDe(usuario, query),
+      TOPE_EXPORTACION,
+    );
+    const filas = await this.aFilas(boletas, { conOcupantes: !esVecino(usuario) });
+    const sufijo = query.periodo ?? new Date().toISOString().slice(0, 10);
+    return { csv: aCsv(filas), nombre: `cobranzas-${sufijo}.csv` };
+  }
+
+  /**
+   * Un aviso a cada vecino de cada boleta con saldo del alcance. Es la acción
+   * de "Enviar recordatorios": no cambia nada en la base, sólo avisa, y un
+   * aviso que falla no corta el resto.
+   */
+  async enviarRecordatorios(
+    usuario: UsuarioActual,
+    dto: EnviarRecordatoriosDto,
+  ): Promise<{ boletas: number; avisos: number; sinDestinatario: number; fallidos: number }> {
+    await this.expensas.marcarVencidas();
+
+    const boletas = await this.expensas.listarBoletasCompletas(
+      {
+        ...(await this.alcanceDe(usuario, {
+          liquidacionId: dto.liquidacionId,
+          consorcioId: dto.consorcioId,
+          periodo: dto.periodo,
+          situacion: dto.situacion,
+        })),
+        // Nunca a quien ya pagó, aunque el filtro diga otra cosa.
+        conSaldo: true,
+        // Recordar una previsualización sería reclamar una deuda que no existe.
+        soloEmitidas: true,
+      },
+      TOPE_EXPORTACION,
+    );
+
+    const vecinos = await this.expensas.vecinosPorUnidad(boletas.map((b) => b.unidadId));
+    const pagos = await this.expensas.pagosPorBoleta(boletas.map((b) => b.id));
+    let avisos = 0;
+    let sinDestinatario = 0;
+    let fallidos = 0;
+
+    for (const boleta of boletas) {
+      const destinatarios = vecinos.get(boleta.unidadId) ?? [];
+      if (destinatarios.length === 0) {
+        sinDestinatario += 1;
+        continue;
+      }
+
+      const saldo = aPesos(
+        Math.max(0, aCentavos(boleta.total) - aCentavos(pagos.get(boleta.id)?.pagado ?? 0)),
+      );
+      const mes = boleta.liquidacion.periodo.slice(0, 7);
+      const vencida = boleta.estado === EstadoBoleta.VENCIDA;
+
+      for (const destinatarioId of destinatarios) {
+        try {
+          await this.notificador.enviar({
+            destinatarioId,
+            asunto: vencida ? `Expensas de ${mes} vencidas` : `Vence tu boleta de ${mes}`,
+            cuerpo: [
+              `Tu unidad ${boleta.unidad.etiqueta} tiene un saldo de $${saldo.toFixed(2)} de las expensas de ${mes}.`,
+              vencida
+                ? `El vencimiento fue el ${boleta.liquidacion.fechaVencimiento}.`
+                : `Vence el ${boleta.liquidacion.fechaVencimiento}.`,
+              dto.mensaje,
+            ]
+              .filter(Boolean)
+              .join(' '),
+            origen: `boleta:${boleta.id}`,
+          });
+          avisos += 1;
+        } catch (error) {
+          fallidos += 1;
+          this.logger.warn(`No se pudo recordar a ${destinatarioId}: ${String(error)}`);
+        }
+      }
     }
-    return this.expensas.listarBoletas(query, {
-      unidadIds: await this.expensas.unidadesDelUsuario(usuario.id),
-      soloEmitidas: true,
-    });
+
+    return { boletas: boletas.length, avisos, sinDestinatario, fallidos };
+  }
+
+  /**
+   * Lo que debe hoy una unidad: su boleta vigente (la última emitida) y el
+   * saldo que le queda. Es lo que el vecino ve arriba de todo al entrar.
+   */
+  async saldoDeUnidad(unidadId: string): Promise<SaldoDeUnidad | null> {
+    await this.expensas.marcarVencidas();
+    const boletaId = await this.expensas.ultimaBoletaEmitida(unidadId);
+    if (!boletaId) return null;
+
+    const boleta = (await this.expensas.findBoleta(boletaId))!;
+    const pagado = await this.expensas.pagadoDe(boletaId);
+    const saldo = aPesos(Math.max(0, aCentavos(boleta.total) - aCentavos(pagado)));
+
+    return {
+      boletaId: boleta.id,
+      periodo: boleta.liquidacion.periodo.slice(0, 7),
+      fechaVencimiento: boleta.liquidacion.fechaVencimiento,
+      total: boleta.total,
+      pagado,
+      saldo,
+      estado: boleta.estado,
+      diasParaVencer: diasEntre(await this.expensas.hoy(), boleta.liquidacion.fechaVencimiento),
+    };
   }
 
   async findBoleta(usuario: UsuarioActual, id: string): Promise<Boleta> {
@@ -404,6 +591,79 @@ export class ExpensasService {
   }
 
   // ── Auxiliares ─────────────────────────────────────────────────────────────
+
+  /**
+   * Traduce los filtros de la pantalla y quién mira a un alcance de boletas.
+   * Que lo arme un solo método es lo que garantiza que la grilla, el resumen,
+   * la exportación y los recordatorios hablen siempre del mismo conjunto.
+   */
+  private async alcanceDe(
+    usuario: UsuarioActual,
+    query: Partial<ListarBoletasQuery>,
+  ): Promise<AlcanceBoletas> {
+    const vecino = esVecino(usuario);
+    return {
+      liquidacionId: query.liquidacionId,
+      consorcioId: query.consorcioId,
+      unidadId: query.unidadId,
+      periodo: query.periodo,
+      estado: query.estado,
+      estados: query.situacion ? estadosDe(query.situacion) : undefined,
+      buscar: query.buscar,
+      unidadIds: vecino ? await this.expensas.unidadesDelUsuario(usuario.id) : undefined,
+      soloEmitidas: vecino,
+    };
+  }
+
+  /**
+   * Le pega a cada boleta lo pagado y, para quien administra, los ocupantes
+   * de la unidad. Los dos datos se piden de una sola vez para toda la página:
+   * uno por fila serían veinte idas a la base para pintar una grilla.
+   *
+   * Al vecino no le viajan los ocupantes: no necesita el teléfono del
+   * propietario para ver su propia boleta.
+   */
+  private async aFilas(
+    boletas: Boleta[],
+    opciones: { conOcupantes: boolean },
+  ): Promise<FilaCobranza[]> {
+    const pagos = await this.expensas.pagosPorBoleta(boletas.map((b) => b.id));
+    const vinculos = opciones.conOcupantes
+      ? await this.expensas.vinculosVigentes([...new Set(boletas.map((b) => b.unidadId))])
+      : new Map<string, UnidadUsuario[]>();
+
+    return boletas.map((boleta) => {
+      const pago = pagos.get(boleta.id);
+      const pagado = pago?.pagado ?? 0;
+      const ocupantes = elegirOcupantes(
+        (vinculos.get(boleta.unidadId) ?? []).map((v) => ({
+          vinculo: v.vinculo,
+          esTitular: v.esTitular,
+          vecino: aVecinoDeFila(v.usuario),
+        })),
+      );
+
+      return {
+        id: boleta.id,
+        unidad: {
+          id: boleta.unidad.id,
+          etiqueta: boleta.unidad.etiqueta,
+          coeficiente: boleta.unidad.coeficiente,
+        },
+        periodo: boleta.liquidacion.periodo.slice(0, 7),
+        fechaVencimiento: boleta.liquidacion.fechaVencimiento,
+        coeficienteAplicado: boleta.coeficienteAplicado,
+        propietario: ocupantes.propietario,
+        inquilino: ocupantes.inquilino,
+        emitido: boleta.total,
+        pagado,
+        saldo: aPesos(Math.max(0, aCentavos(boleta.total) - aCentavos(pagado))),
+        medio: pago?.medio ?? null,
+        estado: boleta.estado,
+        interesesMora: boleta.interesesMora,
+      };
+    });
+  }
 
   /**
    * Arma el insumo del prorrateo desde la base, calcula y reemplaza las

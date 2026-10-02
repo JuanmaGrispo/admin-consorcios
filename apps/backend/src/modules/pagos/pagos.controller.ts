@@ -1,5 +1,24 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  StreamableFile,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiExcludeEndpoint,
+  ApiOperation,
+  ApiProduces,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { RolUsuario } from '../../database/entities';
 import type { UsuarioActual as Usuario } from '../auth/auth.types';
 import { Public } from '../auth/decorators/public.decorator';
@@ -23,6 +42,30 @@ export class PagosController {
   })
   listar(@UsuarioActual() usuario: Usuario, @Query() query: ListarPagosQuery) {
     return this.pagos.listar(usuario, query);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Detalle de un pago',
+    description: 'Con su unidad y su boleta. El vecino sólo ve los de sus unidades.',
+  })
+  @ApiResponse({ status: 404, description: 'No existe o no es de una unidad suya' })
+  findOne(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.pagos.findOne(usuario, id);
+  }
+
+  @Get(':id/recibo')
+  @ApiOperation({
+    summary: 'Recibo en PDF',
+    description: 'Sólo de un pago aprobado. Mismos permisos que el detalle.',
+  })
+  @ApiProduces('application/pdf')
+  async recibo(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    const { buffer, nombre } = await this.pagos.reciboPdf(usuario, id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `inline; filename="${nombre}"`,
+    });
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
