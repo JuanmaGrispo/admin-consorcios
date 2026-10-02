@@ -5,10 +5,16 @@ import { CoreModule } from './core/core.module';
 import { NotificacionesModule } from './core/notificaciones/notificaciones.module';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CategoriasReclamoModule } from './modules/categorias-reclamo/categorias-reclamo.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { ConsorciosModule } from './modules/consorcios/consorcios.module';
+import { ExpensasModule } from './modules/expensas/expensas.module';
+import { PagosModule } from './modules/pagos/pagos.module';
+import { ProveedoresModule } from './modules/proveedores/proveedores.module';
 import { ReclamosModule } from './modules/reclamos/reclamos.module';
+import { RubrosGastoModule } from './modules/rubros-gasto/rubros-gasto.module';
+import { UnidadesModule } from './modules/unidades/unidades.module';
 import { UsuariosModule } from './modules/usuarios/usuarios.module';
 
 /**
@@ -38,7 +44,13 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
     AuthModule,
     UsuariosModule,
     ConsorciosModule,
+    UnidadesModule,
+    ProveedoresModule,
+    CategoriasReclamoModule,
     ReclamosModule,
+    RubrosGastoModule,
+    ExpensasModule,
+    PagosModule,
   ],
   providers: [
     // Guards globales: todo pide token salvo lo marcado con @Public(), y el de
