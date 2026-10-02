@@ -15,6 +15,7 @@ import { InicioModule } from './modules/inicio/inicio.module';
 import { PagosModule } from './modules/pagos/pagos.module';
 import { ProveedoresModule } from './modules/proveedores/proveedores.module';
 import { ReclamosModule } from './modules/reclamos/reclamos.module';
+import { ReservasModule } from './modules/reservas/reservas.module';
 import { RubrosGastoModule } from './modules/rubros-gasto/rubros-gasto.module';
 import { UnidadesModule } from './modules/unidades/unidades.module';
 import { UsuariosModule } from './modules/usuarios/usuarios.module';
@@ -56,6 +57,7 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
     RubrosGastoModule,
     ExpensasModule,
     PagosModule,
+    ReservasModule,
     // Compone la pantalla de inicio del vecino: va último porque depende de
     // todos los anteriores.
     InicioModule,

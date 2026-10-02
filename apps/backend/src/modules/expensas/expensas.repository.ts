@@ -527,6 +527,10 @@ export class ExpensasRepository {
     );
   }
 
+  async contarVencidasDeUnidad(unidadId: string): Promise<number> {
+    return this.boletas.countBy({ unidadId, estado: EstadoBoleta.VENCIDA });
+  }
+
   /** Suma de los pagos APROBADO de la boleta: el mismo criterio que la deuda. */
   async pagadoDe(boletaId: string): Promise<number> {
     const [fila] = await this.dataSource.query(
