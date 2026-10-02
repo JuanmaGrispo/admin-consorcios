@@ -94,6 +94,15 @@ export class UnidadesService {
 
   // ── Vínculos vecino ↔ unidad ───────────────────────────────────────────────
 
+  /**
+   * Las unidades que un vecino habita hoy, con su consorcio y el tipo de
+   * vínculo. Para uso interno de otros services: la pantalla de inicio tiene
+   * que saber en qué edificio está parado antes de mostrarle nada.
+   */
+  unidadesDelVecino(usuarioId: string): Promise<UnidadUsuario[]> {
+    return this.unidades.vinculosDelUsuario(usuarioId);
+  }
+
   async listarVinculos(unidadId: string, incluirTerminados: boolean): Promise<VinculoPublico[]> {
     await this.exigirUnidad(unidadId);
     const vinculos = await this.unidades.listarVinculos(unidadId, incluirTerminados);

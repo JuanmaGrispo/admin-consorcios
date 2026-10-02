@@ -10,6 +10,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { ConsorciosModule } from './modules/consorcios/consorcios.module';
 import { ExpensasModule } from './modules/expensas/expensas.module';
+import { InicioModule } from './modules/inicio/inicio.module';
 import { PagosModule } from './modules/pagos/pagos.module';
 import { ProveedoresModule } from './modules/proveedores/proveedores.module';
 import { ReclamosModule } from './modules/reclamos/reclamos.module';
@@ -51,6 +52,9 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
     RubrosGastoModule,
     ExpensasModule,
     PagosModule,
+    // Compone la pantalla de inicio del vecino: va último porque depende de
+    // todos los anteriores.
+    InicioModule,
   ],
   providers: [
     // Guards globales: todo pide token salvo lo marcado con @Public(), y el de
