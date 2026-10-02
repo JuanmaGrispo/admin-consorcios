@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Pago } from '../../database/entities';
 import { ListarPagosQuery } from './dto/listar-pagos.query';
 
@@ -9,6 +9,7 @@ export class PagosRepository {
   constructor(
     @InjectRepository(Pago)
     private readonly pagos: Repository<Pago>,
+    private readonly dataSource: DataSource,
   ) {}
 
   /** `unidadIds` acota lo que ve un vecino; sin él, todo (administrador). */
@@ -32,6 +33,26 @@ export class PagosRepository {
 
   findById(id: string): Promise<Pago | null> {
     return this.pagos.findOneBy({ id });
+  }
+
+  /** Con la unidad y la boleta: lo que hace falta para mostrarlo o imprimirlo. */
+  findConRelaciones(id: string): Promise<Pago | null> {
+    return this.pagos.findOne({
+      where: { id },
+      relations: { unidad: true, boleta: { liquidacion: true } },
+    });
+  }
+
+  /**
+   * El próximo correlativo de recibo. Sale de una secuencia de Postgres: dos
+   * pagos aprobados a la vez —el webhook y un pago manual— no pueden llevarse
+   * el mismo número.
+   */
+  async siguienteCorrelativoRecibo(): Promise<number> {
+    const [fila] = await this.dataSource.query(
+      `SELECT nextval('recibo_pago_numero')::int AS numero`,
+    );
+    return (fila as { numero: number }).numero;
   }
 
   crear(data: Partial<Pago>): Promise<Pago> {

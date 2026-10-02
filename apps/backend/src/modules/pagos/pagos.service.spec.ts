@@ -1,10 +1,11 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { beforeEach, describe, it } from 'node:test';
 import type { Aviso, Notificador } from '../../core/notificaciones/notificador';
 import { Boleta, EstadoBoleta, EstadoPago, MedioPago, Pago, RolUsuario } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
+import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { ExpensasService } from '../expensas/expensas.service';
 import { firmaValida, type MercadoPagoClient, type PagoMercadoPago } from './mercado-pago.client';
 import type { PagosRepository } from './pagos.repository';
@@ -18,6 +19,8 @@ function crearEntorno() {
     pagos: [] as Pago[],
     saldo: 400,
     sincronizadas: [] as string[],
+    /** La secuencia de recibos de la base, en memoria. */
+    correlativo: 0,
   };
 
   const repo = {
@@ -30,6 +33,8 @@ function crearEntorno() {
     },
     actualizar: async (id: string, d: Partial<Pago>) =>
       Object.assign(db.pagos.find((p) => p.id === id)!, d),
+    findConRelaciones: async (id: string) => db.pagos.find((p) => p.id === id) ?? null,
+    siguienteCorrelativoRecibo: async () => (db.correlativo += 1),
   } as unknown as PagosRepository;
 
   const expensas = {
@@ -50,6 +55,16 @@ function crearEntorno() {
     vecinosDe: async () => ['v1', 'falla'],
     unidadesVisibles: async () => undefined,
   } as unknown as ExpensasService;
+
+  const consorcios = {
+    findOne: async () => ({
+      nombre: 'Consorcio Rivadavia 4820',
+      calle: 'Av. Rivadavia',
+      numero: '4820',
+      ciudad: 'CABA',
+      cuit: '30-12345678-9',
+    }),
+  } as unknown as ConsorciosService;
 
   const avisos: Aviso[] = [];
   const notificador = {
@@ -73,7 +88,7 @@ function crearEntorno() {
     firmaValida: (firma?: string) => firma === 'ok',
   } as unknown as MercadoPagoClient;
 
-  return { db, mp, repo, expensas, mercadoPago, notificador, avisos };
+  return { db, mp, repo, expensas, consorcios, mercadoPago, notificador, avisos };
 }
 
 describe('PagosService', () => {
@@ -82,7 +97,13 @@ describe('PagosService', () => {
 
   beforeEach(() => {
     entorno = crearEntorno();
-    service = new PagosService(entorno.repo, entorno.expensas, entorno.mercadoPago, entorno.notificador);
+    service = new PagosService(
+      entorno.repo,
+      entorno.expensas,
+      entorno.consorcios,
+      entorno.mercadoPago,
+      entorno.notificador,
+    );
   });
 
   describe('pago manual', () => {
@@ -186,6 +207,55 @@ describe('PagosService', () => {
       assert.equal(estadoSegunMercadoPago('cancelled'), EstadoPago.RECHAZADO);
       assert.equal(estadoSegunMercadoPago('charged_back'), EstadoPago.REINTEGRADO);
       assert.equal(estadoSegunMercadoPago('in_process'), EstadoPago.PENDIENTE);
+    });
+  });
+
+  describe('recibo', () => {
+    const pagoMp = (status: string): PagoMercadoPago => ({
+      id: 100,
+      status,
+      status_detail: status,
+      external_reference: 'p1',
+      transaction_amount: 400,
+      date_approved: status === 'approved' ? '2026-10-05T12:00:00Z' : null,
+    });
+
+    it('un pago aprobado se lleva el próximo número de la secuencia', async () => {
+      await service.registrar(admin, { boletaId: 'b1', monto: 100, medio: MedioPago.EFECTIVO });
+      assert.equal(entorno.db.pagos[0].reciboNumero, '0001-00000001');
+    });
+
+    it('el número va en el aviso al vecino', async () => {
+      await service.registrar(admin, { boletaId: 'b1', monto: 100, medio: MedioPago.EFECTIVO });
+      assert.ok(entorno.avisos[0].cuerpo.includes('0001-00000001'));
+    });
+
+    it('un reintento del webhook no renumera el recibo', async () => {
+      await service.crearPreferencia(admin, 'b1');
+      entorno.mp.pagos.set('100', pagoMp('approved'));
+      await service.procesarWebhook({ tipo: 'payment', dataId: '100', firma: 'ok', requestId: 'r1' });
+      const numero = entorno.db.pagos[0].reciboNumero;
+
+      // Un reintegro y una nueva aprobación: el comprobante sigue siendo el mismo.
+      entorno.mp.pagos.set('100', pagoMp('refunded'));
+      await service.procesarWebhook({ tipo: 'payment', dataId: '100', firma: 'ok', requestId: 'r1' });
+      entorno.mp.pagos.set('100', pagoMp('approved'));
+      await service.procesarWebhook({ tipo: 'payment', dataId: '100', firma: 'ok', requestId: 'r1' });
+
+      assert.equal(entorno.db.pagos[0].reciboNumero, numero);
+      assert.equal(entorno.db.correlativo, 1);
+    });
+
+    it('no hay recibo de un pago que no se aprobó', async () => {
+      await service.crearPreferencia(admin, 'b1');
+      await assert.rejects(service.reciboPdf(admin, 'p1'), BadRequestException);
+    });
+
+    it('un pago de otra unidad le da 404 al vecino', async () => {
+      await service.registrar(admin, { boletaId: 'b1', monto: 100, medio: MedioPago.EFECTIVO });
+      const vecinoAjeno: UsuarioActual = { id: 'v9', email: 'v@x', rol: RolUsuario.VECINO };
+      entorno.expensas.unidadesVisibles = async () => ['otra-unidad'];
+      await assert.rejects(service.findOne(vecinoAjeno, 'p1'), NotFoundException);
     });
   });
 });
