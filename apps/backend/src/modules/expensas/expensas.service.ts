@@ -391,6 +391,18 @@ export class ExpensasService {
     return { ...boleta, estado };
   }
 
+  // ── Para reservas ──────────────────────────────────────────────────────────
+
+  /**
+   * Si la unidad tiene expensas impagas y vencidas. Lo consulta reservas para
+   * los amenities con `bloquea_con_deuda`. Marca las vencidas antes de contar:
+   * si no, la respuesta dependería de que alguien hubiera mirado sus boletas.
+   */
+  async tieneDeudaVencida(unidadId: string): Promise<boolean> {
+    await this.expensas.marcarVencidas();
+    return (await this.expensas.contarVencidasDeUnidad(unidadId)) > 0;
+  }
+
   // ── Auxiliares ─────────────────────────────────────────────────────────────
 
   /**

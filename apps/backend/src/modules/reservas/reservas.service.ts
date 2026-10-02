@@ -1,0 +1,540 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { Notificador } from '../../core/notificaciones/notificador';
+import {
+  Amenity,
+  AmenityBloqueo,
+  EstadoReserva,
+  Reserva,
+  RolUsuario,
+} from '../../database/entities';
+import type { UsuarioActual } from '../auth/auth.types';
+import { ConsorciosService } from '../consorcios/consorcios.service';
+import { ExpensasService } from '../expensas/expensas.service';
+import { CrearBloqueoDto } from './dto/crear-bloqueo.dto';
+import { CrearReservaDto } from './dto/crear-reserva.dto';
+import { CreateAmenityDto } from './dto/create-amenity.dto';
+import { DisponibilidadQuery } from './dto/disponibilidad.query';
+import { ListarAmenitiesQuery } from './dto/listar-amenities.query';
+import { ListarBloqueosQuery } from './dto/listar-bloqueos.query';
+import { ListarReservasQuery } from './dto/listar-reservas.query';
+import { RechazarReservaDto } from './dto/rechazar-reserva.dto';
+import { UpdateAmenityDto } from './dto/update-amenity.dto';
+import {
+  minutosDeHora,
+  ProblemaFranja,
+  validarFranja,
+  ZONA_POR_DEFECTO,
+} from './horario';
+import { ReservasRepository } from './reservas.repository';
+
+/**
+ * Quién gestiona reservas: el administrador y el superadmin, que tiene todos
+ * sus permisos (la misma jerarquía que aplica RolesGuard). Sin él, el superadmin
+ * quedaría tratado como un vecino sin unidades y no vería ninguna reserva.
+ */
+const esAdmin = (usuario: UsuarioActual) =>
+  usuario.rol === RolUsuario.ADMINISTRADOR || usuario.rol === RolUsuario.SUPER_ADMIN;
+
+const CANCELABLES = [EstadoReserva.PENDIENTE, EstadoReserva.APROBADA];
+
+@Injectable()
+export class ReservasService {
+  private readonly logger = new Logger(ReservasService.name);
+
+  constructor(
+    private readonly reservas: ReservasRepository,
+    private readonly consorcios: ConsorciosService,
+    private readonly expensas: ExpensasService,
+    private readonly notificador: Notificador,
+  ) {}
+
+  // ── Amenities ──────────────────────────────────────────────────────────────
+
+  async listarAmenities(
+    usuario: UsuarioActual,
+    query: ListarAmenitiesQuery,
+  ): Promise<Amenity[]> {
+    const administra = esAdmin(usuario);
+    return this.reservas.listarAmenities({
+      query: { ...query, incluirInactivos: administra && query.incluirInactivos },
+      consorciosPermitidos: administra
+        ? undefined
+        : await this.reservas.consorciosDelUsuario(usuario.id),
+    });
+  }
+
+  async findAmenity(usuario: UsuarioActual, id: string): Promise<Amenity> {
+    const amenity = await this.reservas.findAmenityById(id);
+    // Al vecino, un amenity de otro edificio le da 404: un 403 confirmaría que existe.
+    if (!amenity || !(await this.puedeVer(usuario, amenity))) {
+      throw new NotFoundException(`El amenity ${id} no existe`);
+    }
+    return amenity;
+  }
+
+  async crearAmenity(dto: CreateAmenityDto): Promise<Amenity> {
+    await this.consorcios.findOne(dto.consorcioId);
+    const horaApertura = dto.horaApertura ?? '08:00:00';
+    const horaCierre = dto.horaCierre ?? '22:00:00';
+    this.exigirVentanaCoherente(horaApertura, horaCierre, dto.duracionMaximaHoras ?? null);
+    await this.exigirNombreLibre(dto.consorcioId, dto.nombre);
+
+    return this.reservas.crearAmenity({ ...dto, horaApertura, horaCierre });
+  }
+
+  async actualizarAmenity(id: string, dto: UpdateAmenityDto): Promise<Amenity> {
+    const amenity = await this.exigirAmenity(id);
+
+    this.exigirVentanaCoherente(
+      dto.horaApertura ?? amenity.horaApertura,
+      dto.horaCierre ?? amenity.horaCierre,
+      dto.duracionMaximaHoras ?? amenity.duracionMaximaHoras,
+    );
+    if (dto.nombre && dto.nombre.toLowerCase() !== amenity.nombre.toLowerCase()) {
+      await this.exigirNombreLibre(amenity.consorcioId, dto.nombre);
+    }
+
+    return this.reservas.actualizarAmenity(amenity, dto);
+  }
+
+  /**
+   * La ventana del día y lo que ya está tomado. Es lo que el portal necesita
+   * para pintar el calendario sin adivinar las reglas del amenity.
+   */
+  async disponibilidad(usuario: UsuarioActual, id: string, query: DisponibilidadQuery) {
+    await this.reservas.cerrarVencidas();
+    const amenity = await this.findAmenity(usuario, id);
+    const { inicio, fin } = await this.reservas.instantes(
+      query.fecha,
+      '00:00',
+      '24:00',
+      ZONA_POR_DEFECTO,
+    );
+
+    const [reservas, bloqueos] = await Promise.all([
+      this.reservas.reservasEnRango(id, inicio, fin),
+      this.reservas.bloqueosEnRango(id, inicio, fin),
+    ]);
+
+    return {
+      fecha: query.fecha,
+      horaApertura: amenity.horaApertura,
+      horaCierre: amenity.horaCierre,
+      duracionMaximaHoras: amenity.duracionMaximaHoras,
+      anticipacionMinimaHoras: amenity.anticipacionMinimaHoras,
+      requiereAprobacion: amenity.requiereAprobacion,
+      ocupado: reservas.map((r) => ({
+        reservaId: r.id,
+        inicio: r.inicio,
+        fin: r.fin,
+        estado: r.estado,
+      })),
+      bloqueos: bloqueos.map((b) => ({ desde: b.desde, hasta: b.hasta, motivo: b.motivo })),
+    };
+  }
+
+  // ── Bloqueos ───────────────────────────────────────────────────────────────
+
+  async listarBloqueos(
+    usuario: UsuarioActual,
+    amenityId: string,
+    query: ListarBloqueosQuery,
+  ): Promise<AmenityBloqueo[]> {
+    await this.findAmenity(usuario, amenityId);
+    return this.reservas.listarBloqueos(
+      amenityId,
+      query.desde ? await this.reservas.instante(`${query.desde} 00:00`, ZONA_POR_DEFECTO) : undefined,
+      query.hasta ? await this.reservas.instante(`${query.hasta} 23:59`, ZONA_POR_DEFECTO) : undefined,
+    );
+  }
+
+  async crearBloqueo(
+    usuario: UsuarioActual,
+    amenityId: string,
+    dto: CrearBloqueoDto,
+  ): Promise<AmenityBloqueo> {
+    await this.reservas.cerrarVencidas();
+    const amenity = await this.exigirAmenity(amenityId);
+
+    const desde = await this.reservas.instante(dto.desde, ZONA_POR_DEFECTO);
+    const hasta = await this.reservas.instante(dto.hasta, ZONA_POR_DEFECTO);
+    if (hasta <= desde) {
+      throw new BadRequestException('El bloqueo tiene que terminar después de empezar');
+    }
+
+    const { bloqueo, canceladas } = await this.reservas.crearBloqueo(
+      amenityId,
+      { amenityId, creadoPorId: usuario.id, desde, hasta, motivo: dto.motivo ?? null },
+      async (pisadas) => {
+        const vigentes = pisadas.filter((r) => CANCELABLES.includes(r.estado));
+        // Rechazar por defecto: el administrador tiene que enterarse de que
+        // está dejando gente sin el amenity, y decidirlo explícitamente.
+        if (vigentes.length > 0 && !dto.cancelarReservas) {
+          throw new ConflictException(
+            `El bloqueo pisa ${vigentes.length} reserva(s). Mandá cancelarReservas: true para cancelarlas.`,
+          );
+        }
+        return vigentes;
+      },
+    );
+
+    for (const reserva of canceladas) {
+      await this.avisar(
+        reserva.solicitadaPorId,
+        `Se canceló tu reserva de ${amenity.nombre}`,
+        `El administrador bloqueó el amenity por mantenimiento${dto.motivo ? ` (${dto.motivo})` : ''}.`,
+        `reserva:${reserva.id}`,
+      );
+    }
+
+    return bloqueo;
+  }
+
+  async borrarBloqueo(amenityId: string, id: string): Promise<void> {
+    await this.exigirAmenity(amenityId);
+    const bloqueo = await this.reservas.findBloqueo(id);
+    if (!bloqueo || bloqueo.amenityId !== amenityId) {
+      throw new NotFoundException(`El bloqueo ${id} no existe`);
+    }
+    await this.reservas.borrarBloqueo(id);
+  }
+
+  // ── Reservas ───────────────────────────────────────────────────────────────
+
+  async listar(usuario: UsuarioActual, query: ListarReservasQuery) {
+    await this.reservas.cerrarVencidas();
+    const { items, total } = await this.reservas.listar(
+      query,
+      await this.unidadesVisibles(usuario),
+    );
+    const limite = query.limite ?? 20;
+    return { items, total, pagina: query.pagina ?? 1, paginas: Math.ceil(total / limite) || 1 };
+  }
+
+  async findOne(usuario: UsuarioActual, id: string): Promise<Reserva> {
+    await this.reservas.cerrarVencidas();
+    return this.buscarConPermiso(usuario, id);
+  }
+
+  async crear(usuario: UsuarioActual, dto: CrearReservaDto): Promise<Reserva> {
+    await this.reservas.cerrarVencidas();
+
+    const amenity = await this.exigirAmenity(dto.amenityId);
+    if (!amenity.activo) {
+      throw new BadRequestException(`El amenity ${amenity.nombre} está dado de baja`);
+    }
+
+    const unidadId = await this.resolverUnidad(usuario, dto.unidadId);
+    await this.exigirMismoConsorcio(amenity, unidadId);
+
+    const problema = validarFranja(dto.horaInicio, dto.horaFin, amenity);
+    if (problema) throw new BadRequestException(this.mensajeDe(problema, amenity));
+
+    const { inicio, fin, ahora } = await this.reservas.instantes(
+      dto.fecha,
+      dto.horaInicio,
+      dto.horaFin,
+      ZONA_POR_DEFECTO,
+    );
+    if (inicio <= ahora) {
+      throw new BadRequestException('No se puede reservar un horario que ya pasó');
+    }
+    const horasDeAnticipacion = (inicio.getTime() - ahora.getTime()) / 3_600_000;
+    if (horasDeAnticipacion < amenity.anticipacionMinimaHoras) {
+      throw new BadRequestException(
+        `${amenity.nombre} se reserva con al menos ${amenity.anticipacionMinimaHoras} horas de anticipación`,
+      );
+    }
+
+    if (amenity.bloqueaConDeuda && (await this.expensas.tieneDeudaVencida(unidadId))) {
+      throw new ConflictException(
+        'La unidad tiene expensas vencidas: regularizá la deuda para poder reservar',
+      );
+    }
+
+    const estado = amenity.requiereAprobacion
+      ? EstadoReserva.PENDIENTE
+      : EstadoReserva.APROBADA;
+
+    const reserva = await this.reservas.crearReserva(
+      amenity.id,
+      {
+        amenityId: amenity.id,
+        unidadId,
+        solicitadaPorId: usuario.id,
+        inicio,
+        fin,
+        estado,
+        motivo: dto.motivo ?? null,
+        // La aprobación automática no la resolvió nadie: `resuelta_por` queda nulo.
+        resueltaAt: amenity.requiereAprobacion ? null : ahora,
+      },
+      async (m) => {
+        if (await this.reservas.haySolapamiento(amenity.id, inicio, fin, null, m)) {
+          throw new ConflictException('Ese horario ya está reservado');
+        }
+        if (await this.reservas.hayBloqueo(amenity.id, inicio, fin, m)) {
+          throw new ConflictException('El amenity está bloqueado por mantenimiento en ese horario');
+        }
+      },
+    );
+
+    if (estado === EstadoReserva.APROBADA) {
+      await this.avisar(
+        usuario.id,
+        `Reservaste ${amenity.nombre}`,
+        `Tu reserva quedó confirmada para el ${dto.fecha} de ${dto.horaInicio} a ${dto.horaFin}.`,
+        `reserva:${reserva.id}`,
+      );
+    } else {
+      const consorcio = await this.consorcios.findOne(amenity.consorcioId);
+      await this.avisar(
+        consorcio.administradorId,
+        `Nueva reserva de ${amenity.nombre}`,
+        `Hay una reserva para el ${dto.fecha} de ${dto.horaInicio} a ${dto.horaFin} esperando aprobación.`,
+        `reserva:${reserva.id}`,
+      );
+    }
+
+    return reserva;
+  }
+
+  async aprobar(usuario: UsuarioActual, id: string): Promise<Reserva> {
+    await this.reservas.cerrarVencidas();
+    const reserva = await this.exigirPendiente(id);
+
+    // Entre el pedido y la aprobación pudo entrar un bloqueo o aprobarse otra
+    // reserva, así que el calendario se vuelve a mirar.
+    if (
+      await this.reservas.haySolapamiento(
+        reserva.amenityId,
+        reserva.inicio,
+        reserva.fin,
+        reserva.id,
+      )
+    ) {
+      throw new ConflictException('Ese horario ya está reservado');
+    }
+    if (await this.reservas.hayBloqueo(reserva.amenityId, reserva.inicio, reserva.fin)) {
+      throw new ConflictException('El amenity está bloqueado por mantenimiento en ese horario');
+    }
+
+    const aprobada = await this.reservas.actualizarReserva(reserva, {
+      estado: EstadoReserva.APROBADA,
+      resueltaPorId: usuario.id,
+      resueltaAt: await this.reservas.ahora(),
+    });
+
+    await this.avisar(
+      reserva.solicitadaPorId,
+      `Se aprobó tu reserva de ${reserva.amenity.nombre}`,
+      'Ya podés usar el amenity en el horario que reservaste.',
+      `reserva:${reserva.id}`,
+    );
+
+    return aprobada;
+  }
+
+  async rechazar(
+    usuario: UsuarioActual,
+    id: string,
+    dto: RechazarReservaDto,
+  ): Promise<Reserva> {
+    await this.reservas.cerrarVencidas();
+    const reserva = await this.exigirPendiente(id);
+
+    const rechazada = await this.reservas.actualizarReserva(reserva, {
+      estado: EstadoReserva.RECHAZADA,
+      motivoRechazo: dto.motivoRechazo,
+      resueltaPorId: usuario.id,
+      resueltaAt: await this.reservas.ahora(),
+    });
+
+    await this.avisar(
+      reserva.solicitadaPorId,
+      `Se rechazó tu reserva de ${reserva.amenity.nombre}`,
+      dto.motivoRechazo,
+      `reserva:${reserva.id}`,
+    );
+
+    return rechazada;
+  }
+
+  async cancelar(usuario: UsuarioActual, id: string): Promise<Reserva> {
+    await this.reservas.cerrarVencidas();
+    const reserva = await this.buscarConPermiso(usuario, id);
+
+    if (!CANCELABLES.includes(reserva.estado)) {
+      throw new BadRequestException(`La reserva está ${reserva.estado} y no se puede cancelar`);
+    }
+    // Cancelar algo que ya empezó no es cancelar, es reescribir la historia.
+    if (reserva.inicio <= (await this.reservas.ahora())) {
+      throw new BadRequestException('La reserva ya empezó: no se puede cancelar');
+    }
+
+    const cancelada = await this.reservas.actualizarReserva(reserva, {
+      estado: EstadoReserva.CANCELADA,
+    });
+
+    if (usuario.id !== reserva.solicitadaPorId) {
+      await this.avisar(
+        reserva.solicitadaPorId,
+        `Se canceló tu reserva de ${reserva.amenity.nombre}`,
+        'El administrador canceló la reserva.',
+        `reserva:${reserva.id}`,
+      );
+    }
+
+    return cancelada;
+  }
+
+  // ── Auxiliares ─────────────────────────────────────────────────────────────
+
+  private async exigirAmenity(id: string): Promise<Amenity> {
+    const amenity = await this.reservas.findAmenityById(id);
+    if (!amenity) throw new NotFoundException(`El amenity ${id} no existe`);
+    return amenity;
+  }
+
+  private async puedeVer(usuario: UsuarioActual, amenity: Amenity): Promise<boolean> {
+    if (esAdmin(usuario)) return true;
+    if (!amenity.activo) return false;
+    return (await this.reservas.consorciosDelUsuario(usuario.id)).includes(
+      amenity.consorcioId,
+    );
+  }
+
+  /**
+   * Si la ventana diera la vuelta, una franja no podría caer "dentro" de ella;
+   * y un tope de duración mayor que la ventana es configuración que nadie puede
+   * alcanzar.
+   */
+  private exigirVentanaCoherente(
+    horaApertura: string,
+    horaCierre: string,
+    duracionMaximaHoras: number | null,
+  ): void {
+    const apertura = minutosDeHora(horaApertura);
+    const cierre = minutosDeHora(horaCierre);
+    if (cierre <= apertura) {
+      throw new BadRequestException('El amenity tiene que cerrar después de abrir');
+    }
+    if (duracionMaximaHoras !== null && duracionMaximaHoras * 60 > cierre - apertura) {
+      throw new BadRequestException(
+        'La duración máxima no puede ser mayor que la ventana horaria del amenity',
+      );
+    }
+  }
+
+  /** Dos "SUM" en el mismo edificio hacen que el vecino reserve el equivocado. */
+  private async exigirNombreLibre(consorcioId: string, nombre: string): Promise<void> {
+    if (await this.reservas.findAmenityPorNombre(consorcioId, nombre)) {
+      throw new ConflictException(`Ya existe un amenity llamado ${nombre} en este consorcio`);
+    }
+  }
+
+  /**
+   * `reserva` no tiene `consorcio_id`: el consorcio llega por el amenity y por
+   * la unidad, y nada en la base obliga a que coincidan.
+   */
+  private async exigirMismoConsorcio(amenity: Amenity, unidadId: string): Promise<void> {
+    const unidad = await this.reservas.findUnidad(unidadId);
+    if (!unidad) throw new BadRequestException(`La unidad ${unidadId} no existe`);
+    if (!unidad.activa) throw new BadRequestException('La unidad está dada de baja');
+    if (unidad.consorcioId !== amenity.consorcioId) {
+      throw new BadRequestException(`El amenity ${amenity.nombre} no es de este consorcio`);
+    }
+  }
+
+  private async unidadesVisibles(usuario: UsuarioActual): Promise<string[] | undefined> {
+    if (esAdmin(usuario)) return undefined;
+    return this.reservas.unidadesDelUsuario(usuario.id);
+  }
+
+  private async buscarConPermiso(usuario: UsuarioActual, id: string): Promise<Reserva> {
+    const reserva = await this.reservas.findById(id);
+    if (!reserva) throw new NotFoundException(`La reserva ${id} no existe`);
+    if (esAdmin(usuario)) return reserva;
+
+    const unidades = await this.reservas.unidadesDelUsuario(usuario.id);
+    // 404 y no 403: un 403 confirmaría que esa reserva existe.
+    if (!unidades.includes(reserva.unidadId)) {
+      throw new NotFoundException(`La reserva ${id} no existe`);
+    }
+    return reserva;
+  }
+
+  private async exigirPendiente(id: string): Promise<Reserva> {
+    const reserva = await this.reservas.findById(id);
+    if (!reserva) throw new NotFoundException(`La reserva ${id} no existe`);
+    if (reserva.estado !== EstadoReserva.PENDIENTE) {
+      throw new BadRequestException(`La reserva ya está ${reserva.estado}`);
+    }
+    return reserva;
+  }
+
+  private async resolverUnidad(
+    usuario: UsuarioActual,
+    unidadPedida?: string,
+  ): Promise<string> {
+    if (esAdmin(usuario)) {
+      if (!unidadPedida) {
+        throw new BadRequestException(
+          'Indicá la unidad: un administrador no está vinculado a ninguna',
+        );
+      }
+      return unidadPedida;
+    }
+
+    const unidades = await this.reservas.unidadesDelUsuario(usuario.id);
+
+    if (unidades.length === 0) {
+      throw new ForbiddenException(
+        'No estás vinculado a ninguna unidad, así que no podés reservar',
+      );
+    }
+
+    if (unidadPedida) {
+      if (!unidades.includes(unidadPedida)) {
+        throw new ForbiddenException('Esa unidad no es tuya');
+      }
+      return unidadPedida;
+    }
+
+    if (unidades.length > 1) {
+      throw new BadRequestException('Tenés más de una unidad: indicá sobre cuál es la reserva');
+    }
+
+    return unidades[0];
+  }
+
+  private mensajeDe(problema: ProblemaFranja, amenity: Amenity): string {
+    const mensajes: Record<ProblemaFranja, string> = {
+      FIN_ANTES_DE_INICIO: 'La reserva tiene que terminar después de empezar',
+      FUERA_DE_HORARIO: `${amenity.nombre} abre de ${amenity.horaApertura} a ${amenity.horaCierre}`,
+      DEMASIADO_LARGA: `${amenity.nombre} se reserva por hasta ${amenity.duracionMaximaHoras} horas`,
+    };
+    return mensajes[problema];
+  }
+
+  /** Avisar nunca corta la operación: la reserva ya quedó guardada igual. */
+  private async avisar(
+    destinatarioId: string,
+    asunto: string,
+    cuerpo: string,
+    origen: string,
+  ): Promise<void> {
+    try {
+      await this.notificador.enviar({ destinatarioId, asunto, cuerpo, origen });
+    } catch (error) {
+      this.logger.warn(`No se pudo avisar a ${destinatarioId}: ${String(error)}`);
+    }
+  }
+}
