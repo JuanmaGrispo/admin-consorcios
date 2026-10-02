@@ -931,6 +931,49 @@ No viajan como listas vacías a propósito: un `[]` le haría creer al front que
 no hay eventos, cuando lo que pasa es que nadie los sabe todavía. Se agregan
 a esta misma respuesta cuando existan esos módulos.
 
+## Asambleas
+
+Módulo `src/modules/asambleas/`. Diseño en
+[docs/superpowers/specs/2026-10-02-asambleas-design.md](docs/superpowers/specs/2026-10-02-asambleas-design.md).
+
+### Ciclo
+
+`BORRADOR → CONVOCADA → EN_CURSO → CERRADA | CERRADA_SIN_QUORUM`
+
+- Sólo un borrador se edita, se borra o cambia su orden del día.
+- **Convocar** arma el padrón: una asistencia `SIN_RESPONDER` por unidad
+  activa, con el coeficiente copiado a ese momento. Avisa a los vecinos.
+- **Iniciar** no exige quórum (segunda convocatoria).
+- **Cerrar** elige el estado final según el quórum alcanzado.
+
+### Endpoints
+
+| Método | Ruta | Rol |
+|---|---|---|
+| GET | `/asambleas` | ambos |
+| GET | `/asambleas/:id` | ambos |
+| POST | `/asambleas` | admin |
+| PATCH | `/asambleas/:id` | admin |
+| DELETE | `/asambleas/:id` | admin |
+| PUT | `/asambleas/:id/orden-dia` | admin |
+| POST | `/asambleas/:id/convocar` · `/iniciar` · `/cerrar` | admin |
+| PATCH | `/asambleas/:id/acta` | admin |
+| GET | `/asambleas/:id/asistencias` | admin |
+| PATCH | `/asambleas/:id/asistencias/:unidadId` | admin |
+| PUT | `/asambleas/:id/asistencia` | vecino |
+
+### Quórum
+
+Suma de coeficientes `ASISTE` + `CON_PODER` sobre el total convocado
+(`quorum.ts`). El vecino responde sólo `ASISTE` / `NO_ASISTE`; los poderes los
+registra el administrador indicando la unidad apoderada. El vecino ve el
+quórum y su propia respuesta, nunca los nombres de los demás.
+
+### Pendiente
+
+Votaciones (los puntos `CON_VOTACION` quedan marcados), eventos
+`asamblea.creada` / `asamblea.recordatorio` por RabbitMQ y subida del acta.
+
 ## Datos de demo
 
 ```bash
