@@ -31,8 +31,6 @@ nuevo tiene que saber antes de tocar código.
 - **Commits atómicos** con mensaje que explique el porqué, no el qué.
 - **Nunca** credenciales en el código ni en PRs: van en `.env` (gitignoreado).
 
-<<<<<<< Updated upstream
-=======
 ## Documentación
 
 | Archivo | Qué tiene |
@@ -42,8 +40,6 @@ nuevo tiene que saber antes de tocar código.
 | [docs/producto.md](docs/producto.md) | Visión del producto: funcionalidades, roles, integraciones y flujos |
 | [docs/diseno-front.html](docs/diseno-front.html) | Prototipo visual del front: pantallas y flujos a implementar |
 | [docs/mensajeria.md](docs/mensajeria.md) | Diseño de notificaciones pub/sub con RabbitMQ: eventos, bindings, sobre del mensaje |
-
->>>>>>> Stashed changes
 ## Frontend
 
 Todo lo de UI está en [apps/frontend/CLAUDE.md](apps/frontend/CLAUDE.md):
