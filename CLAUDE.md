@@ -38,10 +38,17 @@ nuevo tiene que saber antes de tocar código.
 | [README.md](README.md) | Arranque, base de datos, auth y detalle de cada módulo |
 | [apps/frontend/CLAUDE.md](apps/frontend/CLAUDE.md) | Reglas de UI |
 | [docs/producto.md](docs/producto.md) | Visión del producto: funcionalidades, roles, integraciones y flujos |
+| [docs/diseno-front.html](docs/diseno-front.html) | Prototipo visual del front: pantallas y flujos a implementar |
 | [docs/mensajeria.md](docs/mensajeria.md) | Diseño de notificaciones pub/sub con RabbitMQ: eventos, bindings, sobre del mensaje |
-
 ## Frontend
 
 Todo lo de UI está en [apps/frontend/CLAUDE.md](apps/frontend/CLAUDE.md):
 shadcn/ui obligatorio, tokens del design system Domus, paleta, responsive.
 Leelo antes de crear o tocar cualquier componente.
+
+**Diseño de referencia:** [docs/diseno-front.html](docs/diseno-front.html)
+es el prototipo del front (pantallas, layout, flujos).
+Cuando se implemente una pantalla, se toma de ahí la estructura y el
+contenido, pero se construye con shadcn y los tokens de
+[apps/frontend/CLAUDE.md](apps/frontend/CLAUDE.md): el HTML es la guía
+visual, no código para copiar.
