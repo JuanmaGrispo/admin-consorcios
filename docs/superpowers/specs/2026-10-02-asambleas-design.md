@@ -101,7 +101,7 @@ Antes de convocar no hay asistencias: el detalle devuelve `quorum: null`.
 | Método y ruta | Rol | Descripción |
 |---|---|---|
 | `GET /asambleas` | ambos | Listado. Filtros `consorcioId`, `estado`, `anio`. Cada fila trae `quorumPorcentaje` (agregado `SUM` en el repository). Orden: `fechaHora` desc. |
-| `GET /asambleas/:id` | ambos | Detalle con orden del día, quórum y últimas 10 confirmaciones (unidad, usuario, estado, apoderado). Al vecino además su propia asistencia. |
+| `GET /asambleas/:id` | ambos | Detalle con orden del día y quórum. Al admin además las últimas 10 confirmaciones (unidad, usuario, estado, apoderado); al vecino, en su lugar, la asistencia de sus propias unidades (no ve nombres de otros vecinos). |
 | `POST /asambleas` | admin | Crear |
 | `PATCH /asambleas/:id` | admin | Editar |
 | `DELETE /asambleas/:id` | admin | Eliminar |
