@@ -602,6 +602,151 @@ En `apps/backend/.env`, con credenciales **de prueba**: `MP_ACCESS_TOKEN`,
 `http://localhost:4000/api/pagos/webhook/mercadopago`. Sin token, la
 preferencia responde 503 y el resto de la app anda igual.
 
+## Reservas de amenities
+
+El vecino reserva el SUM desde su portal y el administrador gestiona esas
+reservas. Las reglas no están en el código: las declara cada amenity en sus
+columnas (horario, anticipación, duración, si requiere aprobación, si bloquea
+al que debe expensas).
+
+### Endpoints
+
+| Método | Ruta                                       | Quién |
+|--------|--------------------------------------------|-------|
+| GET    | `/amenities`                               | admin: todos · vecino: los activos de los consorcios donde vive |
+| GET    | `/amenities/:id`                           | idem; ajeno al vecino, 404 |
+| POST   | `/amenities`                               | administrador |
+| PATCH  | `/amenities/:id`                           | administrador (`activo: false` lo da de baja) |
+| GET    | `/amenities/:id/disponibilidad?fecha=`     | cualquier logueado: la ventana del día y lo ocupado |
+| GET    | `/amenities/:id/bloqueos`                  | administrador (filtros `desde`, `hasta`) |
+| POST   | `/amenities/:id/bloqueos`                  | administrador |
+| DELETE | `/amenities/:id/bloqueos/:bloqueoId`       | administrador |
+| GET    | `/reservas`                                | admin: todas · vecino: las de sus unidades |
+| GET    | `/reservas/:id`                            | idem; ajena al vecino, 404 |
+| POST   | `/reservas`                                | vecino sobre su unidad · admin indicando `unidadId` |
+| PATCH  | `/reservas/:id/aprobar`                    | administrador |
+| PATCH  | `/reservas/:id/rechazar`                   | administrador (`motivoRechazo` obligatorio) |
+| PATCH  | `/reservas/:id/cancelar`                   | el vecino dueño o el administrador |
+
+Filtros de `GET /reservas`: `amenityId`, `consorcioId`, `unidadId`, `estado`,
+`situacion` (`proximas`/`pasadas`), `desde`, `hasta`, `pagina`, `limite`.
+
+Los amenities no se borran, se dan de baja: las reservas los referencian con FK
+`RESTRICT`. Uno inactivo no acepta reservas nuevas, pero las ya aprobadas siguen.
+
+### Ciclo de una reserva
+
+```
+          ┌─ requiereAprobacion ─▶ PENDIENTE ─aprobar─▶ APROBADA ─(pasó)─▶ FINALIZADA
+alta ─────┤                            │                   │
+          └─ sin aprobación ───────────┼───────────────────┘
+                                       │                   │
+                                  rechazar             cancelar
+                                       ▼                   ▼
+                                  RECHAZADA           CANCELADA
+```
+
+`PENDIENTE` y `APROBADA` **ocupan el calendario**; `RECHAZADA` y `CANCELADA` lo
+liberan. Una solicitud sin resolver reserva el lugar a propósito: si no, dos
+vecinos podrían pedir el mismo sábado y habría que rechazar a uno después de
+haberle dicho "esperá".
+
+### Cómo se recibe la franja
+
+La API toma `fecha` + `horaInicio` + `horaFin`, no instantes:
+
+```json
+{ "amenityId": "…", "fecha": "2026-10-05", "horaInicio": "12:00", "horaFin": "16:00" }
+```
+
+`hora_apertura` y `hora_cierre` son `time` y llegan como string (`'08:00:00'`):
+no tienen día ni zona. Recibiendo la hora de pared, contrastarla con la ventana
+es aritmética de minutos (`modules/reservas/horario.ts`, función pura y
+testeada), y el instante absoluto lo arma Postgres con `AT TIME ZONE`, que sabe
+de horarios de verano. Así no se inventa ninguna zona en TypeScript, igual que
+con `date` y `time` en el resto del proyecto.
+
+La zona es una constante del módulo (`ZONA_POR_DEFECTO`): hoy todos los
+consorcios son argentinos. Cuando haya uno que no lo sea, pasa a ser una columna
+de `consorcio` y sólo cambia quien la llama.
+
+### Reglas
+
+- **La franja entra en la ventana del amenity.** Terminar exactamente a la hora
+  de cierre es válido: cierra a esa hora, no antes.
+- **Duración máxima y anticipación mínima**, si el amenity las define. La
+  anticipación le da margen al administrador para aprobar.
+- **El horario tiene que estar en el futuro**, medido con el reloj de la base
+  (`now()`), no con el del proceso.
+- **El amenity tiene que ser del mismo consorcio que la unidad.** `reserva` no
+  tiene `consorcio_id`: el consorcio llega por el amenity y por la unidad, y
+  nada en la base obliga a que coincidan.
+- **El vecino reserva sobre su unidad**; si está vinculado a una sola, se
+  infiere. Una reserva ajena devuelve 404, no 403: un 403 confirmaría que existe.
+- **No se solapa** con otra reserva que ocupe el amenity. Los intervalos son
+  semiabiertos `[inicio, fin)`, así que de 10 a 12 y de 12 a 14 conviven.
+- **Aprobar revalida el calendario**: entre el pedido y la aprobación pudo
+  entrar un bloqueo o aprobarse otra reserva.
+- **Cancelar sólo antes de que empiece.** Cancelar algo que ya pasó no es
+  cancelar, es reescribir la historia.
+- **Con `bloquea_con_deuda`**, una unidad con boletas `VENCIDA` no puede
+  reservar. Reservas no toca las tablas de expensas: le pregunta a
+  `ExpensasService.tieneDeudaVencida`.
+
+### Bloqueos de mantenimiento
+
+El administrador cierra el amenity un rango de fechas (`amenity_bloqueo`) y ahí
+no se puede reservar. Un bloqueo que pisa reservas vigentes se **rechaza con
+409**: tiene que enterarse de que está dejando gente sin el SUM. Con
+`cancelarReservas: true` las cancela y le avisa a cada solicitante. Puede empezar
+en el pasado, porque un escape de agua no avisa con anticipación.
+
+### Estados que resuelve el reloj
+
+Antes de cada lectura, un `UPDATE` cierra lo que el tiempo ya resolvió, igual que
+`marcarVencidas()` en expensas y sin cron: una `APROBADA` cuyo `fin` pasó queda
+`FINALIZADA`, y una `PENDIENTE` cuyo `inicio` pasó queda `RECHAZADA` con motivo
+automático. Dejarla pendiente para siempre ensucia la bandeja del administrador
+y le miente al vecino.
+
+### Qué impone la base
+
+Tres reglas no las decide el código, las garantiza Postgres (y el generador de
+entities no las muestra, porque sólo lee PK, FK y UNIQUE):
+
+- `ex_reserva_solapada`: un `EXCLUDE USING gist` sobre
+  `(amenity_id, tstzrange(inicio, fin))` con
+  `WHERE estado IN ('PENDIENTE','APROBADA')`. Es la lista de estados que ocupan
+  el calendario, y `ESTADOS_QUE_OCUPAN` en el repositorio la espeja: si se
+  separaran, el código y la base dirían cosas distintas. El rango es `[)`, igual
+  que el chequeo del service.
+- `ck_reserva_rango` y `ck_bloqueo_rango`: `fin > inicio`, `hasta > desde`.
+- `ck_amenity_sena`: `monto_sena >= 0`.
+
+Los triggers `tg_reserva_updated` y `tg_amenity_updated` mantienen `updated_at`:
+el código no lo escribe.
+
+### Concurrencia
+
+El alta corre en una transacción que bloquea la fila del amenity
+(`SELECT … FOR UPDATE`) antes de mirar el calendario: el `SELECT` de chequeo y el
+`INSERT` no son atómicos, y sin el lock dos pedidos simultáneos ven el horario
+libre y los dos insertan. Se bloquea sólo esa fila, así dos amenities distintos
+se reservan en paralelo. El alta de un bloqueo toma el mismo lock y recién ahí
+mira qué reservas pisa.
+
+El chequeo previo existe para devolver un 409 en castellano; si algo lo esquiva,
+el `EXCLUDE` de la base lo frena igual y el repositorio traduce el `23P01` al
+mismo 409.
+
+### Pendiente
+
+- **Seña** (`monto_sena`, `dias_devolucion_sena`, `pago.reserva_id` con
+  `ConceptoPago.SENA_RESERVA`): las columnas están y se exponen, pero la reserva
+  todavía no genera ningún pago.
+- `cupo_personas` se guarda pero no se valida contra nada: hoy no se pide cuánta
+  gente va.
+
 ## Datos de demo
 
 ```bash
