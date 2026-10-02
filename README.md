@@ -458,14 +458,69 @@ El estado `PRORRATEO` del enum no se usa.
 | POST   | `/liquidaciones/:id/previsualizar`          | administrador |
 | POST   | `/liquidaciones/:id/emitir`                 | administrador |
 | POST   | `/liquidaciones/:id/cerrar`                 | administrador |
-| GET    | `/boletas`                                  | admin: todas · vecino: las emitidas de sus unidades |
+| GET    | `/boletas`                                  | grilla de cobranzas, paginada · admin: todas · vecino: las emitidas de sus unidades |
+| GET    | `/boletas/resumen`                          | emitido, cobrado, saldo, intereses y el conteo de cada solapa |
+| GET    | `/boletas/exportar`                         | la grilla en CSV, sin paginar |
+| POST   | `/boletas/recordatorios`                    | administrador: avisa a quienes tienen saldo |
 | GET    | `/boletas/:id`                              | con el detalle línea por línea; al vecino, 404 si no es suya o no se emitió |
 | GET    | `/boletas/:id/pdf`                          | la boleta en PDF, mismos permisos que el detalle |
 | PATCH  | `/boletas/:id/ajuste`                       | administrador, sólo en previsualización |
 | GET    | `/rubros-gasto`                             | cualquier logueado (`?consorcioId=`: los suyos más los compartidos) |
 | POST · PATCH · DELETE | `/rubros-gasto[/:id]`        | administrador (compartido: superadmin); 409 al borrar uno con gastos |
 
-Filtros de `GET /boletas`: `liquidacionId`, `unidadId`, `estado`.
+### La grilla de cobranzas
+
+`GET /boletas` es la pantalla de cobranzas del administrador, no una lista
+pelada de boletas. Cada fila trae lo que hace falta para decidir a quién
+reclamarle:
+
+```jsonc
+{
+  "items": [{
+    "id": "…", "periodo": "2026-08", "fechaVencimiento": "2026-09-10",
+    "unidad": { "id": "…", "etiqueta": "3º B", "coeficiente": 1.86 },
+    "propietario": { "id": "…", "nombre": "Osvaldo", "apellido": "Pereyra", "email": "…", "telefono": "…" },
+    "inquilino": null,              // si está alquilada, quién la ocupa
+    "coeficienteAplicado": 1.86,
+    "emitido": 155520, "pagado": 60000, "saldo": 95520,
+    "medio": "TRANSFERENCIA",       // el del último pago aprobado; null si no hubo
+    "estado": "VENCIDA", "interesesMora": 1240.5
+  }],
+  "total": 48, "pagina": 1, "paginas": 3
+}
+```
+
+Filtros: `liquidacionId`, `consorcioId`, `unidadId`, `periodo` (AAAA-MM),
+`estado`, `situacion`, `buscar`, `pagina`, `limite` (tope 100).
+
+`situacion` son las solapas de la pantalla y **no** es lo mismo que `estado`:
+`pendientes` incluye las `PARCIAL`, porque una boleta pagada a medias sigue
+teniendo saldo. `pagados` es `PAGADA` y `vencidos`, `VENCIDA`.
+
+`buscar` matchea la etiqueta de la unidad o el nombre de cualquiera de sus
+vecinos vigentes: en la grilla se busca "Pereyra", no un uuid.
+
+Al vecino no le viajan `propietario` ni `inquilino`: no necesita el teléfono
+del dueño para ver su propia boleta.
+
+**`GET /boletas/resumen`** devuelve los cuatro totales de la cabecera sobre el
+mismo alcance que la grilla —`emitido`, `cobrado`, `saldoPendiente`,
+`interesesAcumulados`— más `conteos` con `todos`, `pagados`, `pendientes` y
+`vencidos` para los números de las solapas. Ignora `estado` y `situacion`: la
+cabecera muestra el período completo.
+
+**`GET /boletas/exportar`** es la misma grilla en CSV, sin paginar y con tope
+de 5000 filas. Va con `;` y BOM para que Excel en español lo abra en columnas
+sin pasar por el asistente. Es CSV y no `.xlsx` a propósito: un xlsx real pide
+una dependencia nueva y Excel abre este archivo igual.
+
+**`POST /boletas/recordatorios`** manda un aviso por `Notificador` a cada
+vecino de cada boleta **con saldo** del alcance
+(`{ liquidacionId?, consorcioId?, periodo?, situacion?, mensaje? }`). Nunca a
+quien ya pagó, y nunca por una liquidación sin emitir: reclamar una deuda que
+todavía no existe es peor que no avisar. Devuelve
+`{ boletas, avisos, sinDestinatario, fallidos }`; un aviso que falla no corta
+los demás.
 
 ### Cómo se calcula una boleta
 
@@ -571,6 +626,8 @@ antes de cada lectura de boletas, sin cron.
 | Método | Ruta                              | Quién |
 |--------|-----------------------------------|-------|
 | GET    | `/pagos`                          | admin: todos · vecino: los de sus unidades (filtros `boletaId`, `unidadId`, `estado`) |
+| GET    | `/pagos/:id`                      | detalle con su unidad y su boleta; al vecino, 404 si no es de una unidad suya |
+| GET    | `/pagos/:id/recibo`               | el recibo en PDF, sólo de un pago aprobado |
 | POST   | `/pagos`                          | administrador: pago manual `{ boletaId, monto, medio, fechaPago? }` |
 | POST   | `/pagos/mercadopago/preferencia`  | dueño de la boleta o administrador: `{ boletaId }` → `{ pagoId, initPoint }` |
 | POST   | `/pagos/webhook/mercadopago`      | público, protegido por firma: lo llama Mercado Pago |
@@ -594,6 +651,26 @@ antes de cada lectura de boletas, sin cron.
 - Al aprobarse un pago se avisa a los vecinos de la unidad por `Notificador`;
   si el aviso falla, el pago queda igual.
 
+### Recibo
+
+Cuando un pago queda `APROBADO` por primera vez se le asigna
+`recibo_numero` con el formato `0001-00000001`: punto de venta fijo más un
+correlativo que sale de la secuencia `recibo_pago_numero` de la base
+(migración `SecuenciaNumeroRecibo`). Es una secuencia y no un `max(…) + 1`
+porque el webhook de Mercado Pago y un pago manual pueden aprobarse en el
+mismo instante y llevarse el mismo número.
+
+El número se asigna **una sola vez**: el webhook reintenta, y un comprobante
+que cambia de número en cada aviso no sirve como comprobante. Si un pago se
+reintegra y después se vuelve a aprobar, conserva el suyo.
+
+`GET /pagos/:id/recibo` lo genera al vuelo con `pdfkit`, igual que la boleta
+y por el mismo motivo: así siempre refleja el estado de hoy. `recibo_url`
+queda sin usar.
+
+Cuando cada administrador tenga su propio punto de venta, `0001` pasa a ser
+una columna del consorcio y la secuencia se vuelve una por punto de venta.
+
 ### Configurar Mercado Pago
 
 En `apps/backend/.env`, con credenciales **de prueba**: `MP_ACCESS_TOKEN`,
@@ -601,6 +678,45 @@ En `apps/backend/.env`, con credenciales **de prueba**: `MP_ACCESS_TOKEN`,
 `.env.example`). En local, el webhook necesita una URL pública: un túnel a
 `http://localhost:4000/api/pagos/webhook/mercadopago`. Sin token, la
 preferencia responde 503 y el resto de la app anda igual.
+
+## Inicio del vecino
+
+`GET /inicio` (sólo rol `VECINO`) arma de una sola vez lo que la app necesita
+apenas abre, para que el celular no encadene cuatro llamadas antes de pintar
+la primera pantalla. El módulo (`modules/inicio/`) no tiene tablas ni
+repository: compone lo que ya saben usuarios, unidades, expensas y reclamos.
+
+```jsonc
+{
+  "usuario": { "id": "…", "nombre": "Julieta", "apellido": "Sosa", "avatarUrl": null },
+  "unidades": [{
+    "id": "…", "etiqueta": "5º C", "coeficiente": 1.74,
+    "vinculo": "PROPIETARIO", "esTitular": true,
+    "consorcio": { "id": "…", "nombre": "…", "calle": "Av. Rivadavia", "numero": "4820", "barrio": "Almagro" },
+    "expensas": {                       // null si el consorcio nunca emitió
+      "boletaId": "…", "periodo": "2026-08", "fechaVencimiento": "2026-09-10",
+      "total": 145320.5, "pagado": 0, "saldo": 145320.5,
+      "estado": "PENDIENTE", "diasParaVencer": 6
+    },
+    "reclamosAbiertos": 1
+  }]
+}
+```
+
+Viene una lista porque un vecino puede estar vinculado a varias unidades (y a
+varios consorcios); el front elige cuál muestra arriba.
+
+### Pendiente
+
+Faltan dos bloques del diseño, y es porque sus módulos todavía no existen:
+
+- **Próximos eventos** (asamblea citada, reserva aprobada): necesita asambleas
+  y reservas.
+- **Muro de novedades**: necesita el módulo de novedades.
+
+No viajan como listas vacías a propósito: un `[]` le haría creer al front que
+no hay eventos, cuando lo que pasa es que nadie los sabe todavía. Se agregan
+a esta misma respuesta cuando existan esos módulos.
 
 ## Datos de demo
 
