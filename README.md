@@ -400,9 +400,9 @@ ve: al vecino se le devuelve la timeline recortada.
 
 ### Fotos
 
-La API recibe URLs ya subidas (`adjuntos: [{ url, nombre }]`), no archivos. No
-hay bucket de Storage creado todavía; cuando se defina dónde viven las imágenes,
-se suma el upload sin tocar la lógica del módulo.
+La API recibe URLs ya subidas (`adjuntos: [{ url, nombre }]`), no archivos: el
+front sube la foto a [`POST /archivos?destino=reclamos`](#archivos) y manda acá
+la URL que eso devuelve. Hasta 5 por reclamo, que es el tope que impone la base.
 
 ### Avisos
 
@@ -678,6 +678,74 @@ En `apps/backend/.env`, con credenciales **de prueba**: `MP_ACCESS_TOKEN`,
 `.env.example`). En local, el webhook necesita una URL pública: un túnel a
 `http://localhost:4000/api/pagos/webhook/mercadopago`. Sin token, la
 preferencia responde 503 y el resto de la app anda igual.
+
+## Archivos
+
+`POST /archivos` es la **única** forma de meter un archivo en el sistema. Todo
+lo demás guarda la URL que devuelve: `reclamo_adjunto.url`,
+`gasto.comprobante_url`, `novedad_adjunto.url`, `votacion.adjunto_url`,
+`asamblea.acta_url` y `usuario.avatar_url`.
+
+Se sube con `multipart/form-data`, campo `archivo`, y el destino va en la
+query. Devuelve `{ url, ruta, tipo, tamanio }`.
+
+```bash
+curl -X POST "$API/archivos?destino=reclamos" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "archivo=@foto.jpg"
+```
+
+### Destinos
+
+Cada columna `*_url` de la base tiene el suyo, con sus propias reglas:
+
+| Destino | Tipos | Máximo | Quién |
+|---|---|---|---|
+| `reclamos` | JPG, PNG, WEBP | 8 MB | cualquiera con sesión |
+| `comprobantes` | JPG, PNG, WEBP, PDF | 10 MB | administrador |
+| `novedades` | JPG, PNG, WEBP, PDF | 10 MB | administrador |
+| `votaciones` | JPG, PNG, WEBP, PDF | 10 MB | administrador |
+| `actas` | PDF | 10 MB | administrador |
+| `avatares` | JPG, PNG, WEBP | 2 MB | cualquiera con sesión |
+
+Que las fotos de un reclamo no acepten PDF, y que un acta sólo acepte PDF, no
+es capricho: separar los destinos evita que un archivo termine guardado donde
+no corresponde, y hace que cada pantalla pueda confiar en lo que va a recibir.
+
+### Reglas
+
+- **El tipo se detecta por el contenido, no por el `Content-Type`.** Ese header
+  lo escribe el cliente: con cambiarle la extensión a un ejecutable alcanzaría
+  para que entrara como imagen. Se miran los primeros bytes (`detectarTipo`).
+- **El nombre original nunca se usa en la ruta.** Viene del cliente y puede
+  traer barras o `..`. La ruta es `destino/usuarioId/uuid.ext`.
+- **El uuid hace que la URL no se pueda adivinar**, y el `usuarioId` en la ruta
+  es lo que permite saber de quién es un archivo a la hora de borrarlo.
+- `DELETE /archivos?url=…` borra un archivo propio —la foto que el vecino saca
+  y descarta antes de mandar el reclamo—. El vecino sólo borra las suyas; quien
+  administra, cualquiera.
+- Sin las variables de entorno configuradas, responde 503 y el resto de la app
+  anda igual, igual que Mercado Pago.
+
+### Configurar
+
+En Supabase → Storage, crear un bucket llamado `domus` y marcarlo **público**.
+Después, las tres variables de `.env.example`: `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY` y `SUPABASE_STORAGE_BUCKET`.
+
+### Pendiente
+
+- **El bucket es público.** Cualquiera con la URL ve el archivo, y la foto del
+  baño de un vecino es información suya. Hoy lo que protege es que la URL lleva
+  un uuid y no se puede adivinar, que es lo que se banca el esquema actual:
+  las columnas de la base se llaman `url` y guardan una URL. Hacerlo bien es
+  bucket privado y URLs firmadas al leer, pero eso implica guardar la **ruta**
+  en vez de la URL y tocar todos los módulos que hoy leen esas columnas. Por
+  eso la subida ya devuelve `ruta` además de `url`: el día que se haga el
+  cambio, el dato está.
+- **Nadie valida que la URL que llega en un DTO sea nuestra.** `CrearReclamoDto`
+  y `CreateGastoDto` sólo piden `@IsUrl()`, así que se podría guardar una URL
+  externa como si fuera una foto subida.
 
 ## Inicio del vecino
 

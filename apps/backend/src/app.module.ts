@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { CoreModule } from './core/core.module';
 import { NotificacionesModule } from './core/notificaciones/notificaciones.module';
 import { DatabaseModule } from './database/database.module';
+import { ArchivosModule } from './modules/archivos/archivos.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CategoriasReclamoModule } from './modules/categorias-reclamo/categorias-reclamo.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -44,6 +45,9 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
     // ── Módulos de negocio ──
     AuthModule,
     UsuariosModule,
+    // La puerta única para subir archivos: las URLs que devuelve las guardan
+    // los módulos que las usan.
+    ArchivosModule,
     ConsorciosModule,
     UnidadesModule,
     ProveedoresModule,
