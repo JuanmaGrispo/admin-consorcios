@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, IsNull, Like, Repository } from 'typeorm';
+import { Brackets, DataSource, IsNull, Like, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   Boleta,
   BoletaDetalle,
@@ -8,16 +8,59 @@ import {
   EstadoLiquidacion,
   Gasto,
   Liquidacion,
+  MedioPago,
   Unidad,
   UnidadUsuario,
   Votacion,
 } from '../../database/entities';
-import { ListarBoletasQuery } from './dto/listar-boletas.query';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
 import { PREFIJO_AJUSTE, type BoletaCalculada } from './prorrateo';
 
 /** Las liquidaciones que ya salieron: sus boletas son deuda real y el vecino las ve. */
 const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
+
+/**
+ * Qué boletas entran en una consulta de cobranzas. Lo arma el service a
+ * partir de los filtros de la pantalla y de quién está mirando; el repository
+ * sólo lo traduce a SQL.
+ */
+export interface AlcanceBoletas {
+  liquidacionId?: string;
+  consorcioId?: string;
+  unidadId?: string;
+  /** AAAA-MM. */
+  periodo?: string;
+  estado?: EstadoBoleta;
+  /** Los estados de una solapa (`pendientes` son dos). */
+  estados?: EstadoBoleta[];
+  /** Sólo las que todavía deben algo: para los recordatorios. */
+  conSaldo?: boolean;
+  buscar?: string;
+  /** Acota a las unidades del vecino; sin él, todas (administrador). */
+  unidadIds?: string[];
+  soloEmitidas: boolean;
+}
+
+export interface ResumenCobranzas {
+  emitido: number;
+  cobrado: number;
+  saldoPendiente: number;
+  interesesAcumulados: number;
+  conteos: { todos: number; pagados: number; pendientes: number; vencidos: number };
+}
+
+export interface PagoDeBoleta {
+  pagado: number;
+  medio: MedioPago;
+}
+
+/**
+ * Lo pagado de la boleta de la fila actual, como subconsulta escalar. Es el
+ * mismo criterio que `pagadoDe`: sólo los pagos APROBADO cuentan como cobrado.
+ */
+const PAGADO_DE_LA_BOLETA = `(SELECT coalesce(sum(p.monto), 0)
+                                FROM pago p
+                               WHERE p.boleta_id = b.id AND p.estado = 'APROBADO')`;
 
 /** Lo que se muestra de un gasto: rubro, proveedor y de dónde salió. */
 const RELACIONES_GASTO = { rubro: true, proveedor: true, reclamo: true, votacion: true } as const;
@@ -246,28 +289,187 @@ export class ExpensasRepository {
     });
   }
 
-  listarBoletas(
-    query: ListarBoletasQuery,
-    filtro: { unidadIds?: string[]; soloEmitidas: boolean },
-  ): Promise<Boleta[]> {
-    const qb = this.boletas
-      .createQueryBuilder('b')
+  /**
+   * Las boletas del alcance, paginadas. La grilla de cobranzas también pide
+   * el total para la paginación, así que vuelven las dos cosas.
+   */
+  async listarBoletas(
+    alcance: AlcanceBoletas,
+    pagina: { pagina: number; limite: number },
+  ): Promise<{ items: Boleta[]; total: number }> {
+    const qb = this.boletasDelAlcance(alcance)
       .innerJoinAndSelect('b.liquidacion', 'l')
       .innerJoinAndSelect('b.unidad', 'u')
       .orderBy('l.periodo', 'DESC')
-      .addOrderBy('u.etiqueta', 'ASC');
+      .addOrderBy('u.etiqueta', 'ASC')
+      .skip((pagina.pagina - 1) * pagina.limite)
+      .take(pagina.limite);
 
-    if (filtro.unidadIds) {
-      if (filtro.unidadIds.length === 0) qb.andWhere('1 = 0');
-      else qb.andWhere('b.unidadId IN (:...unidades)', { unidades: filtro.unidadIds });
+    const [items, total] = await qb.getManyAndCount();
+    return { items, total };
+  }
+
+  /**
+   * Todas las boletas del alcance, sin paginar: la exportación y los
+   * recordatorios trabajan sobre el conjunto completo, no sobre la página que
+   * se está mirando. Con tope, porque "todas" de un consorcio grande y varios
+   * años sigue teniendo que entrar en memoria.
+   */
+  listarBoletasCompletas(alcance: AlcanceBoletas, tope: number): Promise<Boleta[]> {
+    return this.boletasDelAlcance(alcance)
+      .innerJoinAndSelect('b.liquidacion', 'l')
+      .innerJoinAndSelect('b.unidad', 'u')
+      .orderBy('l.periodo', 'DESC')
+      .addOrderBy('u.etiqueta', 'ASC')
+      .take(tope)
+      .getMany();
+  }
+
+  /**
+   * Los totales de la cabecera de cobranzas, calculados en la base sobre el
+   * mismo alcance que la grilla: si no, los KPIs dirían una cosa y las filas
+   * de abajo, otra.
+   */
+  async resumenCobranzas(alcance: AlcanceBoletas): Promise<ResumenCobranzas> {
+    const fila = await this.boletasDelAlcance(alcance)
+      .select('coalesce(sum(b.total), 0)::text', 'emitido')
+      .addSelect(`coalesce(sum(${PAGADO_DE_LA_BOLETA}), 0)::text`, 'cobrado')
+      .addSelect(
+        `coalesce(sum(greatest(b.total - ${PAGADO_DE_LA_BOLETA}, 0)), 0)::text`,
+        'saldoPendiente',
+      )
+      .addSelect('coalesce(sum(b.intereses_mora), 0)::text', 'interesesAcumulados')
+      .addSelect('count(*)::int', 'todos')
+      .addSelect(`count(*) FILTER (WHERE b.estado = 'PAGADA')::int`, 'pagados')
+      .addSelect(`count(*) FILTER (WHERE b.estado IN ('PENDIENTE', 'PARCIAL'))::int`, 'pendientes')
+      .addSelect(`count(*) FILTER (WHERE b.estado = 'VENCIDA')::int`, 'vencidos')
+      .getRawOne<Record<string, string | number>>();
+
+    return {
+      emitido: Number(fila?.emitido ?? 0),
+      cobrado: Number(fila?.cobrado ?? 0),
+      saldoPendiente: Number(fila?.saldoPendiente ?? 0),
+      interesesAcumulados: Number(fila?.interesesAcumulados ?? 0),
+      conteos: {
+        todos: Number(fila?.todos ?? 0),
+        pagados: Number(fila?.pagados ?? 0),
+        pendientes: Number(fila?.pendientes ?? 0),
+        vencidos: Number(fila?.vencidos ?? 0),
+      },
+    };
+  }
+
+  /**
+   * Lo pagado y con qué medio, por boleta. En una sola consulta para toda la
+   * página: una por fila serían 20 idas a la base para pintar una grilla.
+   */
+  async pagosPorBoleta(boletaIds: string[]): Promise<Map<string, PagoDeBoleta>> {
+    const porBoleta = new Map<string, PagoDeBoleta>();
+    if (boletaIds.length === 0) return porBoleta;
+
+    const filas: { boletaId: string; pagado: string; medio: MedioPago }[] =
+      await this.dataSource.query(
+        `SELECT boleta_id AS "boletaId",
+                sum(monto)::text AS pagado,
+                -- El medio del último pago: es el que la grilla muestra.
+                (array_agg(medio ORDER BY coalesce(fecha_pago, created_at) DESC))[1] AS medio
+           FROM pago
+          WHERE estado = 'APROBADO'
+            AND boleta_id = ANY($1::uuid[])
+          GROUP BY boleta_id`,
+        [boletaIds],
+      );
+
+    for (const f of filas) {
+      porBoleta.set(f.boletaId, { pagado: Number(f.pagado), medio: f.medio });
+    }
+    return porBoleta;
+  }
+
+  /** Los vínculos vigentes de varias unidades, con el vecino de cada uno. */
+  async vinculosVigentes(unidadIds: string[]): Promise<Map<string, UnidadUsuario[]>> {
+    const porUnidad = new Map<string, UnidadUsuario[]>();
+    if (unidadIds.length === 0) return porUnidad;
+
+    const vinculos = await this.vinculos
+      .createQueryBuilder('v')
+      .innerJoinAndSelect('v.usuario', 'usuario')
+      .where('v.unidadId IN (:...unidadIds)', { unidadIds })
+      .andWhere(VINCULO_VIGENTE)
+      // El titular primero: es a quien elige la grilla cuando hay varios.
+      .orderBy('v.esTitular', 'DESC')
+      .addOrderBy('v.desde', 'ASC')
+      .getMany();
+
+    for (const v of vinculos) {
+      porUnidad.set(v.unidadId, [...(porUnidad.get(v.unidadId) ?? []), v]);
+    }
+    return porUnidad;
+  }
+
+  /**
+   * El query builder con el alcance ya aplicado. Lo comparten la grilla, el
+   * resumen, la exportación y los recordatorios: un solo lugar donde decidir
+   * qué boletas entran.
+   */
+  private boletasDelAlcance(alcance: AlcanceBoletas): SelectQueryBuilder<Boleta> {
+    const qb = this.boletas.createQueryBuilder('b');
+
+    if (alcance.unidadIds) {
+      // `IN ()` es un error de sintaxis en Postgres: sin unidades no ve nada.
+      if (alcance.unidadIds.length === 0) qb.andWhere('1 = 0');
+      else qb.andWhere('b.unidadId IN (:...unidades)', { unidades: alcance.unidadIds });
     }
     // El vecino no ve previsualizaciones: todavía pueden cambiar.
-    if (filtro.soloEmitidas) qb.andWhere('l.estado IN (:...emitidas)', { emitidas: EMITIDAS });
-    if (query.liquidacionId) qb.andWhere('b.liquidacionId = :liq', { liq: query.liquidacionId });
-    if (query.unidadId) qb.andWhere('b.unidadId = :uni', { uni: query.unidadId });
-    if (query.estado) qb.andWhere('b.estado = :est', { est: query.estado });
+    if (alcance.soloEmitidas) {
+      qb.andWhere(
+        `b.liquidacionId IN (SELECT id FROM liquidacion WHERE estado IN (:...emitidas))`,
+        { emitidas: EMITIDAS },
+      );
+    }
+    if (alcance.liquidacionId) qb.andWhere('b.liquidacionId = :liq', { liq: alcance.liquidacionId });
+    if (alcance.unidadId) qb.andWhere('b.unidadId = :uni', { uni: alcance.unidadId });
+    if (alcance.estado) qb.andWhere('b.estado = :est', { est: alcance.estado });
+    if (alcance.estados?.length) {
+      qb.andWhere('b.estado IN (:...estados)', { estados: alcance.estados });
+    }
+    if (alcance.conSaldo) qb.andWhere(`b.total > ${PAGADO_DE_LA_BOLETA}`);
 
-    return qb.getMany();
+    if (alcance.consorcioId || alcance.periodo) {
+      const condiciones = ['ls.id = b.liquidacion_id'];
+      if (alcance.consorcioId) {
+        condiciones.push('ls.consorcio_id = :cons');
+        qb.setParameter('cons', alcance.consorcioId);
+      }
+      // `periodo` se guarda como el primer día del mes: se compara el mes.
+      if (alcance.periodo) {
+        condiciones.push(`to_char(ls.periodo, 'YYYY-MM') = :per`);
+        qb.setParameter('per', alcance.periodo);
+      }
+      qb.andWhere(`EXISTS (SELECT 1 FROM liquidacion ls WHERE ${condiciones.join(' AND ')})`);
+    }
+
+    if (alcance.buscar) {
+      // Por etiqueta de la unidad o por el nombre de cualquiera de sus vecinos
+      // vigentes: en la grilla el administrador busca "Pereyra", no un uuid.
+      qb.andWhere(
+        new Brackets((sub) =>
+          sub
+            .where(
+              `b.unidadId IN (SELECT id FROM unidad WHERE etiqueta ILIKE :q)`,
+            )
+            .orWhere(
+              `EXISTS (SELECT 1 FROM unidad_usuario vu
+                         JOIN usuario us ON us.id = vu.usuario_id
+                        WHERE vu.unidad_id = b.unidad_id
+                          AND (vu.hasta IS NULL OR vu.hasta >= CURRENT_DATE)
+                          AND (us.nombre || ' ' || us.apellido) ILIKE :q)`,
+            ),
+        ),
+      ).setParameter('q', `%${alcance.buscar}%`);
+    }
+
+    return qb;
   }
 
   /**
