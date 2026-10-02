@@ -5,6 +5,7 @@ import { CoreModule } from './core/core.module';
 import { NotificacionesModule } from './core/notificaciones/notificaciones.module';
 import { DatabaseModule } from './database/database.module';
 import { ArchivosModule } from './modules/archivos/archivos.module';
+import { AsambleasModule } from './modules/asambleas/asambleas.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CategoriasReclamoModule } from './modules/categorias-reclamo/categorias-reclamo.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -58,6 +59,7 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
     ExpensasModule,
     PagosModule,
     ReservasModule,
+    AsambleasModule,
     // Compone la pantalla de inicio del vecino: va último porque depende de
     // todos los anteriores.
     InicioModule,
