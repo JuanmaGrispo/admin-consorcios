@@ -7,6 +7,7 @@ import {
   Unidad,
   UnidadUsuario,
 } from '../../database/entities';
+import { ArchivosModule } from '../archivos/archivos.module';
 import { CategoriasReclamoModule } from '../categorias-reclamo/categorias-reclamo.module';
 import { ProveedoresModule } from '../proveedores/proveedores.module';
 import { ReclamosController } from './reclamos.controller';
@@ -26,6 +27,8 @@ import { ReclamosService } from './reclamos.service';
     // Para validar que la categoría y el proveedor correspondan al consorcio.
     CategoriasReclamoModule,
     ProveedoresModule,
+    // Para confirmar que las fotos se subieron a `reclamos`.
+    ArchivosModule,
   ],
   controllers: [ReclamosController],
   providers: [ReclamosService, ReclamosRepository],

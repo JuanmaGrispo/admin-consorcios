@@ -1,7 +1,9 @@
+import { BadRequestException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Notificador } from '../../core/notificaciones/notificador';
 import { Reclamo, RolUsuario } from '../../database/entities';
+import type { ArchivosService } from '../archivos/archivos.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { CategoriasReclamoService } from '../categorias-reclamo/categorias-reclamo.service';
 import type { ProveedoresService } from '../proveedores/proveedores.service';
@@ -28,6 +30,12 @@ function crearService() {
     {} as Notificador,
     {} as CategoriasReclamoService,
     {} as ProveedoresService,
+    // Sólo son nuestras las fotos subidas a `reclamos`.
+    {
+      exigirPropia: (url: string) => {
+        if (!url.startsWith('https://storage/reclamos/')) throw new BadRequestException('ajena');
+      },
+    } as unknown as ArchivosService,
   );
   return { service, llamadas };
 }
@@ -52,5 +60,19 @@ describe('ReclamosService — superadmin', () => {
     const { service, llamadas } = crearService();
     await service.listar(vecino, {});
     assert.deepEqual(llamadas.unidadesListado, [[]]);
+  });
+});
+
+describe('ReclamosService — adjuntos', () => {
+  it('rechaza una foto que no se subió a reclamos', async () => {
+    const { service } = crearService();
+    await assert.rejects(
+      service.crear(vecino, {
+        categoriaId: 'c1',
+        descripcion: 'Pierde el inodoro',
+        adjuntos: [{ url: 'https://otro.com/foto.jpg' }],
+      }),
+      BadRequestException,
+    );
   });
 });

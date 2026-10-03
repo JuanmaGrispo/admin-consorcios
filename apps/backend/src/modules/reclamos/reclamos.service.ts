@@ -13,6 +13,8 @@ import {
   RolUsuario,
   TipoEventoReclamo,
 } from '../../database/entities';
+import { ArchivosService } from '../archivos/archivos.service';
+import { DestinoArchivo } from '../archivos/tipos-archivo';
 import type { UsuarioActual } from '../auth/auth.types';
 import { CategoriasReclamoService } from '../categorias-reclamo/categorias-reclamo.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
@@ -39,6 +41,7 @@ export class ReclamosService {
     private readonly notificador: Notificador,
     private readonly categorias: CategoriasReclamoService,
     private readonly proveedores: ProveedoresService,
+    private readonly archivos: ArchivosService,
   ) {}
 
   // ── Lectura ────────────────────────────────────────────────────────────────
@@ -71,6 +74,12 @@ export class ReclamosService {
   // ── Alta ───────────────────────────────────────────────────────────────────
 
   async crear(usuario: UsuarioActual, dto: CrearReclamoDto): Promise<Reclamo> {
+    // Las fotos se suben antes con `POST /archivos?destino=reclamos`: una URL
+    // externa no es una foto del vecino, aunque pase el `@IsUrl()`.
+    for (const adjunto of dto.adjuntos ?? []) {
+      this.archivos.exigirPropia(adjunto.url, DestinoArchivo.RECLAMOS);
+    }
+
     const unidadId = await this.resolverUnidad(usuario, dto.unidadId);
 
     const unidad = await this.reclamos.findUnidad(unidadId);
