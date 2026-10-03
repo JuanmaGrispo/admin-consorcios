@@ -17,7 +17,7 @@ export class InicioController {
   @ApiOperation({
     summary: 'La pantalla de inicio del vecino',
     description:
-      'Sus unidades con el saldo de expensas y los reclamos abiertos de cada una. Todavía no trae próximos eventos ni novedades: faltan los módulos de asambleas, reservas y novedades.',
+      'Sus unidades con el saldo de expensas y los reclamos abiertos de cada una, y los próximos eventos (asambleas convocadas y reservas aprobadas). Todavía no trae novedades: falta ese módulo.',
   })
   paraElVecino(@UsuarioActual() usuario: Usuario) {
     return this.inicio.paraElVecino(usuario);
