@@ -80,6 +80,18 @@ export class ArchivosService {
   }
 
   /**
+   * Para los módulos que guardan una URL: confirma que la subimos nosotros y
+   * al destino que corresponde. Sin esto, un `@IsUrl()` deja guardar una URL
+   * externa —o una foto de reclamo— como si fuera, por ejemplo, un acta.
+   */
+  exigirPropia(url: string, destino: DestinoArchivo): void {
+    const ruta = this.storage.rutaDeUrl(url);
+    if (!ruta?.startsWith(`${destino}/`)) {
+      throw new BadRequestException(`Esa URL no es de un archivo subido a ${destino}`);
+    }
+  }
+
+  /**
    * Borra un archivo propio por su URL. Sirve para la foto que el vecino
    * saca y descarta antes de mandar el reclamo: si no, cada arrepentimiento
    * dejaría basura en el bucket para siempre.

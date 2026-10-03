@@ -166,4 +166,26 @@ describe('ArchivosService', () => {
       assert.equal(entorno.borrados.length, 0);
     });
   });
+
+  describe('exigirPropia', () => {
+    it('acepta una URL nuestra del destino pedido', () => {
+      assert.doesNotThrow(() =>
+        service.exigirPropia(`${PREFIJO}actas/a1/x.pdf`, DestinoArchivo.ACTAS),
+      );
+    });
+
+    it('rechaza una URL de otro destino', () => {
+      assert.throws(
+        () => service.exigirPropia(`${PREFIJO}reclamos/v1/x.jpg`, DestinoArchivo.ACTAS),
+        BadRequestException,
+      );
+    });
+
+    it('rechaza una URL externa', () => {
+      assert.throws(
+        () => service.exigirPropia('https://otro.com/actas/x.pdf', DestinoArchivo.ACTAS),
+        BadRequestException,
+      );
+    });
+  });
 });
