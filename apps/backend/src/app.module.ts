@@ -20,6 +20,7 @@ import { ReservasModule } from './modules/reservas/reservas.module';
 import { RubrosGastoModule } from './modules/rubros-gasto/rubros-gasto.module';
 import { UnidadesModule } from './modules/unidades/unidades.module';
 import { UsuariosModule } from './modules/usuarios/usuarios.module';
+import { VotacionesModule } from './modules/votaciones/votaciones.module';
 
 /**
  * Cada módulo de negocio vive en `modules/<nombre>/` y se compone de:
@@ -60,6 +61,7 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
     PagosModule,
     ReservasModule,
     AsambleasModule,
+    VotacionesModule,
     // Compone la pantalla de inicio del vecino: va último porque depende de
     // todos los anteriores.
     InicioModule,
