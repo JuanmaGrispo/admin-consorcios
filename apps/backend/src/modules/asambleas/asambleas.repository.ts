@@ -14,10 +14,12 @@ import {
   Asistencia,
   EstadoAsamblea,
   EstadoAsistencia,
+  EstadoVotacion,
   PuntoOrdenDia,
   TipoPuntoOrden,
   Unidad,
   UnidadUsuario,
+  Votacion,
 } from '../../database/entities';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { ListarAsambleasQuery } from './dto/listar-asambleas.query';
@@ -50,6 +52,8 @@ export class AsambleasRepository {
     private readonly unidades: Repository<Unidad>,
     @InjectRepository(UnidadUsuario)
     private readonly vinculos: Repository<UnidadUsuario>,
+    @InjectRepository(Votacion)
+    private readonly votaciones: Repository<Votacion>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -174,6 +178,11 @@ export class AsambleasRepository {
 
   async guardarAsistencia(id: string, cambios: QueryDeepPartialEntity<Asistencia>): Promise<void> {
     await this.asistenciasRepo.update({ id }, { ...cambios, updatedAt: new Date() });
+  }
+
+  /** Una asamblea no se cierra con votaciones sin resultado. */
+  votacionesAbiertas(asambleaId: string): Promise<number> {
+    return this.votaciones.count({ where: { asambleaId, estado: EstadoVotacion.ABIERTA } });
   }
 
   // ── Vínculos ───────────────────────────────────────────────────────────────

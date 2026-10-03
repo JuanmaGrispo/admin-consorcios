@@ -61,6 +61,7 @@ function crearService(
     unidadesActivas?: { id: string; coeficiente: number }[];
     unidadesDelVecino?: string[];
     consorciosDelVecino?: string[];
+    votacionesAbiertas?: number;
   } = {},
 ) {
   const escrito = {
@@ -105,6 +106,7 @@ function crearService(
     consorciosDelUsuario: async () => opts.consorciosDelVecino ?? ['c1'],
     unidadesDelUsuarioEnConsorcio: async () => opts.unidadesDelVecino ?? [],
     vecinosDelConsorcio: async () => ['v1'],
+    votacionesAbiertas: async () => opts.votacionesAbiertas ?? 0,
     proximas: async (consorcioIds: string[]) => {
       escrito.proximasConsorcios = consorcioIds;
       return [asamblea({ estado: EstadoAsamblea.CONVOCADA })];
@@ -222,6 +224,15 @@ describe('AsambleasService — ciclo de vida', () => {
     });
     await service.cerrar(admin, 'as1');
     assert.deepEqual(escrito.actualizada, [{ estado: EstadoAsamblea.CERRADA }]);
+  });
+
+  it('no se cierra con votaciones abiertas', async () => {
+    const { service, escrito } = crearService({
+      asamblea: asamblea({ estado: EstadoAsamblea.EN_CURSO }),
+      votacionesAbiertas: 1,
+    });
+    await assert.rejects(service.cerrar(admin, 'as1'), /votaciones/);
+    assert.deepEqual(escrito.actualizada, []);
   });
 
   it('cerrar sin quórum queda CERRADA_SIN_QUORUM', async () => {

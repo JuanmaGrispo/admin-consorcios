@@ -227,6 +227,9 @@ export class AsambleasService {
   async cerrar(usuario: UsuarioActual, id: string) {
     const asamblea = await this.exigirAsamblea(id);
     exigirEstado(asamblea, [EstadoAsamblea.EN_CURSO], 'cerrar');
+    if ((await this.asambleas.votacionesAbiertas(id)) > 0) {
+      throw new ConflictException('Cerrá primero las votaciones abiertas de esta asamblea');
+    }
 
     const quorum = calcularQuorum(await this.asambleas.asistencias(id), asamblea.quorumRequerido);
     const estado = quorum.alcanzado ? EstadoAsamblea.CERRADA : EstadoAsamblea.CERRADA_SIN_QUORUM;
