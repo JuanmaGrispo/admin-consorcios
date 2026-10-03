@@ -5,6 +5,7 @@ import { ReclamosModule } from '../reclamos/reclamos.module';
 import { ReservasModule } from '../reservas/reservas.module';
 import { UnidadesModule } from '../unidades/unidades.module';
 import { UsuariosModule } from '../usuarios/usuarios.module';
+import { VotacionesModule } from '../votaciones/votaciones.module';
 import { InicioController } from './inicio.controller';
 import { InicioService } from './inicio.service';
 
@@ -20,6 +21,7 @@ import { InicioService } from './inicio.service';
     ReclamosModule,
     AsambleasModule,
     ReservasModule,
+    VotacionesModule,
   ],
   controllers: [InicioController],
   providers: [InicioService],

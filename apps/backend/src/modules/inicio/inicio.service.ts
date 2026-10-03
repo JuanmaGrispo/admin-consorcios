@@ -7,6 +7,7 @@ import { ReclamosService } from '../reclamos/reclamos.service';
 import { ReservasService } from '../reservas/reservas.service';
 import { UnidadesService } from '../unidades/unidades.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
+import { VotacionesService } from '../votaciones/votaciones.service';
 
 /** Una de las unidades del vecino, con su situación de hoy. */
 export interface UnidadDeInicio {
@@ -27,7 +28,7 @@ export interface UnidadDeInicio {
   reclamosAbiertos: number;
 }
 
-/** Lo que se le viene al vecino: una asamblea citada o una reserva aprobada. */
+/** Lo que se le viene al vecino: una asamblea citada, una reserva aprobada o una votación abierta. */
 export type EventoProximo =
   | {
       tipo: 'ASAMBLEA';
@@ -47,6 +48,15 @@ export type EventoProximo =
       fin: Date;
       unidadId: string;
       amenityId: string;
+    }
+  | {
+      tipo: 'VOTACION';
+      id: string;
+      titulo: string;
+      /** Cuándo cierra: es lo que apura al vecino. */
+      fecha: Date;
+      consorcioId: string;
+      asambleaId: string | null;
     };
 
 export interface Inicio {
@@ -78,6 +88,7 @@ export class InicioService {
     private readonly reclamos: ReclamosService,
     private readonly asambleas: AsambleasService,
     private readonly reservas: ReservasService,
+    private readonly votaciones: VotacionesService,
   ) {}
 
   async paraElVecino(usuario: UsuarioActual): Promise<Inicio> {
@@ -119,12 +130,13 @@ export class InicioService {
   }
 
   /**
-   * Asambleas convocadas o en curso y reservas aprobadas que todavía no
-   * empezaron, mezcladas y de la más cercana a la más lejana.
+   * Asambleas convocadas o en curso, reservas aprobadas que todavía no
+   * empezaron y votaciones abiertas, mezcladas y de la más cercana a la más
+   * lejana.
    */
   private async proximosEventos(usuario: UsuarioActual): Promise<EventoProximo[]> {
     const tope = new Date(Date.now() + DIAS_DE_RESERVAS * DIA_MS).toISOString().slice(0, 10);
-    const [asambleas, reservas] = await Promise.all([
+    const [asambleas, reservas, votaciones] = await Promise.all([
       this.asambleas.proximasDelVecino(usuario),
       this.reservas.listar(usuario, {
         estado: EstadoReserva.APROBADA,
@@ -133,6 +145,7 @@ export class InicioService {
         pagina: 1,
         limite: 100,
       }),
+      this.votaciones.abiertasDelVecino(usuario),
     ]);
 
     const eventos: EventoProximo[] = [
@@ -156,6 +169,16 @@ export class InicioService {
           fin: r.fin,
           unidadId: r.unidadId,
           amenityId: r.amenityId,
+        }),
+      ),
+      ...votaciones.map(
+        (v): EventoProximo => ({
+          tipo: 'VOTACION',
+          id: v.id,
+          titulo: v.titulo,
+          fecha: v.cierre,
+          consorcioId: v.consorcioId,
+          asambleaId: v.asambleaId,
         }),
       ),
     ];

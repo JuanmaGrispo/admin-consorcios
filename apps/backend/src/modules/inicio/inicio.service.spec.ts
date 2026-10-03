@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Asamblea, EstadoAsamblea, EstadoReserva, Reserva, RolUsuario } from '../../database/entities';
+import {
+  Asamblea,
+  EstadoAsamblea,
+  EstadoReserva,
+  Reserva,
+  RolUsuario,
+  Votacion,
+} from '../../database/entities';
 import type { AsambleasService } from '../asambleas/asambleas.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ExpensasService } from '../expensas/expensas.service';
@@ -9,13 +16,16 @@ import type { ListarReservasQuery } from '../reservas/dto/listar-reservas.query'
 import type { ReservasService } from '../reservas/reservas.service';
 import type { UnidadesService } from '../unidades/unidades.service';
 import type { UsuariosService } from '../usuarios/usuarios.service';
+import type { VotacionesService } from '../votaciones/votaciones.service';
 import { InicioService } from './inicio.service';
 
 const vecino: UsuarioActual = { id: 'v1', email: 'v@x', rol: RolUsuario.VECINO };
 
 const enDias = (dias: number) => new Date(Date.now() + dias * 24 * 3600 * 1000);
 
-function crearService(opts: { asambleas?: Asamblea[]; reservas?: Reserva[] } = {}) {
+function crearService(
+  opts: { asambleas?: Asamblea[]; reservas?: Reserva[]; votaciones?: Votacion[] } = {},
+) {
   const pedidas: ListarReservasQuery[] = [];
   const service = new InicioService(
     { findOne: async () => ({ nombre: 'Julieta', apellido: 'Sosa', avatarUrl: null }) } as unknown as UsuariosService,
@@ -30,6 +40,7 @@ function crearService(opts: { asambleas?: Asamblea[]; reservas?: Reserva[] } = {
         return { items: opts.reservas ?? [], total: 0, pagina: 1, paginas: 1 };
       },
     } as unknown as ReservasService,
+    { abiertasDelVecino: async () => opts.votaciones ?? [] } as unknown as VotacionesService,
   );
   return { service, pedidas };
 }
@@ -66,6 +77,34 @@ describe('InicioService — próximos eventos', () => {
       [
         ['RESERVA', 'r1', 'SUM'],
         ['ASAMBLEA', 'as1', 'Asamblea ordinaria'],
+      ],
+    );
+  });
+
+  it('suma las votaciones abiertas, ordenadas por su cierre', async () => {
+    const { service } = crearService({
+      asambleas: [
+        {
+          id: 'as1',
+          titulo: 'Asamblea ordinaria',
+          fechaHora: enDias(5),
+          lugar: 'SUM',
+          estado: EstadoAsamblea.CONVOCADA,
+          consorcioId: 'c1',
+        } as Asamblea,
+      ],
+      votaciones: [
+        { id: 'vt1', titulo: 'Bomba de agua', cierre: enDias(3), consorcioId: 'c1', asambleaId: null } as Votacion,
+      ],
+    });
+
+    const { proximosEventos } = await service.paraElVecino(vecino);
+
+    assert.deepEqual(
+      proximosEventos.map((e) => [e.tipo, e.id]),
+      [
+        ['VOTACION', 'vt1'],
+        ['ASAMBLEA', 'as1'],
       ],
     );
   });
