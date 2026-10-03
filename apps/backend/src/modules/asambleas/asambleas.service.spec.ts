@@ -15,6 +15,7 @@ import {
   ModalidadAsamblea,
   RolUsuario,
 } from '../../database/entities';
+import type { ArchivosService } from '../archivos/archivos.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { AsambleasRepository } from './asambleas.repository';
@@ -106,7 +107,13 @@ function crearService(
   } as unknown as AsambleasRepository;
   const consorcios = { findOne: async () => ({ id: 'c1' }) } as unknown as ConsorciosService;
   const notificador = { enviar: async () => undefined } as unknown as Notificador;
-  return { service: new AsambleasService(repo, consorcios, notificador), escrito };
+  // Sólo son nuestras las URLs de actas que subió `archivos`.
+  const archivos = {
+    exigirPropia: (url: string) => {
+      if (!url.startsWith('https://storage/actas/')) throw new BadRequestException('ajena');
+    },
+  } as unknown as ArchivosService;
+  return { service: new AsambleasService(repo, consorcios, notificador, archivos), escrito };
 }
 
 const crearDto = (over = {}) => ({
@@ -227,9 +234,28 @@ describe('AsambleasService — ciclo de vida', () => {
   it('el acta sólo se carga en una asamblea cerrada', async () => {
     const { service } = crearService({ asamblea: asamblea({ estado: EstadoAsamblea.EN_CURSO }) });
     await assert.rejects(
-      service.cargarActa(admin, 'as1', { actaUrl: 'https://x.com/acta.pdf' }),
+      service.cargarActa(admin, 'as1', { actaUrl: 'https://storage/actas/a1/x.pdf' }),
       ConflictException,
     );
+  });
+
+  it('el acta tiene que ser un archivo subido a actas', async () => {
+    const { service, escrito } = crearService({
+      asamblea: asamblea({ estado: EstadoAsamblea.CERRADA }),
+    });
+    await assert.rejects(
+      service.cargarActa(admin, 'as1', { actaUrl: 'https://x.com/acta.pdf' }),
+      BadRequestException,
+    );
+    assert.deepEqual(escrito.actualizada, []);
+  });
+
+  it('guarda un acta subida a actas', async () => {
+    const { service, escrito } = crearService({
+      asamblea: asamblea({ estado: EstadoAsamblea.CERRADA }),
+    });
+    await service.cargarActa(admin, 'as1', { actaUrl: 'https://storage/actas/a1/x.pdf' });
+    assert.deepEqual(escrito.actualizada, [{ actaUrl: 'https://storage/actas/a1/x.pdf' }]);
   });
 });
 

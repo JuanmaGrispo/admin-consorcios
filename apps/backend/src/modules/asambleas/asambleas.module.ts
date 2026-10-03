@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Asamblea, Asistencia, PuntoOrdenDia, Unidad, UnidadUsuario } from '../../database/entities';
+import { ArchivosModule } from '../archivos/archivos.module';
 import { ConsorciosModule } from '../consorcios/consorcios.module';
 import { AsambleasController } from './asambleas.controller';
 import { AsambleasRepository } from './asambleas.repository';
@@ -18,6 +19,8 @@ import { AsambleasService } from './asambleas.service';
     ]),
     // Para validar que el consorcio exista al crear.
     ConsorciosModule,
+    // Para confirmar que el acta es un PDF subido a `actas`.
+    ArchivosModule,
   ],
   controllers: [AsambleasController],
   providers: [AsambleasService, AsambleasRepository],

@@ -115,7 +115,10 @@ export class AsambleasController {
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Patch(':id/acta')
-  @ApiOperation({ summary: 'Carga la URL del acta de una asamblea cerrada' })
+  @ApiOperation({
+    summary: 'Carga el acta de una asamblea cerrada',
+    description: 'La URL tiene que venir de POST /archivos?destino=actas.',
+  })
   cargarActa(
     @UsuarioActual() usuario: Usuario,
     @Param('id', ParseUUIDPipe) id: string,

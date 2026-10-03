@@ -15,6 +15,8 @@ import {
   ModalidadAsamblea,
   RolUsuario,
 } from '../../database/entities';
+import { ArchivosService } from '../archivos/archivos.service';
+import { DestinoArchivo } from '../archivos/tipos-archivo';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { AsambleasRepository } from './asambleas.repository';
@@ -64,6 +66,7 @@ export class AsambleasService {
     private readonly asambleas: AsambleasRepository,
     private readonly consorcios: ConsorciosService,
     private readonly notificador: Notificador,
+    private readonly archivos: ArchivosService,
   ) {}
 
   // ── Consultas ──────────────────────────────────────────────────────────────
@@ -224,9 +227,11 @@ export class AsambleasService {
     return this.findOne(usuario, id);
   }
 
+  /** El PDF se sube antes con `POST /archivos?destino=actas`; acá sólo se guarda su URL. */
   async cargarActa(usuario: UsuarioActual, id: string, dto: CargarActaDto) {
     const asamblea = await this.exigirAsamblea(id);
     exigirEstado(asamblea, CERRADAS, 'cargar el acta de');
+    this.archivos.exigirPropia(dto.actaUrl, DestinoArchivo.ACTAS);
     await this.asambleas.actualizar(id, { actaUrl: dto.actaUrl });
     return this.findOne(usuario, id);
   }
