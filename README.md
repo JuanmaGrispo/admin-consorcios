@@ -930,8 +930,9 @@ Viene una lista porque un vecino puede estar vinculado a varias unidades (y a
 varios consorcios); el front elige cuál muestra arriba.
 
 **Próximos eventos** junta las asambleas convocadas o en curso de sus
-consorcios y sus reservas aprobadas que todavía no empezaron, de los próximos
-30 días. Acá un `[]` sí quiere decir que no tiene nada por delante.
+consorcios, sus reservas aprobadas que todavía no empezaron (de los próximos
+30 días) y las votaciones abiertas (con `fecha` = cuándo cierran). Acá un `[]`
+sí quiere decir que no tiene nada por delante.
 
 ### Pendiente
 
@@ -984,10 +985,81 @@ El PDF se sube primero con `POST /archivos?destino=actas` y después se guarda
 su URL con `PATCH /asambleas/:id/acta`. Una URL que no venga de ahí —externa
 o de otro destino— responde 400.
 
+No se puede cerrar una asamblea con votaciones abiertas (409): primero se
+cierran sus votaciones.
+
 ### Pendiente
 
-Votaciones (los puntos `CON_VOTACION` quedan marcados) y eventos
-`asamblea.creada` / `asamblea.recordatorio` por RabbitMQ.
+Eventos `asamblea.creada` / `asamblea.recordatorio` por RabbitMQ.
+
+## Votaciones
+
+Módulo `src/modules/votaciones/`. Diseño en
+[docs/superpowers/specs/2026-10-03-votaciones-design.md](docs/superpowers/specs/2026-10-03-votaciones-design.md).
+
+### Dos tipos
+
+- **Independiente**: se vota sólo desde la app, entre `apertura` y `cierre`.
+  Si pasa el cierre y sigue abierta, se cierra sola en la próxima consulta
+  (sin cron, como las reservas vencidas).
+- **De asamblea**: se crea sobre un punto `CON_VOTACION` del orden del día
+  (uno por punto). Se vota con la asamblea `EN_CURSO`; con
+  `permiteVotoAnticipado`, el vecino también puede votar desde la app con la
+  asamblea convocada, y el voto queda `anticipado`. La cierra el admin.
+
+Ciclo: `BORRADOR → ABIERTA → CERRADA`. Sólo un borrador se edita o se borra.
+
+### Quién vota
+
+- **Padrón** (`padron.ts`): unidades activas con vínculo vigente. Con
+  `SOLO_PROPIETARIOS` vota un propietario (el inquilino ve, no vota); con
+  `TODAS_LAS_UNIDADES`, cualquiera vinculado. Peso: coeficiente o 1 según
+  `formaConteo`. Con `bloqueaConDeuda`, una unidad con expensas vencidas no vota.
+- **Un voto por unidad, sin cambios.** El vecino vota desde la app
+  (`POST /votaciones/:id/votos`); la administración carga los presenciales de
+  una asamblea en curso (`POST /votaciones/:id/votos/:unidadId`). Si la unidad
+  ya votó, 409 diciendo cuándo y si fue desde la app o lo cargó la
+  administración. El UNIQUE `(votacion_id, unidad_id)` de la base cubre los
+  votos simultáneos.
+
+### Resultado
+
+`escrutinio.ts` decide con "A favor" y "En contra", que son fijas; las demás
+opciones (ej. "Abstención") se informan pero no deciden.
+
+| Mayoría | Se aprueba si A favor… |
+|---|---|
+| `SIMPLE_PRESENTES` | supera a En contra |
+| `ABSOLUTA` | supera el 50% del peso del padrón |
+| `DOS_TERCIOS` | llega a 2/3 del peso del padrón |
+
+Empate exacto: decide `desempate`. `SIN_QUORUM` si nadie votó o si es de
+asamblea y la asamblea no tenía quórum al cerrar la votación. Un gasto que sale
+de una votación sólo se carga si está `APROBADA` (ya lo valida expensas).
+
+### Endpoints
+
+| Método | Ruta | Rol |
+|---|---|---|
+| GET | `/votaciones` · `/votaciones/:id` | ambos |
+| POST | `/votaciones` | admin |
+| PATCH · DELETE | `/votaciones/:id` | admin |
+| PUT | `/votaciones/:id/opciones` | admin |
+| POST | `/votaciones/:id/publicar` · `/cerrar` | admin |
+| GET | `/votaciones/:id/votos` | admin |
+| POST | `/votaciones/:id/votos/:unidadId` | admin |
+| POST | `/votaciones/:id/votos` | vecino |
+
+El vecino ve sus unidades habilitadas con su peso ("tu voto vale 1,74%") y su
+voto; el parcial, sólo si `mostrarParcial` o ya cerró. El presupuesto adjunto
+(`adjuntoUrl`) tiene que venir de `POST /archivos?destino=votaciones`.
+
+### Pendiente
+
+- Eventos `votacion.nueva` / `votacion.cerrada` por RabbitMQ.
+- El padrón no se congela al publicar: se calcula con las unidades y vínculos
+  de hoy, también al mirar una votación ya cerrada. El resultado guardado no
+  cambia, pero el peso total que se muestra sí podría.
 
 ## Datos de demo
 
