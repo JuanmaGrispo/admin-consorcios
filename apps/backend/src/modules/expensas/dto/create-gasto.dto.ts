@@ -66,7 +66,7 @@ export class CreateGastoDto {
   @IsEnum(NaturalezaGasto)
   naturaleza?: NaturalezaGasto;
 
-  @ApiPropertyOptional({ example: 'https://…/factura-0001.pdf' })
+  @ApiPropertyOptional({ description: 'La URL que devolvió POST /archivos?destino=comprobantes' })
   @IsOptional()
   @IsUrl()
   comprobanteUrl?: string;

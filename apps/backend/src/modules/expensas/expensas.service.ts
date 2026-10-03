@@ -18,6 +18,8 @@ import {
   UnidadUsuario,
   Usuario,
 } from '../../database/entities';
+import { ArchivosService } from '../archivos/archivos.service';
+import { DestinoArchivo } from '../archivos/tipos-archivo';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
@@ -125,6 +127,7 @@ export class ExpensasService {
     private readonly proveedores: ProveedoresService,
     private readonly reclamos: ReclamosService,
     private readonly notificador: Notificador,
+    private readonly archivos: ArchivosService,
   ) {}
 
   // ── Liquidaciones ──────────────────────────────────────────────────────────
@@ -197,6 +200,9 @@ export class ExpensasService {
     }
     await this.exigirOrigenValido(dto, liquidacion.consorcioId);
     this.exigirCuotasValidas(dto.cuotaNumero, dto.cuotaTotal);
+    if (dto.comprobanteUrl) {
+      this.archivos.exigirPropia(dto.comprobanteUrl, DestinoArchivo.COMPROBANTES);
+    }
 
     const gasto = await this.expensas.crearGasto({
       ...dto,
@@ -234,6 +240,11 @@ export class ExpensasService {
       dto.cuotaNumero ?? gasto.cuotaNumero ?? undefined,
       dto.cuotaTotal ?? gasto.cuotaTotal ?? undefined,
     );
+
+    // Sólo si cambia: un comprobante ya guardado no se vuelve a juzgar.
+    if (dto.comprobanteUrl && dto.comprobanteUrl !== gasto.comprobanteUrl) {
+      this.archivos.exigirPropia(dto.comprobanteUrl, DestinoArchivo.COMPROBANTES);
+    }
 
     const actualizado = await this.expensas.actualizarGasto(gasto, dto);
     await this.despuesDeTocarGastos(liquidacionId);

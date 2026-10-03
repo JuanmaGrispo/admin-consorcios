@@ -16,6 +16,7 @@ import {
   Unidad,
   Votacion,
 } from '../../database/entities';
+import type { ArchivosService } from '../archivos/archivos.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { ProveedoresService } from '../proveedores/proveedores.service';
@@ -154,6 +155,12 @@ function crearEntorno() {
       },
     } as unknown as ReclamosService,
     notificador,
+    // Sólo son nuestros los comprobantes subidos a `comprobantes`.
+    {
+      exigirPropia: (url: string) => {
+        if (!url.startsWith('https://storage/comprobantes/')) throw new BadRequestException('ajena');
+      },
+    } as unknown as ArchivosService,
   );
 
   return { db, service, avisos };
@@ -226,6 +233,35 @@ describe('ExpensasService', () => {
   });
 
   describe('gastos', () => {
+    it('el comprobante tiene que venir de archivos', async () => {
+      const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
+      await assert.rejects(
+        service.agregarGasto(l.id, {
+          rubroId: 'r1',
+          descripcion: 'X',
+          monto: 10,
+          comprobanteUrl: 'https://otro.com/factura.pdf',
+        }),
+        BadRequestException,
+      );
+    });
+
+    it('guarda un comprobante subido a comprobantes', async () => {
+      const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
+      const url = 'https://storage/comprobantes/a1/f.pdf';
+      const g = await service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'X', monto: 10, comprobanteUrl: url });
+      assert.equal(g.comprobanteUrl, url);
+    });
+
+    it('al editar también exige que el comprobante venga de archivos', async () => {
+      const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
+      const g = await service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'X', monto: 10 });
+      await assert.rejects(
+        service.actualizarGasto(l.id, g.id, { comprobanteUrl: 'https://otro.com/f.pdf' }),
+        BadRequestException,
+      );
+    });
+
     it('sin naturaleza toma la del rubro', async () => {
       const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
       const g = await service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'X', monto: 10 });

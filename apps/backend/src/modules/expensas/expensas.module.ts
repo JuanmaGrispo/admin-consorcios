@@ -9,6 +9,7 @@ import {
   UnidadUsuario,
   Votacion,
 } from '../../database/entities';
+import { ArchivosModule } from '../archivos/archivos.module';
 import { ConsorciosModule } from '../consorcios/consorcios.module';
 import { ProveedoresModule } from '../proveedores/proveedores.module';
 import { ReclamosModule } from '../reclamos/reclamos.module';
@@ -31,6 +32,8 @@ import { ExpensasService } from './expensas.service';
       Votacion,
     ]),
     ConsorciosModule,
+    // Para confirmar que el comprobante se subió a `comprobantes`.
+    ArchivosModule,
     RubrosGastoModule,
     ProveedoresModule,
     ReclamosModule,
