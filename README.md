@@ -403,6 +403,7 @@ ve: al vecino se le devuelve la timeline recortada.
 La API recibe URLs ya subidas (`adjuntos: [{ url, nombre }]`), no archivos: el
 front sube la foto a [`POST /archivos?destino=reclamos`](#archivos) y manda acá
 la URL que eso devuelve. Hasta 5 por reclamo, que es el tope que impone la base.
+Una URL que no salió de ahí responde 400.
 
 ### Avisos
 
@@ -866,6 +867,11 @@ no corresponde, y hace que cada pantalla pueda confiar en lo que va a recibir.
   traer barras o `..`. La ruta es `destino/usuarioId/uuid.ext`.
 - **El uuid hace que la URL no se pueda adivinar**, y el `usuarioId` en la ruta
   es lo que permite saber de quién es un archivo a la hora de borrarlo.
+- **Los módulos que guardan una URL la validan** con
+  `ArchivosService.exigirPropia(url, destino)`: tiene que ser de nuestro bucket
+  y del destino que corresponde. Hoy lo hacen las fotos de reclamos, el
+  comprobante de un gasto y el acta de una asamblea; una URL externa o de otro
+  destino responde 400.
 - `DELETE /archivos?url=…` borra un archivo propio —la foto que el vecino saca
   y descarta antes de mandar el reclamo—. El vecino sólo borra las suyas; quien
   administra, cualquiera.
@@ -888,11 +894,6 @@ Después, las tres variables de `.env.example`: `SUPABASE_URL`,
   en vez de la URL y tocar todos los módulos que hoy leen esas columnas. Por
   eso la subida ya devuelve `ruta` además de `url`: el día que se haga el
   cambio, el dato está.
-- **No todos validan que la URL que llega en un DTO sea nuestra.** Para eso
-  está `ArchivosService.exigirPropia(url, destino)`, que hoy usa sólo el acta
-  de asambleas. `CrearReclamoDto` y `CreateGastoDto` todavía piden sólo
-  `@IsUrl()`, así que ahí se podría guardar una URL externa como si fuera una
-  foto subida.
 
 ## Inicio del vecino
 
