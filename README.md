@@ -888,16 +888,19 @@ Después, las tres variables de `.env.example`: `SUPABASE_URL`,
   en vez de la URL y tocar todos los módulos que hoy leen esas columnas. Por
   eso la subida ya devuelve `ruta` además de `url`: el día que se haga el
   cambio, el dato está.
-- **Nadie valida que la URL que llega en un DTO sea nuestra.** `CrearReclamoDto`
-  y `CreateGastoDto` sólo piden `@IsUrl()`, así que se podría guardar una URL
-  externa como si fuera una foto subida.
+- **No todos validan que la URL que llega en un DTO sea nuestra.** Para eso
+  está `ArchivosService.exigirPropia(url, destino)`, que hoy usa sólo el acta
+  de asambleas. `CrearReclamoDto` y `CreateGastoDto` todavía piden sólo
+  `@IsUrl()`, así que ahí se podría guardar una URL externa como si fuera una
+  foto subida.
 
 ## Inicio del vecino
 
 `GET /inicio` (sólo rol `VECINO`) arma de una sola vez lo que la app necesita
 apenas abre, para que el celular no encadene cuatro llamadas antes de pintar
 la primera pantalla. El módulo (`modules/inicio/`) no tiene tablas ni
-repository: compone lo que ya saben usuarios, unidades, expensas y reclamos.
+repository: compone lo que ya saben usuarios, unidades, expensas, reclamos,
+asambleas y reservas.
 
 ```jsonc
 {
@@ -912,24 +915,29 @@ repository: compone lo que ya saben usuarios, unidades, expensas y reclamos.
       "estado": "PENDIENTE", "diasParaVencer": 6
     },
     "reclamosAbiertos": 1
-  }]
+  }],
+  "proximosEventos": [               // de la más cercana a la más lejana, hasta 10
+    { "tipo": "RESERVA", "id": "…", "titulo": "SUM", "fecha": "2026-10-05T21:00:00Z",
+      "fin": "2026-10-06T01:00:00Z", "unidadId": "…", "amenityId": "…" },
+    { "tipo": "ASAMBLEA", "id": "…", "titulo": "Asamblea ordinaria", "fecha": "2026-10-12T22:00:00Z",
+      "lugar": "SUM del edificio", "estado": "CONVOCADA", "consorcioId": "…" }
+  ]
 }
 ```
 
 Viene una lista porque un vecino puede estar vinculado a varias unidades (y a
 varios consorcios); el front elige cuál muestra arriba.
 
+**Próximos eventos** junta las asambleas convocadas o en curso de sus
+consorcios y sus reservas aprobadas que todavía no empezaron, de los próximos
+30 días. Acá un `[]` sí quiere decir que no tiene nada por delante.
+
 ### Pendiente
 
-Faltan dos bloques del diseño, y es porque sus módulos todavía no existen:
-
-- **Próximos eventos** (asamblea citada, reserva aprobada): necesita asambleas
-  y reservas.
-- **Muro de novedades**: necesita el módulo de novedades.
-
-No viajan como listas vacías a propósito: un `[]` le haría creer al front que
-no hay eventos, cuando lo que pasa es que nadie los sabe todavía. Se agregan
-a esta misma respuesta cuando existan esos módulos.
+Falta el **muro de novedades**: necesita el módulo de novedades. No viaja como
+lista vacía a propósito: un `[]` le haría creer al front que no hay novedades,
+cuando lo que pasa es que nadie las sabe todavía. Se agrega a esta misma
+respuesta cuando exista ese módulo.
 
 ## Asambleas
 
@@ -969,10 +977,16 @@ Suma de coeficientes `ASISTE` + `CON_PODER` sobre el total convocado
 registra el administrador indicando la unidad apoderada. El vecino ve el
 quórum y su propia respuesta, nunca los nombres de los demás.
 
+### Acta
+
+El PDF se sube primero con `POST /archivos?destino=actas` y después se guarda
+su URL con `PATCH /asambleas/:id/acta`. Una URL que no venga de ahí —externa
+o de otro destino— responde 400.
+
 ### Pendiente
 
-Votaciones (los puntos `CON_VOTACION` quedan marcados), eventos
-`asamblea.creada` / `asamblea.recordatorio` por RabbitMQ y subida del acta.
+Votaciones (los puntos `CON_VOTACION` quedan marcados) y eventos
+`asamblea.creada` / `asamblea.recordatorio` por RabbitMQ.
 
 ## Datos de demo
 
