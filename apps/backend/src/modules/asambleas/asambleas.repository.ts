@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, DeepPartial, EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
+import {
+  Brackets,
+  DataSource,
+  DeepPartial,
+  EntityManager,
+  In,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import {
   Asamblea,
   Asistencia,
@@ -84,6 +92,17 @@ export class AsambleasRepository {
     return new Map(
       filas.map((f) => [f.asambleaId, { presente: Number(f.presente), total: Number(f.total) }]),
     );
+  }
+
+  /** Convocadas o en curso, de la más cercana a la más lejana. */
+  proximas(consorcioIds: string[]): Promise<Asamblea[]> {
+    return this.asambleas.find({
+      where: {
+        consorcioId: In(consorcioIds),
+        estado: In([EstadoAsamblea.CONVOCADA, EstadoAsamblea.EN_CURSO]),
+      },
+      order: { fechaHora: 'ASC' },
+    });
   }
 
   findById(id: string): Promise<Asamblea | null> {

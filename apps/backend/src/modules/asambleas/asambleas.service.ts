@@ -109,6 +109,13 @@ export class AsambleasService {
     return { ...asamblea, quorum, miAsistencia };
   }
 
+  /** Para la pantalla de inicio: las asambleas convocadas o en curso de sus consorcios. */
+  async proximasDelVecino(usuario: UsuarioActual): Promise<Asamblea[]> {
+    const consorcioIds = await this.asambleas.consorciosDelUsuario(usuario.id);
+    if (consorcioIds.length === 0) return [];
+    return this.asambleas.proximas(consorcioIds);
+  }
+
   async listarAsistencias(id: string) {
     await this.exigirAsamblea(id);
     const asistencias = await this.asambleas.asistencias(id);

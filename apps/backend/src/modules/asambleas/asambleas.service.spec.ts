@@ -69,6 +69,7 @@ function crearService(
     convocada: null as unknown,
     asistencia: [] as unknown[],
     listarFiltro: null as unknown,
+    proximasConsorcios: null as unknown,
   };
   const asistencias = opts.asistencias ?? [];
   const repo = {
@@ -104,6 +105,10 @@ function crearService(
     consorciosDelUsuario: async () => opts.consorciosDelVecino ?? ['c1'],
     unidadesDelUsuarioEnConsorcio: async () => opts.unidadesDelVecino ?? [],
     vecinosDelConsorcio: async () => ['v1'],
+    proximas: async (consorcioIds: string[]) => {
+      escrito.proximasConsorcios = consorcioIds;
+      return [asamblea({ estado: EstadoAsamblea.CONVOCADA })];
+    },
   } as unknown as AsambleasRepository;
   const consorcios = { findOne: async () => ({ id: 'c1' }) } as unknown as ConsorciosService;
   const notificador = { enviar: async () => undefined } as unknown as Notificador;
@@ -405,5 +410,20 @@ describe('AsambleasService — asistencia registrada por el admin', () => {
       apoderadoUnidadId: 'u2',
     });
     assert.equal((escrito.asistencia[0] as Asistencia).apoderadoUnidadId, null);
+  });
+});
+
+describe('AsambleasService — próximas del vecino', () => {
+  it('busca en los consorcios donde vive', async () => {
+    const { service, escrito } = crearService({ consorciosDelVecino: ['c1', 'c2'] });
+    const proximas = await service.proximasDelVecino(vecino);
+    assert.deepEqual(escrito.proximasConsorcios, ['c1', 'c2']);
+    assert.equal(proximas.length, 1);
+  });
+
+  it('sin consorcios no consulta y devuelve vacío', async () => {
+    const { service, escrito } = crearService({ consorciosDelVecino: [] });
+    assert.deepEqual(await service.proximasDelVecino(vecino), []);
+    assert.equal(escrito.proximasConsorcios, null);
   });
 });
