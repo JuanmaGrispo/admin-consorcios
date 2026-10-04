@@ -8,6 +8,7 @@ import {
   IsNull,
   Not,
   Repository,
+  SelectQueryBuilder,
 } from 'typeorm';
 import {
   EstadoReclamo,
@@ -27,6 +28,25 @@ const RELACIONES = {
   proveedor: true,
   creadoPor: true,
 } as const;
+
+/** Qué reclamos puede ver alguien: los de sus unidades (vecino) o de sus consorcios (administrador). */
+export interface AlcanceReclamos {
+  unidades?: string[];
+  consorcios?: string[];
+}
+
+// `IN ()` es un error de sintaxis en Postgres: una lista vacía se corta con un FALSE.
+function aplicarAlcance(qb: SelectQueryBuilder<Reclamo>, alcance: AlcanceReclamos) {
+  if (alcance.unidades) {
+    if (alcance.unidades.length === 0) qb.andWhere('1 = 0');
+    else qb.andWhere('r.unidadId IN (:...unidades)', { unidades: alcance.unidades });
+  }
+  if (alcance.consorcios) {
+    if (alcance.consorcios.length === 0) qb.andWhere('1 = 0');
+    else qb.andWhere('r.consorcioId IN (:...consorcios)', { consorcios: alcance.consorcios });
+  }
+  return qb;
+}
 
 @Injectable()
 export class ReclamosRepository {
@@ -82,7 +102,7 @@ export class ReclamosRepository {
    */
   async listar(
     query: ListarReclamosQuery,
-    unidadesPermitidas?: string[],
+    alcance: AlcanceReclamos,
   ): Promise<{ items: Reclamo[]; total: number }> {
     const pagina = query.pagina ?? 1;
     const limite = query.limite ?? 20;
@@ -97,15 +117,7 @@ export class ReclamosRepository {
       .skip((pagina - 1) * limite)
       .take(limite);
 
-    if (unidadesPermitidas) {
-      // Sin unidades vinculadas no ve nada. `In([])` genera `IN ()`, que en
-      // Postgres es un error de sintaxis, así que se corta con un FALSE.
-      if (unidadesPermitidas.length === 0) {
-        qb.andWhere('1 = 0');
-      } else {
-        qb.andWhere('r.unidadId IN (:...unidades)', { unidades: unidadesPermitidas });
-      }
-    }
+    aplicarAlcance(qb, alcance);
 
     if (query.estado) qb.andWhere('r.estado = :estado', { estado: query.estado });
     if (query.situacion === 'abiertos') {
@@ -149,16 +161,12 @@ export class ReclamosRepository {
   }
 
   /** Números del encabezado de la bandeja. */
-  async resumen(consorcioId?: string, unidades?: string[]) {
+  async resumen(consorcioId: string | undefined, alcance: AlcanceReclamos) {
     // Los mismos filtros para las dos consultas: se arman una vez y se aplican
     // a cada query builder nuevo.
-    const aplicarFiltros = <T extends { andWhere: Function }>(qb: T): T => {
+    const aplicarFiltros = (qb: SelectQueryBuilder<Reclamo>) => {
       if (consorcioId) qb.andWhere('r.consorcioId = :consorcioId', { consorcioId });
-      if (unidades) {
-        if (unidades.length === 0) qb.andWhere('1 = 0');
-        else qb.andWhere('r.unidadId IN (:...unidades)', { unidades });
-      }
-      return qb;
+      return aplicarAlcance(qb, alcance);
     };
 
     const filas = await aplicarFiltros(this.reclamos.createQueryBuilder('r'))
