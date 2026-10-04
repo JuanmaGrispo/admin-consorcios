@@ -12,6 +12,7 @@ import { CategoriasReclamoModule } from './modules/categorias-reclamo/categorias
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { ConsorciosModule } from './modules/consorcios/consorcios.module';
+import { EmailModule } from './modules/email/email.module';
 import { ExpensasModule } from './modules/expensas/expensas.module';
 import { InicioModule } from './modules/inicio/inicio.module';
 import { PagosModule } from './modules/pagos/pagos.module';
@@ -64,6 +65,8 @@ import { VotacionesModule } from './modules/votaciones/votaciones.module';
     ReservasModule,
     AsambleasModule,
     VotacionesModule,
+    // Consumidor de la cola de mails: no expone rutas.
+    EmailModule,
     // Compone la pantalla de inicio del vecino: va último porque depende de
     // todos los anteriores.
     InicioModule,
