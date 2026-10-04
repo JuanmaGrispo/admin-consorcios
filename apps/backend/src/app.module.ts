@@ -15,6 +15,7 @@ import { ConsorciosModule } from './modules/consorcios/consorcios.module';
 import { EmailModule } from './modules/email/email.module';
 import { ExpensasModule } from './modules/expensas/expensas.module';
 import { InicioModule } from './modules/inicio/inicio.module';
+import { NovedadesModule } from './modules/novedades/novedades.module';
 import { PagosModule } from './modules/pagos/pagos.module';
 import { ProveedoresModule } from './modules/proveedores/proveedores.module';
 import { ReclamosModule } from './modules/reclamos/reclamos.module';
@@ -65,6 +66,7 @@ import { VotacionesModule } from './modules/votaciones/votaciones.module';
     ReservasModule,
     AsambleasModule,
     VotacionesModule,
+    NovedadesModule,
     // Consumidor de la cola de mails: no expone rutas.
     EmailModule,
     // Compone la pantalla de inicio del vecino: va último porque depende de

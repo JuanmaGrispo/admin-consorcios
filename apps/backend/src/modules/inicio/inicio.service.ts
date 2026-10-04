@@ -3,6 +3,7 @@ import { EstadoAsamblea, EstadoReserva, VinculoUnidad } from '../../database/ent
 import { AsambleasService } from '../asambleas/asambleas.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ExpensasService, type SaldoDeUnidad } from '../expensas/expensas.service';
+import { NovedadesService, type NovedadVista } from '../novedades/novedades.service';
 import { ReclamosService } from '../reclamos/reclamos.service';
 import { ReservasService } from '../reservas/reservas.service';
 import { UnidadesService } from '../unidades/unidades.service';
@@ -63,21 +64,20 @@ export interface Inicio {
   usuario: { id: string; nombre: string; apellido: string; avatarUrl: string | null };
   unidades: UnidadDeInicio[];
   proximosEventos: EventoProximo[];
+  /** Lo último del muro de sus edificios, fijadas primero, con `leida`. */
+  novedades: NovedadVista[];
 }
 
 /** Hasta cuándo mirar reservas: el inicio muestra lo cercano, no la agenda entera. */
 const DIAS_DE_RESERVAS = 30;
 const MAXIMO_EVENTOS = 10;
+const NOVEDADES_DEL_INICIO = 5;
 const DIA_MS = 24 * 3600 * 1000;
 
 /**
  * La pantalla de inicio del vecino. No tiene datos propios: junta en una sola
  * respuesta lo que el celular necesita apenas abre la app, para que no tenga
  * que encadenar cuatro llamadas antes de pintar la primera pantalla.
- *
- * Todavía le falta el muro de novedades, porque su módulo no existe. Se agrega
- * acá cuando exista; mientras tanto no viaja, en vez de viajar vacío y
- * hacerle creer al front que no hay nada.
  */
 @Injectable()
 export class InicioService {
@@ -89,6 +89,7 @@ export class InicioService {
     private readonly asambleas: AsambleasService,
     private readonly reservas: ReservasService,
     private readonly votaciones: VotacionesService,
+    private readonly novedades: NovedadesService,
   ) {}
 
   async paraElVecino(usuario: UsuarioActual): Promise<Inicio> {
@@ -126,6 +127,7 @@ export class InicioService {
       },
       unidades,
       proximosEventos: await this.proximosEventos(usuario),
+      novedades: await this.novedades.ultimasDelVecino(usuario, NOVEDADES_DEL_INICIO),
     };
   }
 
