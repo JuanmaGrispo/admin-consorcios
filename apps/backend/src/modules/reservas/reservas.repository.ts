@@ -264,8 +264,9 @@ export class ReservasRepository {
 
   async listar(
     query: ListarReservasQuery,
-    unidadesPermitidas?: string[],
+    alcance: { unidades?: string[]; consorcios?: string[] },
   ): Promise<{ items: Reserva[]; total: number }> {
+    const { unidades: unidadesPermitidas, consorcios } = alcance;
     const pagina = query.pagina ?? 1;
     const limite = query.limite ?? 20;
 
@@ -281,6 +282,10 @@ export class ReservasRepository {
     if (unidadesPermitidas) {
       if (unidadesPermitidas.length === 0) qb.andWhere('1 = 0');
       else qb.andWhere('r.unidadId IN (:...unidades)', { unidades: unidadesPermitidas });
+    }
+    if (consorcios) {
+      if (consorcios.length === 0) qb.andWhere('1 = 0');
+      else qb.andWhere('amenity.consorcioId IN (:...consorcios)', { consorcios });
     }
 
     if (query.amenityId) qb.andWhere('r.amenityId = :am', { am: query.amenityId });

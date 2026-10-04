@@ -12,8 +12,8 @@ import {
   AmenityBloqueo,
   EstadoReserva,
   Reserva,
-  RolUsuario,
 } from '../../database/entities';
+import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ExpensasService } from '../expensas/expensas.service';
@@ -34,14 +34,6 @@ import {
 } from './horario';
 import { ReservasRepository } from './reservas.repository';
 
-/**
- * Quién gestiona reservas: el administrador y el superadmin, que tiene todos
- * sus permisos (la misma jerarquía que aplica RolesGuard). Sin él, el superadmin
- * quedaría tratado como un vecino sin unidades y no vería ninguna reserva.
- */
-const esAdmin = (usuario: UsuarioActual) =>
-  usuario.rol === RolUsuario.ADMINISTRADOR || usuario.rol === RolUsuario.SUPER_ADMIN;
-
 const CANCELABLES = [EstadoReserva.PENDIENTE, EstadoReserva.APROBADA];
 
 @Injectable()
@@ -61,25 +53,28 @@ export class ReservasService {
     usuario: UsuarioActual,
     query: ListarAmenitiesQuery,
   ): Promise<Amenity[]> {
-    const administra = esAdmin(usuario);
+    const administra = esGestor(usuario);
     return this.reservas.listarAmenities({
       query: { ...query, incluirInactivos: administra && query.incluirInactivos },
       consorciosPermitidos: administra
-        ? undefined
+        ? consorciosGestionados(usuario)
         : await this.reservas.consorciosDelUsuario(usuario.id),
     });
   }
 
   async findAmenity(usuario: UsuarioActual, id: string): Promise<Amenity> {
     const amenity = await this.reservas.findAmenityById(id);
-    // Al vecino, un amenity de otro edificio le da 404: un 403 confirmaría que existe.
+    // Un amenity de otro edificio da 404: un 403 confirmaría que existe.
     if (!amenity || !(await this.puedeVer(usuario, amenity))) {
       throw new NotFoundException(`El amenity ${id} no existe`);
     }
     return amenity;
   }
 
-  async crearAmenity(dto: CreateAmenityDto): Promise<Amenity> {
+  async crearAmenity(usuario: UsuarioActual, dto: CreateAmenityDto): Promise<Amenity> {
+    if (!gestiona(usuario, dto.consorcioId)) {
+      throw new NotFoundException(`Consorcio ${dto.consorcioId} no existe`);
+    }
     await this.consorcios.findOne(dto.consorcioId);
     const horaApertura = dto.horaApertura ?? '08:00:00';
     const horaCierre = dto.horaCierre ?? '22:00:00';
@@ -89,8 +84,12 @@ export class ReservasService {
     return this.reservas.crearAmenity({ ...dto, horaApertura, horaCierre });
   }
 
-  async actualizarAmenity(id: string, dto: UpdateAmenityDto): Promise<Amenity> {
-    const amenity = await this.exigirAmenity(id);
+  async actualizarAmenity(
+    usuario: UsuarioActual,
+    id: string,
+    dto: UpdateAmenityDto,
+  ): Promise<Amenity> {
+    const amenity = await this.exigirAmenity(usuario, id);
 
     this.exigirVentanaCoherente(
       dto.horaApertura ?? amenity.horaApertura,
@@ -161,7 +160,7 @@ export class ReservasService {
     dto: CrearBloqueoDto,
   ): Promise<AmenityBloqueo> {
     await this.reservas.cerrarVencidas();
-    const amenity = await this.exigirAmenity(amenityId);
+    const amenity = await this.exigirAmenity(usuario, amenityId);
 
     const desde = await this.reservas.instante(dto.desde, ZONA_POR_DEFECTO);
     const hasta = await this.reservas.instante(dto.hasta, ZONA_POR_DEFECTO);
@@ -197,8 +196,8 @@ export class ReservasService {
     return bloqueo;
   }
 
-  async borrarBloqueo(amenityId: string, id: string): Promise<void> {
-    await this.exigirAmenity(amenityId);
+  async borrarBloqueo(usuario: UsuarioActual, amenityId: string, id: string): Promise<void> {
+    await this.exigirAmenity(usuario, amenityId);
     const bloqueo = await this.reservas.findBloqueo(id);
     if (!bloqueo || bloqueo.amenityId !== amenityId) {
       throw new NotFoundException(`El bloqueo ${id} no existe`);
@@ -210,10 +209,7 @@ export class ReservasService {
 
   async listar(usuario: UsuarioActual, query: ListarReservasQuery) {
     await this.reservas.cerrarVencidas();
-    const { items, total } = await this.reservas.listar(
-      query,
-      await this.unidadesVisibles(usuario),
-    );
+    const { items, total } = await this.reservas.listar(query, await this.alcance(usuario));
     const limite = query.limite ?? 20;
     return { items, total, pagina: query.pagina ?? 1, paginas: Math.ceil(total / limite) || 1 };
   }
@@ -226,7 +222,7 @@ export class ReservasService {
   async crear(usuario: UsuarioActual, dto: CrearReservaDto): Promise<Reserva> {
     await this.reservas.cerrarVencidas();
 
-    const amenity = await this.exigirAmenity(dto.amenityId);
+    const amenity = await this.exigirAmenity(usuario, dto.amenityId);
     if (!amenity.activo) {
       throw new BadRequestException(`El amenity ${amenity.nombre} está dado de baja`);
     }
@@ -308,7 +304,7 @@ export class ReservasService {
 
   async aprobar(usuario: UsuarioActual, id: string): Promise<Reserva> {
     await this.reservas.cerrarVencidas();
-    const reserva = await this.exigirPendiente(id);
+    const reserva = await this.exigirPendiente(usuario, id);
 
     // Entre el pedido y la aprobación pudo entrar un bloqueo o aprobarse otra
     // reserva, así que el calendario se vuelve a mirar.
@@ -348,7 +344,7 @@ export class ReservasService {
     dto: RechazarReservaDto,
   ): Promise<Reserva> {
     await this.reservas.cerrarVencidas();
-    const reserva = await this.exigirPendiente(id);
+    const reserva = await this.exigirPendiente(usuario, id);
 
     const rechazada = await this.reservas.actualizarReserva(reserva, {
       estado: EstadoReserva.RECHAZADA,
@@ -397,14 +393,20 @@ export class ReservasService {
 
   // ── Auxiliares ─────────────────────────────────────────────────────────────
 
-  private async exigirAmenity(id: string): Promise<Amenity> {
+  /**
+   * Para quien administra, uno de otro consorcio no existe. Al vecino que
+   * reserva no se lo filtra acá: exigirMismoConsorcio lo ata a su unidad.
+   */
+  private async exigirAmenity(usuario: UsuarioActual, id: string): Promise<Amenity> {
     const amenity = await this.reservas.findAmenityById(id);
-    if (!amenity) throw new NotFoundException(`El amenity ${id} no existe`);
+    if (!amenity || (esGestor(usuario) && !gestiona(usuario, amenity.consorcioId))) {
+      throw new NotFoundException(`El amenity ${id} no existe`);
+    }
     return amenity;
   }
 
   private async puedeVer(usuario: UsuarioActual, amenity: Amenity): Promise<boolean> {
-    if (esAdmin(usuario)) return true;
+    if (esGestor(usuario)) return gestiona(usuario, amenity.consorcioId);
     if (!amenity.activo) return false;
     return (await this.reservas.consorciosDelUsuario(usuario.id)).includes(
       amenity.consorcioId,
@@ -453,27 +455,24 @@ export class ReservasService {
     }
   }
 
-  private async unidadesVisibles(usuario: UsuarioActual): Promise<string[] | undefined> {
-    if (esAdmin(usuario)) return undefined;
-    return this.reservas.unidadesDelUsuario(usuario.id);
+  private async alcance(usuario: UsuarioActual) {
+    if (esGestor(usuario)) return { consorcios: consorciosGestionados(usuario) };
+    return { unidades: await this.reservas.unidadesDelUsuario(usuario.id) };
   }
 
   private async buscarConPermiso(usuario: UsuarioActual, id: string): Promise<Reserva> {
     const reserva = await this.reservas.findById(id);
-    if (!reserva) throw new NotFoundException(`La reserva ${id} no existe`);
-    if (esAdmin(usuario)) return reserva;
-
-    const unidades = await this.reservas.unidadesDelUsuario(usuario.id);
     // 404 y no 403: un 403 confirmaría que esa reserva existe.
-    if (!unidades.includes(reserva.unidadId)) {
-      throw new NotFoundException(`La reserva ${id} no existe`);
-    }
+    if (!reserva) throw new NotFoundException(`La reserva ${id} no existe`);
+    const visible = esGestor(usuario)
+      ? gestiona(usuario, reserva.amenity.consorcioId)
+      : (await this.reservas.unidadesDelUsuario(usuario.id)).includes(reserva.unidadId);
+    if (!visible) throw new NotFoundException(`La reserva ${id} no existe`);
     return reserva;
   }
 
-  private async exigirPendiente(id: string): Promise<Reserva> {
-    const reserva = await this.reservas.findById(id);
-    if (!reserva) throw new NotFoundException(`La reserva ${id} no existe`);
+  private async exigirPendiente(usuario: UsuarioActual, id: string): Promise<Reserva> {
+    const reserva = await this.buscarConPermiso(usuario, id);
     if (reserva.estado !== EstadoReserva.PENDIENTE) {
       throw new BadRequestException(`La reserva ya está ${reserva.estado}`);
     }
@@ -484,7 +483,7 @@ export class ReservasService {
     usuario: UsuarioActual,
     unidadPedida?: string,
   ): Promise<string> {
-    if (esAdmin(usuario)) {
+    if (esGestor(usuario)) {
       if (!unidadPedida) {
         throw new BadRequestException(
           'Indicá la unidad: un administrador no está vinculado a ninguna',
