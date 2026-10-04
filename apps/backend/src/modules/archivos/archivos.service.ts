@@ -96,14 +96,16 @@ export class ArchivosService {
    * saca y descarta antes de mandar el reclamo: si no, cada arrepentimiento
    * dejaría basura en el bucket para siempre.
    *
-   * Sólo quien lo subió, o quien administra: el id del dueño está en la ruta.
+   * Sólo quien lo subió, o el superadmin: el id del dueño está en la ruta.
+   * La ruta no dice de qué consorcio es, así que un administrador no puede
+   * borrar lo de otros sin arriesgarse a tocar otro edificio.
    */
   async borrar(usuario: UsuarioActual, url: string): Promise<void> {
     const ruta = this.storage.rutaDeUrl(url);
     if (!ruta) throw new BadRequestException('Esa URL no es de un archivo nuestro');
 
     const [, propietarioId] = ruta.split('/');
-    if (usuario.rol === RolUsuario.VECINO && propietarioId !== usuario.id) {
+    if (usuario.rol !== RolUsuario.SUPER_ADMIN && propietarioId !== usuario.id) {
       // 404 y no 403: un 403 confirmaría que el archivo existe.
       throw new BadRequestException('Esa URL no es de un archivo nuestro');
     }
