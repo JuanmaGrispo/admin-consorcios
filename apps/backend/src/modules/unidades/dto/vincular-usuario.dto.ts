@@ -1,11 +1,28 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
 import { VinculoUnidad } from '../../../database/entities';
+import { NuevoVecinoDto } from '../../usuarios/dto/nuevo-vecino.dto';
 
+/** Va `usuarioId` o `nuevoUsuario`, uno de los dos. */
 export class VincularUsuarioDto {
-  @ApiProperty({ format: 'uuid', description: 'Usuario activo con rol VECINO' })
+  @ApiPropertyOptional({ format: 'uuid', description: 'Vecino que ya tiene cuenta' })
+  @IsOptional()
   @IsUUID()
-  usuarioId: string;
+  usuarioId?: string;
+
+  @ApiPropertyOptional({ type: NuevoVecinoDto, description: 'Lo da de alta y lo vincula en un paso' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NuevoVecinoDto)
+  nuevoUsuario?: NuevoVecinoDto;
 
   @ApiProperty({ enum: VinculoUnidad })
   @IsEnum(VinculoUnidad)

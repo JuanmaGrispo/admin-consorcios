@@ -115,6 +115,12 @@ export class UnidadesService {
     unidadId: string,
     dto: VincularUsuarioDto,
   ): Promise<VinculoPublico> {
+    if (!dto.usuarioId === !dto.nuevoUsuario) {
+      throw new BadRequestException(
+        'Indicá usuarioId para un vecino que ya tiene cuenta o nuevoUsuario para darlo de alta, uno de los dos',
+      );
+    }
+
     const unidad = await this.exigirUnidad(usuario, unidadId);
     if (!unidad.activa) {
       throw new BadRequestException(
@@ -122,37 +128,39 @@ export class UnidadesService {
       );
     }
 
+    const datosVinculo = {
+      unidadId,
+      vinculo: dto.vinculo,
+      esTitular: dto.esTitular ?? false,
+      // Sin `desde`, lo completa la base con CURRENT_DATE.
+      ...(dto.desde ? { desde: dto.desde } : {}),
+    };
+
+    if (dto.nuevoUsuario) {
+      await this.exigirTitularLibre(unidad, dto.esTitular);
+      const vecino = await this.usuarios.prepararVecino(dto.nuevoUsuario);
+      return this.recortar(await this.unidades.crearVecinoYVinculo(vecino, datosVinculo));
+    }
+
     // Los vínculos son para vecinos. Un administrador opera el consorcio
     // entero; vincularlo a una unidad lo haría pasar por vecino en reclamos.
-    const vecino = await this.usuarios.findOne(dto.usuarioId);
+    const usuarioId = dto.usuarioId!;
+    const vecino = await this.usuarios.findOne(usuarioId);
     if (!vecino || !vecino.activo || vecino.rol !== RolUsuario.VECINO) {
       throw new BadRequestException(
         'Sólo se puede vincular a un usuario activo con rol VECINO',
       );
     }
 
-    if (await this.unidades.findVinculoVigente(unidadId, dto.usuarioId)) {
+    if (await this.unidades.findVinculoVigente(unidadId, usuarioId)) {
       throw new ConflictException(
         `${vecino.nombre} ${vecino.apellido} ya está vinculado a la unidad ${unidad.etiqueta}`,
       );
     }
 
-    // Titular es el responsable de la unidad ante el consorcio: si hubiera
-    // dos, no quedaría claro a quién se le emite la boleta.
-    if (dto.esTitular && (await this.unidades.findTitularVigente(unidadId))) {
-      throw new ConflictException(
-        `La unidad ${unidad.etiqueta} ya tiene un titular. Terminá ese vínculo antes de asignar otro.`,
-      );
-    }
+    await this.exigirTitularLibre(unidad, dto.esTitular);
 
-    const vinculo = await this.unidades.crearVinculo({
-      unidadId,
-      usuarioId: dto.usuarioId,
-      vinculo: dto.vinculo,
-      esTitular: dto.esTitular ?? false,
-      // Sin `desde`, lo completa la base con CURRENT_DATE.
-      ...(dto.desde ? { desde: dto.desde } : {}),
-    });
+    const vinculo = await this.unidades.crearVinculo({ ...datosVinculo, usuarioId });
     return this.recortar(vinculo);
   }
 
@@ -193,6 +201,18 @@ export class UnidadesService {
       throw new NotFoundException(`La unidad ${id} no existe`);
     }
     return unidad;
+  }
+
+  /**
+   * Titular es el responsable de la unidad ante el consorcio: si hubiera dos,
+   * no quedaría claro a quién se le emite la boleta.
+   */
+  private async exigirTitularLibre(unidad: Unidad, esTitular?: boolean): Promise<void> {
+    if (esTitular && (await this.unidades.findTitularVigente(unidad.id))) {
+      throw new ConflictException(
+        `La unidad ${unidad.etiqueta} ya tiene un titular. Terminá ese vínculo antes de asignar otro.`,
+      );
+    }
   }
 
   /** La base tiene UNIQUE (consorcio_id, etiqueta); acá se da un mensaje claro. */

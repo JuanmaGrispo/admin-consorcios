@@ -24,6 +24,7 @@ function crearRepo() {
     hoy: '2026-09-25',
     borrados: [] as string[],
     terminados: [] as { id: string; hasta: string }[],
+    altas: [] as string[],
   };
   const repo = {
     listar: async (f: { ids?: string[]; consorcioIds?: string[] }) =>
@@ -55,6 +56,10 @@ function crearRepo() {
       estado.vinculos.find((v) => v.unidadId === u && v.esTitular && !v.hasta) ?? null,
     crearVinculo: async (d: Partial<UnidadUsuario>) =>
       ({ id: 'nuevo', desde: estado.hoy, hasta: null, ...d, usuario: { id: d.usuarioId, nombre: 'N', apellido: 'A', email: 'e', passwordHash: 'x' } }) as unknown as UnidadUsuario,
+    crearVecinoYVinculo: async (vecino: { email: string }, d: Partial<UnidadUsuario>) => {
+      estado.altas.push(vecino.email);
+      return { id: 'nuevo', ...d, usuario: { id: 'creado', nombre: 'N', apellido: 'A', email: vecino.email, passwordHash: 'x' } } as unknown as UnidadUsuario;
+    },
     borrarVinculo: async (id: string) => void estado.borrados.push(id),
     terminarVinculo: async (id: string, hasta: string) => void estado.terminados.push({ id, hasta }),
   };
@@ -76,6 +81,7 @@ describe('UnidadesService', () => {
     const consorcios = { findOne: async () => ({}) } as unknown as ConsorciosService;
     const usuariosService = {
       findOne: async (id: string) => (usuarios[id] ? { id, ...usuarios[id] } : null),
+      prepararVecino: async (d: { email: string }) => ({ email: d.email, rol: RolUsuario.VECINO }),
     } as unknown as UsuariosService;
     service = new UnidadesService(creado.repo, consorcios, usuariosService);
   });
@@ -210,6 +216,45 @@ describe('UnidadesService', () => {
       await service.desvincular(admin, 'u1', 'x');
       assert.deepEqual(estado.borrados, ['x']);
       assert.deepEqual(estado.terminados, []);
+    });
+
+    describe('con alta del vecino', () => {
+      const nuevoUsuario = { nombre: 'Julieta', apellido: 'Sosa', email: 'ju@x', password: '12345678' };
+
+      it('lo da de alta y lo vincula en un paso, sin el hash', async () => {
+        const v = await service.vincular(admin, 'u1', { nuevoUsuario, vinculo: VinculoUnidad.INQUILINO });
+        assert.deepEqual(estado.altas, ['ju@x']);
+        assert.equal(v.usuario.email, 'ju@x');
+        assert.equal('passwordHash' in v.usuario, false);
+      });
+
+      it('pide usuarioId o nuevoUsuario, uno de los dos', async () => {
+        await assert.rejects(
+          service.vincular(admin, 'u1', { vinculo: VinculoUnidad.INQUILINO }),
+          BadRequestException,
+        );
+        await assert.rejects(
+          service.vincular(admin, 'u1', { usuarioId: 'v1', nuevoUsuario, vinculo: VinculoUnidad.INQUILINO }),
+          BadRequestException,
+        );
+      });
+
+      it('respeta el titular único y no crea la cuenta', async () => {
+        estado.vinculos.push({ id: 't', unidadId: 'u1', usuarioId: 'otro', esTitular: true, hasta: null } as UnidadUsuario);
+        await assert.rejects(
+          service.vincular(admin, 'u1', { nuevoUsuario, vinculo: VinculoUnidad.PROPIETARIO, esTitular: true }),
+          ConflictException,
+        );
+        assert.deepEqual(estado.altas, []);
+      });
+
+      it('no da de alta vecinos en un consorcio ajeno', async () => {
+        await assert.rejects(
+          service.vincular(adminAjeno, 'u1', { nuevoUsuario, vinculo: VinculoUnidad.INQUILINO }),
+          NotFoundException,
+        );
+        assert.deepEqual(estado.altas, []);
+      });
     });
 
     it('un vínculo de otra unidad da 404', async () => {

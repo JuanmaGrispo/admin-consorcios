@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
-import { Unidad, UnidadUsuario } from '../../database/entities';
+import { Brackets, QueryFailedError, Repository } from 'typeorm';
+import { Unidad, UnidadUsuario, Usuario } from '../../database/entities';
 
 /**
  * Un vínculo está vigente mientras no tenga `hasta` o `hasta` no haya pasado.
@@ -162,6 +162,30 @@ export class UnidadesRepository {
   async crearVinculo(data: Partial<UnidadUsuario>): Promise<UnidadUsuario> {
     const creado = await this.vinculos.save(this.vinculos.create(data));
     return (await this.findVinculo(creado.id))!;
+  }
+
+  /**
+   * El vecino nuevo y su vínculo, juntos o ninguno: un vecino sin unidad no
+   * ve nada y ningún administrador lo encuentra para arreglarlo.
+   */
+  async crearVecinoYVinculo(
+    vecino: Partial<Usuario>,
+    vinculo: Partial<UnidadUsuario>,
+  ): Promise<UnidadUsuario> {
+    try {
+      const id = await this.vinculos.manager.transaction(async (m) => {
+        const creado = await m.save(m.create(Usuario, vecino));
+        const nuevo = await m.save(m.create(UnidadUsuario, { ...vinculo, usuarioId: creado.id }));
+        return nuevo.id;
+      });
+      return (await this.findVinculo(id))!;
+    } catch (error) {
+      // Dos altas simultáneas con el mismo email: el UNIQUE rechaza la segunda.
+      if (error instanceof QueryFailedError && (error.driverError as { code?: string }).code === '23505') {
+        throw new ConflictException(`Ya existe un usuario con el email ${vecino.email}`);
+      }
+      throw error;
+    }
   }
 
   async terminarVinculo(id: string, hasta: string): Promise<void> {

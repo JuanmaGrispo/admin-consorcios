@@ -10,6 +10,7 @@ import { consorciosGestionados, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { hashearPassword } from '../auth/password';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
+import { NuevoVecinoDto } from './dto/nuevo-vecino.dto';
 import { ListarUsuariosQuery } from './dto/listar-usuarios.query';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import { UsuariosRepository } from './usuarios.repository';
@@ -66,6 +67,19 @@ export class UsuariosService {
       rol: dto.rol ?? RolUsuario.ADMINISTRADOR,
     });
     return this.sinHash(creado);
+  }
+
+  /** Los datos de un vecino listo para guardar: lo inserta unidades junto con su vínculo. */
+  async prepararVecino(dto: NuevoVecinoDto): Promise<Partial<Usuario>> {
+    return {
+      nombre: dto.nombre,
+      apellido: dto.apellido,
+      email: await this.exigirEmailLibre(dto.email),
+      passwordHash: await hashearPassword(dto.password),
+      rol: RolUsuario.VECINO,
+      dni: dto.dni ?? null,
+      telefono: dto.telefono ?? null,
+    };
   }
 
   async update(usuario: UsuarioActual, id: string, dto: UpdateUsuarioDto): Promise<UsuarioPublico> {

@@ -99,7 +99,8 @@ export class UnidadesController {
   @Post(':id/vinculos')
   @ApiOperation({
     summary: 'Vincula un vecino a la unidad',
-    description: 'Como propietario o inquilino. Hay un solo titular vigente por unidad.',
+    description:
+      'Como propietario o inquilino. Con `nuevoUsuario` lo da de alta en el mismo paso. Hay un solo titular vigente por unidad.',
   })
   vincular(
     @UsuarioActual() usuario: Usuario,
