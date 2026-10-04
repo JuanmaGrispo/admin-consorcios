@@ -12,8 +12,12 @@ export class PagosRepository {
     private readonly dataSource: DataSource,
   ) {}
 
-  /** `unidadIds` acota lo que ve un vecino; sin él, todo (administrador). */
-  listar(query: ListarPagosQuery, unidadIds?: string[]): Promise<Pago[]> {
+  /** El vecino ve los de sus unidades; el administrador, los de sus consorcios. */
+  listar(
+    query: ListarPagosQuery,
+    alcance: { unidadIds?: string[]; consorcioIds?: string[] },
+  ): Promise<Pago[]> {
+    const { unidadIds, consorcioIds } = alcance;
     const qb = this.pagos
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.boleta', 'b')
@@ -24,6 +28,10 @@ export class PagosRepository {
     if (unidadIds) {
       if (unidadIds.length === 0) qb.andWhere('1 = 0');
       else qb.andWhere('p.unidadId IN (:...unidades)', { unidades: unidadIds });
+    }
+    if (consorcioIds) {
+      if (consorcioIds.length === 0) qb.andWhere('1 = 0');
+      else qb.andWhere('u.consorcioId IN (:...consorcioIds)', { consorcioIds });
     }
     if (query.boletaId) qb.andWhere('p.boletaId = :boleta', { boleta: query.boletaId });
     if (query.unidadId) qb.andWhere('p.unidadId = :unidad', { unidad: query.unidadId });

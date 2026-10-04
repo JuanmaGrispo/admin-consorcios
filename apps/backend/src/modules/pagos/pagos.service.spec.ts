@@ -11,7 +11,18 @@ import { firmaValida, type MercadoPagoClient, type PagoMercadoPago } from './mer
 import type { PagosRepository } from './pagos.repository';
 import { estadoSegunMercadoPago, PagosService } from './pagos.service';
 
-const admin: UsuarioActual = { id: 'a1', email: 'a@x', rol: RolUsuario.ADMINISTRADOR };
+const admin: UsuarioActual = {
+  id: 'a1',
+  email: 'a@x',
+  rol: RolUsuario.ADMINISTRADOR,
+  consorcioIds: ['c1'],
+};
+const adminAjeno: UsuarioActual = {
+  id: 'a2',
+  email: 'b@x',
+  rol: RolUsuario.ADMINISTRADOR,
+  consorcioIds: ['c2'],
+};
 
 /** Pagos en memoria y un ExpensasService de mentira con una boleta de $400. */
 function crearEntorno() {
@@ -21,10 +32,14 @@ function crearEntorno() {
     sincronizadas: [] as string[],
     /** La secuencia de recibos de la base, en memoria. */
     correlativo: 0,
+    alcances: [] as unknown[],
   };
 
   const repo = {
-    listar: async () => db.pagos,
+    listar: async (_q: unknown, alcance: unknown) => {
+      db.alcances.push(alcance);
+      return db.pagos;
+    },
     findById: async (id: string) => db.pagos.find((p) => p.id === id) ?? null,
     crear: async (d: Partial<Pago>) => {
       const p = { id: `p${db.pagos.length + 1}`, ...d } as Pago;
@@ -33,7 +48,10 @@ function crearEntorno() {
     },
     actualizar: async (id: string, d: Partial<Pago>) =>
       Object.assign(db.pagos.find((p) => p.id === id)!, d),
-    findConRelaciones: async (id: string) => db.pagos.find((p) => p.id === id) ?? null,
+    findConRelaciones: async (id: string) => {
+      const pago = db.pagos.find((p) => p.id === id);
+      return pago ? { ...pago, unidad: { consorcioId: 'c1', etiqueta: '3º B' } } : null;
+    },
     siguienteCorrelativoRecibo: async () => (db.correlativo += 1),
   } as unknown as PagosRepository;
 
@@ -256,6 +274,13 @@ describe('PagosService', () => {
       const vecinoAjeno: UsuarioActual = { id: 'v9', email: 'v@x', rol: RolUsuario.VECINO };
       entorno.expensas.unidadesVisibles = async () => ['otra-unidad'];
       await assert.rejects(service.findOne(vecinoAjeno, 'p1'), NotFoundException);
+    });
+
+    it('al administrador de otro consorcio, el pago le da 404 y la lista se acota', async () => {
+      await service.registrar(admin, { boletaId: 'b1', monto: 100, medio: MedioPago.EFECTIVO });
+      await assert.rejects(service.findOne(adminAjeno, 'p1'), NotFoundException);
+      await service.listar(adminAjeno, {});
+      assert.deepEqual(entorno.db.alcances, [{ consorcioIds: ['c2'] }]);
     });
   });
 });

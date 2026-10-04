@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Notificador } from '../../core/notificaciones/notificador';
 import { ConceptoPago, EstadoPago, MedioPago, Pago } from '../../database/entities';
+import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ExpensasService } from '../expensas/expensas.service';
@@ -51,7 +52,12 @@ export class PagosService {
   ) {}
 
   async listar(usuario: UsuarioActual, query: ListarPagosQuery): Promise<Pago[]> {
-    return this.pagos.listar(query, await this.expensas.unidadesVisibles(usuario));
+    return this.pagos.listar(
+      query,
+      esGestor(usuario)
+        ? { consorcioIds: consorciosGestionados(usuario) }
+        : { unidadIds: await this.expensas.unidadesVisibles(usuario) },
+    );
   }
 
   /**
@@ -60,9 +66,13 @@ export class PagosService {
    */
   async findOne(usuario: UsuarioActual, id: string): Promise<Pago> {
     const pago = await this.pagos.findConRelaciones(id);
-    const visibles = await this.expensas.unidadesVisibles(usuario);
-    // Un pago ajeno le da 404 y no 403: un 403 confirmaría que existe.
-    if (!pago || (visibles && !visibles.includes(pago.unidadId))) {
+    const visible =
+      pago &&
+      (esGestor(usuario)
+        ? gestiona(usuario, pago.unidad.consorcioId)
+        : (await this.expensas.unidadesVisibles(usuario))!.includes(pago.unidadId));
+    // Un pago ajeno da 404 y no 403: un 403 confirmaría que existe.
+    if (!visible) {
       throw new NotFoundException(`El pago ${id} no existe`);
     }
     return pago;
