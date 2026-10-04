@@ -13,4 +13,6 @@ export interface UsuarioActual {
   id: string;
   email: string;
   rol: RolUsuario;
+  /** Sólo para ADMINISTRADOR: los consorcios que tiene asignados. */
+  consorcioIds?: string[];
 }

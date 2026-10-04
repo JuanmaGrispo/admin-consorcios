@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Usuario } from '../../database/entities';
+import { Consorcio, Usuario } from '../../database/entities';
 
 /**
  * Acceso a datos de autenticación. La tabla `usuario` la toca esta clase; el
@@ -12,6 +12,8 @@ export class AuthRepository {
   constructor(
     @InjectRepository(Usuario)
     private readonly usuarios: Repository<Usuario>,
+    @InjectRepository(Consorcio)
+    private readonly consorcios: Repository<Consorcio>,
   ) {}
 
   /**
@@ -31,5 +33,13 @@ export class AuthRepository {
 
   findById(id: string): Promise<Usuario | null> {
     return this.usuarios.findOneBy({ id });
+  }
+
+  async consorciosAdministrados(usuarioId: string): Promise<string[]> {
+    const filas = await this.consorcios.find({
+      select: { id: true },
+      where: { administradorId: usuarioId },
+    });
+    return filas.map((c) => c.id);
   }
 }

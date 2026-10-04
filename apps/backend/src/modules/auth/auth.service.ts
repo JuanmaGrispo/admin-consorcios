@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { Usuario } from '../../database/entities';
+import { RolUsuario, Usuario } from '../../database/entities';
 import { AuthRepository } from './auth.repository';
 import type { JwtPayload, UsuarioActual } from './auth.types';
 import { LoginDto } from './dto/login.dto';
@@ -47,14 +47,15 @@ export class AuthService {
 
     return {
       accessToken: await this.firmarToken(usuario),
-      usuario: this.aUsuarioActual(usuario),
+      usuario: await this.aUsuarioActual(usuario),
     };
   }
 
   /**
    * Relee el usuario en cada request autenticado, en vez de confiar en lo que
    * dice el token: si lo dieron de baja o le cambiaron el rol, el cambio pega
-   * al instante y no cuando venza el token.
+   * al instante y no cuando venza el token. Lo mismo con los consorcios de un
+   * administrador: reasignarle uno le cambia el alcance en el próximo request.
    */
   async validarPayload(payload: JwtPayload): Promise<UsuarioActual> {
     const usuario = await this.usuarios.findById(payload.sub);
@@ -74,15 +75,18 @@ export class AuthService {
   }
 
   /** Recorta la entidad a lo que puede salir por la API: nunca el hash. */
-  private aUsuarioActual(
+  private async aUsuarioActual(
     usuario: Usuario,
-  ): UsuarioActual & { nombre: string; apellido: string } {
+  ): Promise<UsuarioActual & { nombre: string; apellido: string }> {
     return {
       id: usuario.id,
       email: usuario.email,
       rol: usuario.rol,
       nombre: usuario.nombre,
       apellido: usuario.apellido,
+      ...(usuario.rol === RolUsuario.ADMINISTRADOR && {
+        consorcioIds: await this.usuarios.consorciosAdministrados(usuario.id),
+      }),
     };
   }
 }
