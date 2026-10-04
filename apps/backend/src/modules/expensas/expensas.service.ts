@@ -14,12 +14,12 @@ import {
   Gasto,
   Liquidacion,
   ResultadoVotacion,
-  RolUsuario,
   UnidadUsuario,
   Usuario,
 } from '../../database/entities';
 import { ArchivosService } from '../archivos/archivos.service';
 import { DestinoArchivo } from '../archivos/tipos-archivo';
+import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
@@ -65,7 +65,6 @@ const EDITABLES = [EstadoLiquidacion.BORRADOR, EstadoLiquidacion.PREVISUALIZACIO
 /** Ya salieron: sus boletas son deuda real, el vecino las ve y se pagan. */
 const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
 
-const esVecino = (usuario: UsuarioActual) => usuario.rol === RolUsuario.VECINO;
 
 /**
  * Tope de filas para lo que no se pagina (exportación y recordatorios). Un
@@ -132,18 +131,22 @@ export class ExpensasService {
 
   // ── Liquidaciones ──────────────────────────────────────────────────────────
 
-  listar(query: ListarLiquidacionesQuery): Promise<Liquidacion[]> {
-    return this.expensas.listar(query);
+  listar(usuario: UsuarioActual, query: ListarLiquidacionesQuery): Promise<Liquidacion[]> {
+    return this.expensas.listar(query, consorciosGestionados(usuario));
   }
 
-  async findOne(id: string): Promise<Liquidacion> {
+  async findOne(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
     const liquidacion = await this.expensas.findConGastos(id);
-    if (!liquidacion) throw new NotFoundException(`La liquidación ${id} no existe`);
+    if (!liquidacion || !gestiona(usuario, liquidacion.consorcioId)) {
+      throw new NotFoundException(`La liquidación ${id} no existe`);
+    }
     return liquidacion;
   }
 
   async create(usuario: UsuarioActual, dto: CreateLiquidacionDto): Promise<Liquidacion> {
-    // 404 si el consorcio no existe.
+    if (!gestiona(usuario, dto.consorcioId)) {
+      throw new NotFoundException(`Consorcio ${dto.consorcioId} no existe`);
+    }
     const consorcio = await this.consorcios.findOne(dto.consorcioId);
     const periodo = `${dto.periodo}-01`;
 
@@ -171,29 +174,33 @@ export class ExpensasService {
       creadaPorId: usuario.id,
       ...(dto.criterioProrrateo ? { criterioProrrateo: dto.criterioProrrateo } : {}),
     });
-    return this.findOne(creada.id);
+    return this.findOne(usuario, creada.id);
   }
 
-  async update(id: string, dto: UpdateLiquidacionDto): Promise<Liquidacion> {
-    const liquidacion = await this.exigirEditable(id);
+  async update(usuario: UsuarioActual, id: string, dto: UpdateLiquidacionDto): Promise<Liquidacion> {
+    const liquidacion = await this.exigirEditable(usuario, id);
     if (dto.fechaVencimiento) this.exigirVencimientoValido(liquidacion.periodo, dto.fechaVencimiento);
 
     // Sin campos, TypeORM falla con UpdateValuesMissingError.
     if (Object.keys(dto).length > 0) await this.expensas.update(id, dto);
     await this.refrescarPrevisualizacion(id);
-    return this.findOne(id);
+    return this.findOne(usuario, id);
   }
 
   /** Sólo antes de emitir. Gastos y boletas se borran con ella. */
-  async remove(id: string): Promise<void> {
-    await this.exigirEditable(id);
+  async remove(usuario: UsuarioActual, id: string): Promise<void> {
+    await this.exigirEditable(usuario, id);
     await this.expensas.remove(id);
   }
 
   // ── Gastos ─────────────────────────────────────────────────────────────────
 
-  async agregarGasto(liquidacionId: string, dto: CreateGastoDto): Promise<Gasto> {
-    const liquidacion = await this.exigirEditable(liquidacionId);
+  async agregarGasto(
+    usuario: UsuarioActual,
+    liquidacionId: string,
+    dto: CreateGastoDto,
+  ): Promise<Gasto> {
+    const liquidacion = await this.exigirEditable(usuario, liquidacionId);
     const rubro = await this.rubros.exigirUsable(dto.rubroId, liquidacion.consorcioId);
     if (dto.proveedorId) {
       await this.proveedores.exigirAsignable(dto.proveedorId, liquidacion.consorcioId);
@@ -216,11 +223,12 @@ export class ExpensasService {
   }
 
   async actualizarGasto(
+    usuario: UsuarioActual,
     liquidacionId: string,
     gastoId: string,
     dto: UpdateGastoDto,
   ): Promise<Gasto> {
-    const liquidacion = await this.exigirEditable(liquidacionId);
+    const liquidacion = await this.exigirEditable(usuario, liquidacionId);
     const gasto = await this.exigirGasto(liquidacionId, gastoId);
 
     if (dto.rubroId && dto.rubroId !== gasto.rubroId) {
@@ -251,8 +259,8 @@ export class ExpensasService {
     return actualizado;
   }
 
-  async borrarGasto(liquidacionId: string, gastoId: string): Promise<void> {
-    await this.exigirEditable(liquidacionId);
+  async borrarGasto(usuario: UsuarioActual, liquidacionId: string, gastoId: string): Promise<void> {
+    await this.exigirEditable(usuario, liquidacionId);
     await this.exigirGasto(liquidacionId, gastoId);
     await this.expensas.borrarGasto(gastoId);
     await this.despuesDeTocarGastos(liquidacionId);
@@ -264,10 +272,10 @@ export class ExpensasService {
    * Calcula las boletas y deja la liquidación en PREVISUALIZACION. Se puede
    * repetir: cada vez se recalcula todo, conservando los ajustes manuales.
    */
-  async previsualizar(id: string): Promise<Liquidacion> {
-    const liquidacion = await this.exigirEditable(id);
+  async previsualizar(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
+    const liquidacion = await this.exigirEditable(usuario, id);
     await this.recalcular(liquidacion);
-    return this.findOne(id);
+    return this.findOne(usuario, id);
   }
 
   /**
@@ -275,8 +283,8 @@ export class ExpensasService {
    * previsualización y la emisión pudo entrar un pago o cambiar una unidad, y
    * lo que se emite tiene que reflejar el estado de hoy.
    */
-  async emitir(id: string): Promise<Liquidacion> {
-    const liquidacion = await this.exigirLiquidacion(id);
+  async emitir(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
+    const liquidacion = await this.exigirLiquidacion(usuario, id);
     if (liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) {
       throw new BadRequestException(
         liquidacion.estado === EstadoLiquidacion.BORRADOR
@@ -303,23 +311,23 @@ export class ExpensasService {
     });
 
     await this.avisarEmision(liquidacion, boletas);
-    return this.findOne(id);
+    return this.findOne(usuario, id);
   }
 
   /** Da el período por terminado. Sus boletas siguen vigentes como deuda. */
-  async cerrar(id: string): Promise<Liquidacion> {
-    const liquidacion = await this.exigirLiquidacion(id);
+  async cerrar(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
+    const liquidacion = await this.exigirLiquidacion(usuario, id);
     if (liquidacion.estado !== EstadoLiquidacion.EMITIDA) {
       throw new BadRequestException('Sólo se cierra una liquidación emitida');
     }
     await this.expensas.update(id, { estado: EstadoLiquidacion.CERRADA });
-    return this.findOne(id);
+    return this.findOne(usuario, id);
   }
 
   // ── Boletas ────────────────────────────────────────────────────────────────
 
   /**
-   * La grilla de cobranzas. El administrador ve todas las boletas; el vecino,
+   * La grilla de cobranzas. El administrador ve las de sus consorcios; el vecino,
    * las emitidas de sus unidades. Cada fila viaja con lo pagado, el saldo y
    * quién vive en la unidad: la boleta sola no alcanza para decidir a quién
    * reclamarle.
@@ -338,7 +346,7 @@ export class ExpensasService {
     );
 
     return {
-      items: await this.aFilas(items, { conOcupantes: !esVecino(usuario) }),
+      items: await this.aFilas(items, { conOcupantes: esGestor(usuario) }),
       total,
       pagina,
       paginas: Math.ceil(total / limite) || 1,
@@ -370,7 +378,7 @@ export class ExpensasService {
       await this.alcanceDe(usuario, query),
       TOPE_EXPORTACION,
     );
-    const filas = await this.aFilas(boletas, { conOcupantes: !esVecino(usuario) });
+    const filas = await this.aFilas(boletas, { conOcupantes: esGestor(usuario) });
     const sufijo = query.periodo ?? new Date().toISOString().slice(0, 10);
     return { csv: aCsv(filas), nombre: `cobranzas-${sufijo}.csv` };
   }
@@ -478,10 +486,11 @@ export class ExpensasService {
     const boleta = await this.expensas.findBoleta(id);
     const visible =
       boleta &&
-      (!esVecino(usuario) ||
-        (EMITIDAS.includes(boleta.liquidacion.estado) &&
-          (await this.expensas.unidadesDelUsuario(usuario.id)).includes(boleta.unidadId)));
-    // Al vecino, una boleta ajena o sin emitir le da 404: un 403 confirmaría que existe.
+      (esGestor(usuario)
+        ? gestiona(usuario, boleta.liquidacion.consorcioId)
+        : EMITIDAS.includes(boleta.liquidacion.estado) &&
+          (await this.expensas.unidadesDelUsuario(usuario.id)).includes(boleta.unidadId));
+    // Una boleta ajena o, al vecino, sin emitir da 404: un 403 confirmaría que existe.
     if (!visible) throw new NotFoundException(`La boleta ${id} no existe`);
     return boleta;
   }
@@ -499,9 +508,8 @@ export class ExpensasService {
    * Ajuste manual sobre una boleta en previsualización (una bonificación, un
    * cargo puntual). Se conserva si después se recalcula la liquidación.
    */
-  async ajustarBoleta(id: string, dto: AjustarBoletaDto): Promise<Boleta> {
-    const boleta = await this.expensas.findBoleta(id);
-    if (!boleta) throw new NotFoundException(`La boleta ${id} no existe`);
+  async ajustarBoleta(usuario: UsuarioActual, id: string, dto: AjustarBoletaDto): Promise<Boleta> {
+    const boleta = await this.findBoleta(usuario, id);
     if (boleta.liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) {
       throw new BadRequestException('Sólo se ajustan boletas de una liquidación en previsualización');
     }
@@ -558,9 +566,9 @@ export class ExpensasService {
     return { boleta, saldo: aPesos(saldo) };
   }
 
-  /** Las unidades que ve un vecino; `undefined` para quien administra (ve todo). */
+  /** Las unidades que ve un vecino; `undefined` para quien administra (lo acota por consorcio). */
   async unidadesVisibles(usuario: UsuarioActual): Promise<string[] | undefined> {
-    return esVecino(usuario) ? this.expensas.unidadesDelUsuario(usuario.id) : undefined;
+    return esGestor(usuario) ? undefined : this.expensas.unidadesDelUsuario(usuario.id);
   }
 
   /** A quién avisarle algo de una unidad: los vecinos vinculados hoy. */
@@ -612,7 +620,7 @@ export class ExpensasService {
     usuario: UsuarioActual,
     query: Partial<ListarBoletasQuery>,
   ): Promise<AlcanceBoletas> {
-    const vecino = esVecino(usuario);
+    const vecino = !esGestor(usuario);
     return {
       liquidacionId: query.liquidacionId,
       consorcioId: query.consorcioId,
@@ -622,6 +630,7 @@ export class ExpensasService {
       estados: query.situacion ? estadosDe(query.situacion) : undefined,
       buscar: query.buscar,
       unidadIds: vecino ? await this.expensas.unidadesDelUsuario(usuario.id) : undefined,
+      consorcioIds: vecino ? undefined : consorciosGestionados(usuario),
       soloEmitidas: vecino,
     };
   }
@@ -749,8 +758,8 @@ export class ExpensasService {
   }
 
   private async refrescarPrevisualizacion(liquidacionId: string): Promise<void> {
-    const liquidacion = await this.exigirLiquidacion(liquidacionId);
-    if (liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) return;
+    const liquidacion = await this.expensas.findById(liquidacionId);
+    if (!liquidacion || liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) return;
 
     // Si se borró el último gasto no hay nada que previsualizar: vuelve a borrador.
     if ((await this.expensas.gastosDe(liquidacionId)).length === 0) {
@@ -787,14 +796,17 @@ export class ExpensasService {
     }
   }
 
-  private async exigirLiquidacion(id: string): Promise<Liquidacion> {
+  /** Una liquidación de otro consorcio responde como inexistente. */
+  private async exigirLiquidacion(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
     const liquidacion = await this.expensas.findById(id);
-    if (!liquidacion) throw new NotFoundException(`La liquidación ${id} no existe`);
+    if (!liquidacion || !gestiona(usuario, liquidacion.consorcioId)) {
+      throw new NotFoundException(`La liquidación ${id} no existe`);
+    }
     return liquidacion;
   }
 
-  private async exigirEditable(id: string): Promise<Liquidacion> {
-    const liquidacion = await this.exigirLiquidacion(id);
+  private async exigirEditable(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
+    const liquidacion = await this.exigirLiquidacion(usuario, id);
     if (!EDITABLES.includes(liquidacion.estado)) {
       throw new BadRequestException(
         `La liquidación está ${liquidacion.estado}: sus boletas ya son deuda y no se modifican`,
