@@ -16,13 +16,28 @@ export class ConsorciosRepository {
   ) {}
 
   /** Trae el administrador y cuántas unidades tiene cada consorcio. */
-  findAll(): Promise<Consorcio[]> {
-    return this.repo
+  findAll(filtro: { id?: string; ids?: string[]; vecinoId?: string } = {}): Promise<Consorcio[]> {
+    const qb = this.repo
       .createQueryBuilder('c')
       .leftJoinAndSelect('c.administrador', 'a')
       .loadRelationCountAndMap('c.cantidadUnidades', 'c.unidades')
-      .orderBy('c.createdAt', 'DESC')
-      .getMany();
+      .orderBy('c.createdAt', 'DESC');
+
+    if (filtro.id) qb.andWhere('c.id = :id', { id: filtro.id });
+    if (filtro.ids) {
+      if (filtro.ids.length === 0) qb.andWhere('1 = 0');
+      else qb.andWhere('c.id IN (:...ids)', { ids: filtro.ids });
+    }
+    if (filtro.vecinoId) {
+      qb.andWhere(
+        `c.id IN (SELECT u.consorcio_id FROM unidad u
+                  JOIN unidad_usuario uu ON uu.unidad_id = u.id
+                  WHERE uu.usuario_id = :vecinoId
+                    AND (uu.hasta IS NULL OR uu.hasta >= CURRENT_DATE))`,
+        { vecinoId: filtro.vecinoId },
+      );
+    }
+    return qb.getMany();
   }
 
   findById(id: string): Promise<Consorcio | null> {
