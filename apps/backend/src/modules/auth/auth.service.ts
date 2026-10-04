@@ -5,9 +5,7 @@ import { RolUsuario, Usuario } from '../../database/entities';
 import { AuthRepository } from './auth.repository';
 import type { JwtPayload, UsuarioActual } from './auth.types';
 import { LoginDto } from './dto/login.dto';
-
-/** Costo del hash. 10 rondas es el default de bcrypt y va bien acá. */
-export const BCRYPT_ROUNDS = 10;
+import { BCRYPT_ROUNDS } from './password';
 
 /**
  * Hash descartable con el que se compara cuando el email no existe. Sin esto,

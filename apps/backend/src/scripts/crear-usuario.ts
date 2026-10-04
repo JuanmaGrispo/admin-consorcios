@@ -1,6 +1,6 @@
-import * as bcrypt from 'bcryptjs';
 import dataSource from '../database/data-source';
 import { RolUsuario, Usuario } from '../database/entities';
+import { hashearPassword } from '../modules/auth/password';
 
 /**
  * Crea un usuario con la contraseña hasheada:
@@ -11,8 +11,6 @@ import { RolUsuario, Usuario } from '../database/entities';
  * algún lado, y dejar esa puerta abierta en la API sería un agujero. Los altas
  * siguientes son una decisión del negocio, no de cualquiera con acceso a /auth.
  */
-
-const BCRYPT_ROUNDS = 10;
 
 function salir(mensaje: string): never {
   console.error(`✖ ${mensaje}`);
@@ -50,7 +48,7 @@ async function main() {
   const usuario = await repo.save(
     repo.create({
       email: normalizado,
-      passwordHash: await bcrypt.hash(password, BCRYPT_ROUNDS),
+      passwordHash: await hashearPassword(password),
       nombre: nombre ?? 'Admin',
       apellido: apellido ?? 'Consorcios',
       rol,
