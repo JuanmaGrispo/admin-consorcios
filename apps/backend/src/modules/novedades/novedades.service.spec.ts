@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
+import { crearSobre, type EventoDomus } from '../../core/mensajeria/eventos';
 import type { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import { Novedad, NovedadAdjunto, RolUsuario, TipoAdjunto } from '../../database/entities';
 import type { ArchivosService } from '../archivos/archivos.service';
@@ -30,6 +31,8 @@ describe('NovedadesService', () => {
   let filtros: FiltroNovedades[];
   let lecturas: string[];
   let publicados: unknown[][];
+  let procesados: Set<string>;
+  let automaticas: Partial<Novedad>[];
   let service: NovedadesService;
 
   beforeEach(() => {
@@ -38,7 +41,17 @@ describe('NovedadesService', () => {
     filtros = [];
     lecturas = [];
     publicados = [];
+    procesados = new Set();
+    automaticas = [];
     const repo = {
+      administradorDe: async (id: string) => (id === 'c1' ? 'a1' : null),
+      crearDesdeEvento: async (eventoId: string, consumidor: string, datos: Partial<Novedad>) => {
+        const clave = `${eventoId}:${consumidor}`;
+        if (procesados.has(clave)) return false;
+        procesados.add(clave);
+        automaticas.push(datos);
+        return true;
+      },
       listar: async (f: FiltroNovedades) => {
         filtros.push(f);
         return { items: guardadas, total: guardadas.length };
@@ -129,6 +142,30 @@ describe('NovedadesService', () => {
 
     it('el administrador no marca lecturas', async () => {
       await assert.rejects(service.marcarLeida(admin, 'n1'), ForbiddenException);
+    });
+  });
+
+  describe('muro automático', () => {
+    const cerrada = (consorcioId: string) =>
+      crearSobre('votacion.cerrada', consorcioId, {
+        votacion_id: 'v1',
+        titulo: 'Pintura',
+        resultado: 'aprobada',
+        participacion_pct: 70,
+      }) as EventoDomus;
+
+    it('publica en nombre del administrador y un evento repetido no la duplica', async () => {
+      const evento = cerrada('c1');
+      await service.publicarAutomatica(evento);
+      await service.publicarAutomatica(evento);
+      assert.equal(automaticas.length, 1);
+      assert.equal(automaticas[0].autorId, 'a1');
+      assert.equal(automaticas[0].titulo, 'Resultado de la votación: Pintura');
+    });
+
+    it('un consorcio que ya no existe no rompe el consumidor', async () => {
+      await service.publicarAutomatica(cerrada('c9'));
+      assert.equal(automaticas.length, 0);
     });
   });
 });

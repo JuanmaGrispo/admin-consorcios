@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { fechaLegible, mesLegible } from '../../core/formato';
 import { crearSobre, type EventoDomus } from '../../core/mensajeria/eventos';
-import { fechaLegible, mesLegible, redactar } from './plantillas';
+import { redactar } from './plantillas';
 
 describe('plantillas de mail', () => {
   it('formatea período y fecha', () => {

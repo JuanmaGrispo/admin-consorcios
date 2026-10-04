@@ -1,4 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import type { EventoDomus } from '../../core/mensajeria/eventos';
 import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import { Novedad, TipoAdjunto } from '../../database/entities';
 import { ArchivosService } from '../archivos/archivos.service';
@@ -8,6 +9,7 @@ import type { UsuarioActual } from '../auth/auth.types';
 import { ActualizarNovedadDto } from './dto/actualizar-novedad.dto';
 import { CrearNovedadDto } from './dto/crear-novedad.dto';
 import { ListarNovedadesQuery } from './dto/listar-novedades.query';
+import { novedadDeEvento } from './muro';
 import { NovedadesRepository } from './novedades.repository';
 
 /** Al vecino le viaja si la leyó; al administrador, cuántos la leyeron. */
@@ -21,6 +23,8 @@ const tipoDeAdjunto = (url: string): TipoAdjunto => {
 
 @Injectable()
 export class NovedadesService {
+  private readonly logger = new Logger(NovedadesService.name);
+
   constructor(
     private readonly novedades: NovedadesRepository,
     private readonly archivos: ArchivosService,
@@ -83,6 +87,29 @@ export class NovedadesService {
       titulo: novedad.titulo,
     });
     return novedad;
+  }
+
+  /**
+   * Lo que publica el muro por un evento de dominio. El autor es el
+   * administrador del consorcio: la novedad sale en su nombre, como si la
+   * hubiera escrito él.
+   */
+  async publicarAutomatica(evento: EventoDomus): Promise<void> {
+    const contenido = novedadDeEvento(evento);
+    if (!contenido || !evento.consorcio_id) return;
+
+    const autorId = await this.novedades.administradorDe(evento.consorcio_id);
+    if (!autorId) {
+      this.logger.warn(`El consorcio ${evento.consorcio_id} no existe: ${evento.tipo_evento} no va al muro`);
+      return;
+    }
+
+    await this.novedades.crearDesdeEvento(evento.evento_id, 'muro-novedades', {
+      consorcioId: evento.consorcio_id,
+      autorId,
+      ...contenido,
+      publicadaAt: new Date(evento.timestamp),
+    });
   }
 
   async actualizar(usuario: UsuarioActual, id: string, dto: ActualizarNovedadDto): Promise<Novedad> {

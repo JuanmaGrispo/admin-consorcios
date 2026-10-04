@@ -1,3 +1,4 @@
+import { fechaLegible, instanteLegible, mesLegible } from '../../core/formato';
 import type { EventoDomus } from '../../core/mensajeria/eventos';
 
 export interface Mensaje {
@@ -12,13 +13,6 @@ export interface Contexto {
   unidades?: { etiqueta: string; total: number }[];
 }
 
-const ZONA = 'America/Argentina/Buenos_Aires';
-
-const MESES = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-];
-
 const MAYORIAS: Record<string, string> = {
   SIMPLE_PRESENTES: 'mayoría simple de los votos emitidos',
   ABSOLUTA: 'mayoría absoluta del padrón',
@@ -30,22 +24,6 @@ const RESULTADOS: Record<string, string> = {
   rechazada: 'se rechazó',
   sin_quorum: 'no alcanzó el quórum, así que no decide nada',
 };
-
-/** `2026-10` → `octubre 2026`. */
-export const mesLegible = (periodo: string) => {
-  const [anio, mes] = periodo.split('-');
-  return `${MESES[Number(mes) - 1]} ${anio}`;
-};
-
-/** `2026-11-10` → `10/11/2026`. */
-export const fechaLegible = (fecha: string) => fecha.split('-').reverse().join('/');
-
-const instanteLegible = (iso: string) =>
-  new Date(iso).toLocaleString('es-AR', {
-    timeZone: ZONA,
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
 
 const pesos = (n: number) =>
   n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });

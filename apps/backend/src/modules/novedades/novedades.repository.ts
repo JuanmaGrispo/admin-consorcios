@@ -98,6 +98,36 @@ export class NovedadesRepository {
     return (await this.findById(id))!;
   }
 
+  async administradorDe(consorcioId: string): Promise<string | null> {
+    const [fila] = await this.novedades.manager.query(
+      'SELECT administrador_id AS "administradorId" FROM consorcio WHERE id = $1',
+      [consorcioId],
+    );
+    return fila?.administradorId ?? null;
+  }
+
+  /**
+   * La novedad de un evento y la marca de que el consumidor ya lo procesó, en
+   * la misma transacción: si el evento llega repetido, el INSERT de la marca
+   * no hace nada y la novedad no se duplica. Devuelve `false` en ese caso.
+   */
+  async crearDesdeEvento(
+    eventoId: string,
+    consumidor: string,
+    datos: Partial<Novedad>,
+  ): Promise<boolean> {
+    return this.novedades.manager.transaction(async (m) => {
+      const marcado: unknown[] = await m.query(
+        `INSERT INTO evento_procesado (evento_id, consumidor) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING RETURNING evento_id`,
+        [eventoId, consumidor],
+      );
+      if (marcado.length === 0) return false;
+      await m.save(m.create(Novedad, datos));
+      return true;
+    });
+  }
+
   async actualizar(novedad: Novedad, datos: Partial<Novedad>): Promise<Novedad> {
     await this.novedades.update({ id: novedad.id }, datos);
     return (await this.findById(novedad.id))!;
