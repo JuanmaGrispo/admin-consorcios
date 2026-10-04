@@ -37,6 +37,13 @@ export class ConsorciosService {
     return filas.map((c) => this.recortar(c));
   }
 
+  /** `undefined` = todos. Para filtrar catálogos que también lee el vecino. */
+  async idsVisibles(usuario: UsuarioActual): Promise<string[] | undefined> {
+    if (esGestor(usuario)) return consorciosGestionados(usuario);
+    const propios = await this.consorcios.findAll({ vecinoId: usuario.id });
+    return propios.map((c) => c.id);
+  }
+
   /** El de la API: un consorcio fuera del alcance responde como inexistente. */
   async findVisible(usuario: UsuarioActual, id: string): Promise<ConsorcioConAdministrador> {
     const [consorcio] = await this.consorcios.findAll({ ...this.alcance(usuario), id });

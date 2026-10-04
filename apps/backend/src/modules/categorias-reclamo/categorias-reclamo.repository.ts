@@ -13,11 +13,24 @@ export class CategoriasReclamoRepository {
   ) {}
 
   /** Con consorcio: las suyas más las compartidas. Sin consorcio: todas. */
-  listar(consorcioId?: string): Promise<CategoriaReclamo[]> {
+  listar(consorcioId?: string, visibles?: string[]): Promise<CategoriaReclamo[]> {
     const qb = this.repo.createQueryBuilder('c').orderBy('c.nombre', 'ASC');
     if (consorcioId) {
-      qb.where('c.consorcioId = :consorcioId', { consorcioId }).orWhere(
-        'c.consorcioId IS NULL',
+      qb.andWhere(
+        new Brackets((sub) =>
+          sub
+            .where('c.consorcioId = :consorcioId', { consorcioId })
+            .orWhere('c.consorcioId IS NULL'),
+        ),
+      );
+    }
+    // Los compartidos (`consorcio_id` NULL) los ve cualquiera.
+    if (visibles) {
+      qb.andWhere(
+        new Brackets((sub) => {
+          sub.where('c.consorcioId IS NULL');
+          if (visibles.length > 0) sub.orWhere('c.consorcioId IN (:...visibles)', { visibles });
+        }),
       );
     }
     return qb.getMany();

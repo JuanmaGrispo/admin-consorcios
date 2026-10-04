@@ -31,13 +31,13 @@ export class ProveedoresController {
     summary: 'Lista proveedores',
     description: 'Con `consorcioId`, los de ese consorcio más los compartidos.',
   })
-  listar(@Query() query: ListarProveedoresQuery) {
-    return this.proveedores.listar(query);
+  listar(@UsuarioActual() usuario: Usuario, @Query() query: ListarProveedoresQuery) {
+    return this.proveedores.listar(usuario, query);
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.proveedores.findOne(id);
+  findOne(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.proveedores.findOne(usuario, id);
   }
 
   @Post()

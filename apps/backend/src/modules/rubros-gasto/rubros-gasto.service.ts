@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { RolUsuario, RubroGasto } from '../../database/entities';
+import { gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { CreateRubroGastoDto } from './dto/create-rubro-gasto.dto';
@@ -20,20 +21,25 @@ export class RubrosGastoService {
     private readonly consorcios: ConsorciosService,
   ) {}
 
-  listar(consorcioId?: string): Promise<RubroGasto[]> {
-    return this.rubros.listar(consorcioId);
+  async listar(usuario: UsuarioActual, consorcioId?: string): Promise<RubroGasto[]> {
+    return this.rubros.listar(consorcioId, await this.consorcios.idsVisibles(usuario));
   }
 
-  async findOne(id: string): Promise<RubroGasto> {
+  async findOne(usuario: UsuarioActual, id: string): Promise<RubroGasto> {
     const rubro = await this.rubros.findById(id);
-    if (!rubro) throw new NotFoundException(`El rubro ${id} no existe`);
+    const visibles = rubro?.consorcioId ? await this.consorcios.idsVisibles(usuario) : undefined;
+    if (!rubro || (visibles && !visibles.includes(rubro.consorcioId!))) {
+      throw new NotFoundException(`El rubro ${id} no existe`);
+    }
     return rubro;
   }
 
   async create(usuario: UsuarioActual, dto: CreateRubroGastoDto): Promise<RubroGasto> {
     const consorcioId = dto.consorcioId ?? null;
     if (consorcioId) {
-      // 404 si el consorcio no existe.
+      if (!gestiona(usuario, consorcioId)) {
+        throw new NotFoundException(`Consorcio ${consorcioId} no existe`);
+      }
       await this.consorcios.findOne(consorcioId);
     } else {
       this.exigirSuperAdmin(usuario);
@@ -41,7 +47,7 @@ export class RubrosGastoService {
     await this.exigirNombreLibre(dto.nombre, consorcioId);
 
     const creado = await this.rubros.create(dto);
-    return this.findOne(creado.id);
+    return this.findOne(usuario, creado.id);
   }
 
   /**
@@ -53,7 +59,7 @@ export class RubrosGastoService {
     id: string,
     dto: UpdateRubroGastoDto,
   ): Promise<RubroGasto> {
-    const rubro = await this.findOne(id);
+    const rubro = await this.findOne(usuario, id);
     if (rubro.consorcioId === null) this.exigirSuperAdmin(usuario);
 
     if (dto.nombre !== undefined && dto.nombre.toLowerCase() !== rubro.nombre.toLowerCase()) {
@@ -64,7 +70,7 @@ export class RubrosGastoService {
 
   /** Sólo sin gastos: la FK es RESTRICT y los gastos no pueden quedar sin rubro. */
   async remove(usuario: UsuarioActual, id: string): Promise<void> {
-    const rubro = await this.findOne(id);
+    const rubro = await this.findOne(usuario, id);
     if (rubro.consorcioId === null) this.exigirSuperAdmin(usuario);
 
     const enUso = await this.rubros.contarGastos(id);

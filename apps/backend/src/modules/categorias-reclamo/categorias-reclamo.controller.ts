@@ -36,13 +36,16 @@ export class CategoriasReclamoController {
     description: 'Con `consorcioId`, las de ese consorcio más las compartidas.',
   })
   @ApiQuery({ name: 'consorcioId', required: false, format: 'uuid' })
-  listar(@Query('consorcioId', new ParseUUIDPipe({ optional: true })) consorcioId?: string) {
-    return this.categorias.listar(consorcioId);
+  listar(
+    @UsuarioActual() usuario: Usuario,
+    @Query('consorcioId', new ParseUUIDPipe({ optional: true })) consorcioId?: string,
+  ) {
+    return this.categorias.listar(usuario, consorcioId);
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.categorias.findOne(id);
+  findOne(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.categorias.findOne(usuario, id);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
