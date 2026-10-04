@@ -76,8 +76,8 @@ export class VotacionesController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Elimina una votación en borrador' })
-  eliminar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.votaciones.eliminar(id);
+  eliminar(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.votaciones.eliminar(usuario, id);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
@@ -108,8 +108,8 @@ export class VotacionesController {
   @Roles(RolUsuario.ADMINISTRADOR)
   @Get(':id/votos')
   @ApiOperation({ summary: 'Padrón con quién votó, qué y por qué canal' })
-  padronConVotos(@Param('id', ParseUUIDPipe) id: string) {
-    return this.votaciones.padronConVotos(id);
+  padronConVotos(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.votaciones.padronConVotos(usuario, id);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)

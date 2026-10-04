@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Proveedor, RolUsuario } from '../../database/entities';
+import { consorciosGestionados, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { CreateProveedorDto } from './dto/create-proveedor.dto';
@@ -19,25 +20,32 @@ export class ProveedoresService {
     private readonly consorcios: ConsorciosService,
   ) {}
 
-  listar(query: ListarProveedoresQuery): Promise<Proveedor[]> {
-    return this.proveedores.listar(query);
+  listar(usuario: UsuarioActual, query: ListarProveedoresQuery): Promise<Proveedor[]> {
+    return this.proveedores.listar(query, consorciosGestionados(usuario));
   }
 
-  async findOne(id: string): Promise<Proveedor> {
+  async findOne(usuario: UsuarioActual, id: string): Promise<Proveedor> {
     const proveedor = await this.proveedores.findById(id);
-    if (!proveedor) throw new NotFoundException(`El proveedor ${id} no existe`);
+    if (
+      !proveedor ||
+      (proveedor.consorcioId !== null && !gestiona(usuario, proveedor.consorcioId))
+    ) {
+      throw new NotFoundException(`El proveedor ${id} no existe`);
+    }
     return proveedor;
   }
 
   async create(usuario: UsuarioActual, dto: CreateProveedorDto): Promise<Proveedor> {
     if (dto.consorcioId) {
-      // 404 si el consorcio no existe.
+      if (!gestiona(usuario, dto.consorcioId)) {
+        throw new NotFoundException(`Consorcio ${dto.consorcioId} no existe`);
+      }
       await this.consorcios.findOne(dto.consorcioId);
     } else {
       this.exigirSuperAdmin(usuario);
     }
     const creado = await this.proveedores.create(dto);
-    return this.findOne(creado.id);
+    return this.findOne(usuario, creado.id);
   }
 
   async update(
@@ -45,7 +53,7 @@ export class ProveedoresService {
     id: string,
     dto: UpdateProveedorDto,
   ): Promise<Proveedor> {
-    const proveedor = await this.findOne(id);
+    const proveedor = await this.findOne(usuario, id);
     if (proveedor.consorcioId === null) this.exigirSuperAdmin(usuario);
     return this.proveedores.update(proveedor, dto);
   }

@@ -11,8 +11,18 @@ export class ProveedoresRepository {
     private readonly repo: Repository<Proveedor>,
   ) {}
 
-  listar(query: ListarProveedoresQuery): Promise<Proveedor[]> {
+  listar(query: ListarProveedoresQuery, visibles?: string[]): Promise<Proveedor[]> {
     const qb = this.repo.createQueryBuilder('p').orderBy('p.razonSocial', 'ASC');
+
+    // Los compartidos (`consorcio_id` NULL) los ve cualquiera.
+    if (visibles) {
+      qb.andWhere(
+        new Brackets((sub) => {
+          sub.where('p.consorcioId IS NULL');
+          if (visibles.length > 0) sub.orWhere('p.consorcioId IN (:...visibles)', { visibles });
+        }),
+      );
+    }
 
     // Filtrar por consorcio incluye los compartidos (`consorcio_id` NULL):
     // también son opciones válidas para ese edificio.

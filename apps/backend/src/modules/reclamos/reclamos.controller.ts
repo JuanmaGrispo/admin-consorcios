@@ -52,7 +52,7 @@ export class ReclamosController {
   @ApiQuery({ name: 'consorcioId', required: false, format: 'uuid' })
   resumen(
     @UsuarioActual() usuario: Usuario,
-    @Query('consorcioId') consorcioId?: string,
+    @Query('consorcioId', new ParseUUIDPipe({ optional: true })) consorcioId?: string,
   ) {
     return this.reclamos.resumen(usuario, consorcioId);
   }

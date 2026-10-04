@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import { CategoriaReclamo, RolUsuario } from '../../database/entities';
@@ -7,7 +7,18 @@ import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { CategoriasReclamoRepository } from './categorias-reclamo.repository';
 import { CategoriasReclamoService } from './categorias-reclamo.service';
 
-const admin: UsuarioActual = { id: 'a1', email: 'a@x', rol: RolUsuario.ADMINISTRADOR };
+const admin: UsuarioActual = {
+  id: 'a1',
+  email: 'a@x',
+  rol: RolUsuario.ADMINISTRADOR,
+  consorcioIds: ['c1'],
+};
+const adminAjeno: UsuarioActual = {
+  id: 'a2',
+  email: 'b@x',
+  rol: RolUsuario.ADMINISTRADOR,
+  consorcioIds: ['c2'],
+};
 
 const categoria = (datos: Partial<CategoriaReclamo> = {}) =>
   ({ id: 'k1', consorcioId: null, nombre: 'Plomería', icono: null, ...datos }) as CategoriaReclamo;
@@ -38,7 +49,10 @@ describe('CategoriasReclamoService', () => {
       },
       remove: async (id: string) => void borradas.push(id),
     } as unknown as CategoriasReclamoRepository;
-    const consorcios = { findOne: async () => ({}) } as unknown as ConsorciosService;
+    const consorcios = {
+      findOne: async () => ({}),
+      idsVisibles: async (u: UsuarioActual) => u.consorcioIds,
+    } as unknown as ConsorciosService;
     service = new CategoriasReclamoService(repo, consorcios);
   });
 
@@ -85,6 +99,19 @@ describe('CategoriasReclamoService', () => {
 
     it('rechaza una inexistente', async () => {
       await assert.rejects(service.exigirUsable('k9', 'c1'), BadRequestException);
+    });
+  });
+
+  describe('alcance', () => {
+    it('el administrador de otro consorcio no lo ve ni lo crea ahí', async () => {
+      guardadas.push(categoria({ consorcioId: 'c1' }));
+      await assert.rejects(service.findOne(adminAjeno, 'k1'), NotFoundException);
+      await assert.rejects(service.create(adminAjeno, { consorcioId: 'c1', nombre: 'Gas' }), NotFoundException);
+    });
+
+    it('los compartidos los ve cualquier administrador', async () => {
+      guardadas.push(categoria({ consorcioId: null }));
+      assert.equal((await service.findOne(adminAjeno, 'k1')).id, 'k1');
     });
   });
 });

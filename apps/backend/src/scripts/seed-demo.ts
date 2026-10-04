@@ -1,4 +1,3 @@
-import * as bcrypt from 'bcryptjs';
 import { EntityManager } from 'typeorm';
 import dataSource from '../database/data-source';
 import {
@@ -19,6 +18,7 @@ import {
   Usuario,
   VinculoUnidad,
 } from '../database/entities';
+import { hashearPassword } from '../modules/auth/password';
 
 /**
  * Datos mínimos para poder probar los flujos: un consorcio con unidades, un
@@ -153,7 +153,7 @@ async function sembrarReclamos(m: EntityManager, consorcioId: string) {
 
 async function main() {
   await dataSource.initialize();
-  const hash = await bcrypt.hash(PASSWORD, 10);
+  const hash = await hashearPassword(PASSWORD);
 
   await dataSource.transaction(async (m) => {
     // ── Administrador ──

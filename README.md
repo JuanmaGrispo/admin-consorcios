@@ -180,7 +180,9 @@ pnpm back usuario:crear <email> <password> [SUPER_ADMIN|ADMINISTRADOR|VECINO] [n
 
 El **superadmin solo se crea así**: la API no permite darse de alta con ese
 rol. Los administradores, en cambio, los crea el superadmin desde el panel
-(o por `POST /usuarios`).
+(o por `POST /usuarios`). Los vecinos los da de alta el administrador desde la
+unidad donde viven (`POST /unidades/:id/vinculos` con `nuevoUsuario`), con una
+contraseña inicial que el vecino cambia desde su perfil.
 
 ### Endpoints
 
@@ -189,8 +191,18 @@ rol. Los administradores, en cambio, los crea el superadmin desde el panel
 | POST   | `/auth/login`  | cualquiera — deja la cookie de sesión |
 | POST   | `/auth/logout` | cualquiera — borra la cookie          |
 | GET    | `/auth/me`     | con sesión (cookie o bearer)          |
-| GET    | `/usuarios`    | superadmin (filtro `?rol=`)           |
+| GET    | `/usuarios`    | superadmin: todos (`?rol=`) · admin: los vecinos de sus consorcios. Con `?email=`, busca uno exacto |
+| GET    | `/usuarios/:id` | superadmin · admin: sólo vecinos de sus consorcios (404 si no) |
 | POST   | `/usuarios`    | superadmin (crea ADMINISTRADOR/VECINO)|
+| PATCH  | `/usuarios/:id` | superadmin · admin sobre sus vecinos; `activo` es sólo del superadmin |
+| PUT    | `/usuarios/:id/password` | superadmin · admin sobre sus vecinos: le pone una contraseña nueva |
+| GET · PATCH | `/perfil` | con sesión: los datos propios (nombre, teléfono, avatar) |
+| PUT    | `/perfil/password` | con sesión: cambia la propia, pidiendo la actual |
+
+Dar de baja una cuenta es del superadmin: un vecino puede vivir en consorcios
+de administradores distintos, así que el administrador termina el vínculo en
+vez de apagarle la cuenta. Las cuentas de superadmin no se tocan por API. El
+avatar tiene que venir de `POST /archivos?destino=avatares`.
 
 ```bash
 curl -X POST localhost:4000/api/auth/login \
@@ -213,8 +225,25 @@ explícita.
 ```
 
 Sin `@Roles()`, alcanza con estar logueado. En `consorcios` está aplicado como
-referencia: leer es para cualquier usuario logueado, crear/editar/borrar es del
-superadmin.
+referencia: leer es para cualquier usuario logueado (cada uno ve los suyos),
+crear/editar/borrar es del superadmin.
+
+### Alcance del administrador
+
+`@Roles()` dice **qué** puede hacer cada rol; el alcance dice **sobre qué**. Un
+administrador sólo ve y gestiona los consorcios donde `consorcio.administrador_id`
+es él. La sesión trae esos `consorcioIds` (se releen en cada request, así que
+reasignar un consorcio pega al instante) y `modules/auth/alcance.ts` concentra
+la regla:
+
+- `esGestor(usuario)`: administrador o superadmin.
+- `consorciosGestionados(usuario)`: los ids del administrador; `undefined` para
+  el superadmin, que ve todo.
+- `gestiona(usuario, consorcioId)`.
+
+Cada módulo la aplica igual: los listados filtran por esos consorcios, y un
+recurso de otro consorcio responde **404**, no 403, como ya hacía el vecino
+con lo ajeno. Un administrador sin consorcios asignados no ve nada.
 
 Config en `.env`: `JWT_SECRET` (obligatorio, la app no arranca sin él) y
 `JWT_EXPIRES_IN` (default `1d`). Generar el secreto con:
@@ -270,18 +299,19 @@ Dos criterios comunes:
 - **Proveedores y categorías pueden ser compartidos.** Con `consorcio_id`
   vacío aparecen en todos los consorcios, así que sólo el **superadmin** los
   crea o edita; un administrador que lo intenta recibe 403 y tiene que indicar
-  `consorcioId`. Filtrar por consorcio devuelve los suyos más los compartidos.
+  `consorcioId`. Filtrar por consorcio devuelve los suyos más los compartidos;
+  sin filtro, cada uno ve los de sus consorcios más los compartidos.
 
 ### Unidades
 
 | Método | Ruta                                  | Quién |
 |--------|---------------------------------------|-------|
-| GET    | `/unidades`                           | admin: todas · vecino: las suyas |
-| GET    | `/unidades/:id`                       | admin: cualquiera · vecino: sólo las suyas (404 si no) |
+| GET    | `/unidades`                           | admin: las de sus consorcios · vecino: las suyas |
+| GET    | `/unidades/:id`                       | admin: de sus consorcios · vecino: sólo las suyas (404 si no) |
 | POST   | `/unidades`                           | administrador |
 | PATCH  | `/unidades/:id`                       | administrador (`activa: false` la da de baja) |
 | GET    | `/unidades/:id/vinculos`              | administrador |
-| POST   | `/unidades/:id/vinculos`              | administrador: vincula un vecino |
+| POST   | `/unidades/:id/vinculos`              | administrador: vincula un vecino existente (`usuarioId`) o lo da de alta (`nuevoUsuario`) |
 | DELETE | `/unidades/:id/vinculos/:vinculoId`   | administrador: termina el vínculo |
 
 Filtros de `GET /unidades`: `consorcioId`, `incluirInactivas`. Cada unidad trae
@@ -297,6 +327,11 @@ Reglas:
   revisa en el alta, al cambiar el coeficiente y al reactivar una unidad.
 - El **consorcio de una unidad no se cambia**: arrastraría boletas y reclamos
   del otro edificio.
+- **Alta del vecino.** Con `nuevoUsuario: { nombre, apellido, email, password,
+  dni?, telefono? }` se crean la cuenta y el vínculo en una transacción: un
+  vecino sin unidad no vería nada y ningún administrador lo encontraría. Si el
+  email ya existe responde 409; a esa persona se la busca con
+  `GET /usuarios?email=` y se la vincula por `usuarioId`.
 - Un **vínculo** une a un usuario con rol `VECINO` y una unidad activa, como
   `PROPIETARIO` o `INQUILINO`. Vincular a un administrador lo haría pasar por
   vecino en reclamos.
@@ -354,7 +389,7 @@ lo asigna a un proveedor, responde sobre la línea de tiempo y lo cierra.
 
 | Método | Ruta                      | Quién                  |
 |--------|---------------------------|------------------------|
-| GET    | `/reclamos`               | admin: todos · vecino: los de sus unidades |
+| GET    | `/reclamos`               | admin: los de sus consorcios · vecino: los de sus unidades |
 | GET    | `/reclamos/resumen`       | totales por estado y tiempo medio de resolución |
 | GET    | `/reclamos/:id`           | detalle con adjuntos y línea de tiempo |
 | POST   | `/reclamos`               | alta |
@@ -388,8 +423,8 @@ Las tres primeras las impone la base y el código las respeta, no las duplica:
 - La **categoría** tiene que ser del consorcio del reclamo o compartida, y el
   **proveedor** además tiene que estar activo. La FK sólo garantiza que
   existan; una categoría o un proveedor de otro edificio devuelve 400.
-- Donde dice "administrador" vale también para el **superadmin**: ve todos los
-  reclamos, las notas internas y puede gestionarlos.
+- Donde dice "administrador" vale también para el **superadmin**, que además
+  ve los reclamos de todos los consorcios.
 
 ### Línea de tiempo
 
@@ -459,7 +494,7 @@ El estado `PRORRATEO` del enum no se usa.
 | POST   | `/liquidaciones/:id/previsualizar`          | administrador |
 | POST   | `/liquidaciones/:id/emitir`                 | administrador |
 | POST   | `/liquidaciones/:id/cerrar`                 | administrador |
-| GET    | `/boletas`                                  | grilla de cobranzas, paginada · admin: todas · vecino: las emitidas de sus unidades |
+| GET    | `/boletas`                                  | grilla de cobranzas, paginada · admin: las de sus consorcios · vecino: las emitidas de sus unidades |
 | GET    | `/boletas/resumen`                          | emitido, cobrado, saldo, intereses y el conteo de cada solapa |
 | GET    | `/boletas/exportar`                         | la grilla en CSV, sin paginar |
 | POST   | `/boletas/recordatorios`                    | administrador: avisa a quienes tienen saldo |
@@ -626,7 +661,7 @@ antes de cada lectura de boletas, sin cron.
 
 | Método | Ruta                              | Quién |
 |--------|-----------------------------------|-------|
-| GET    | `/pagos`                          | admin: todos · vecino: los de sus unidades (filtros `boletaId`, `unidadId`, `estado`) |
+| GET    | `/pagos`                          | admin: los de sus consorcios · vecino: los de sus unidades (filtros `boletaId`, `unidadId`, `estado`) |
 | GET    | `/pagos/:id`                      | detalle con su unidad y su boleta; al vecino, 404 si no es de una unidad suya |
 | GET    | `/pagos/:id/recibo`               | el recibo en PDF, sólo de un pago aprobado |
 | POST   | `/pagos`                          | administrador: pago manual `{ boletaId, monto, medio, fechaPago? }` |
@@ -691,7 +726,7 @@ al que debe expensas).
 
 | Método | Ruta                                       | Quién |
 |--------|--------------------------------------------|-------|
-| GET    | `/amenities`                               | admin: todos · vecino: los activos de los consorcios donde vive |
+| GET    | `/amenities`                               | admin: los de sus consorcios · vecino: los activos de los consorcios donde vive |
 | GET    | `/amenities/:id`                           | idem; ajeno al vecino, 404 |
 | POST   | `/amenities`                               | administrador |
 | PATCH  | `/amenities/:id`                           | administrador (`activo: false` lo da de baja) |
@@ -699,7 +734,7 @@ al que debe expensas).
 | GET    | `/amenities/:id/bloqueos`                  | administrador (filtros `desde`, `hasta`) |
 | POST   | `/amenities/:id/bloqueos`                  | administrador |
 | DELETE | `/amenities/:id/bloqueos/:bloqueoId`       | administrador |
-| GET    | `/reservas`                                | admin: todas · vecino: las de sus unidades |
+| GET    | `/reservas`                                | admin: las de sus consorcios · vecino: las de sus unidades |
 | GET    | `/reservas/:id`                            | idem; ajena al vecino, 404 |
 | POST   | `/reservas`                                | vecino sobre su unidad · admin indicando `unidadId` |
 | PATCH  | `/reservas/:id/aprobar`                    | administrador |
@@ -873,8 +908,9 @@ no corresponde, y hace que cada pantalla pueda confiar en lo que va a recibir.
   comprobante de un gasto y el acta de una asamblea; una URL externa o de otro
   destino responde 400.
 - `DELETE /archivos?url=…` borra un archivo propio —la foto que el vecino saca
-  y descarta antes de mandar el reclamo—. El vecino sólo borra las suyas; quien
-  administra, cualquiera.
+  y descarta antes de mandar el reclamo—. Cada uno borra sólo lo que subió y
+  el superadmin, cualquiera: la ruta dice quién lo subió pero no de qué
+  consorcio es.
 - Sin las variables de entorno configuradas, responde 503 y el resto de la app
   anda igual, igual que Mercado Pago.
 

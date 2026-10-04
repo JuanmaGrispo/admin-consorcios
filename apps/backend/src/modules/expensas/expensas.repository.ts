@@ -36,8 +36,10 @@ export interface AlcanceBoletas {
   /** Sólo las que todavía deben algo: para los recordatorios. */
   conSaldo?: boolean;
   buscar?: string;
-  /** Acota a las unidades del vecino; sin él, todas (administrador). */
+  /** Acota a las unidades del vecino. */
   unidadIds?: string[];
+  /** Acota a los consorcios del administrador; sin él, todos (superadmin). */
+  consorcioIds?: string[];
   soloEmitidas: boolean;
 }
 
@@ -90,13 +92,17 @@ export class ExpensasRepository {
 
   // ── Liquidaciones ──────────────────────────────────────────────────────────
 
-  listar(query: ListarLiquidacionesQuery): Promise<Liquidacion[]> {
+  listar(query: ListarLiquidacionesQuery, consorcioIds?: string[]): Promise<Liquidacion[]> {
     const qb = this.liquidaciones
       .createQueryBuilder('l')
       .loadRelationCountAndMap('l.cantidadGastos', 'l.gastos')
       .loadRelationCountAndMap('l.cantidadBoletas', 'l.boletas')
       .orderBy('l.periodo', 'DESC');
     if (query.consorcioId) qb.andWhere('l.consorcioId = :c', { c: query.consorcioId });
+    if (consorcioIds) {
+      if (consorcioIds.length === 0) qb.andWhere('1 = 0');
+      else qb.andWhere('l.consorcioId IN (:...consorcioIds)', { consorcioIds });
+    }
     if (query.estado) qb.andWhere('l.estado = :e', { e: query.estado });
     return qb.getMany();
   }
@@ -419,6 +425,15 @@ export class ExpensasRepository {
       // `IN ()` es un error de sintaxis en Postgres: sin unidades no ve nada.
       if (alcance.unidadIds.length === 0) qb.andWhere('1 = 0');
       else qb.andWhere('b.unidadId IN (:...unidades)', { unidades: alcance.unidadIds });
+    }
+    if (alcance.consorcioIds) {
+      if (alcance.consorcioIds.length === 0) qb.andWhere('1 = 0');
+      else {
+        qb.andWhere(
+          `b.liquidacionId IN (SELECT id FROM liquidacion WHERE consorcio_id IN (:...consorcioIds))`,
+          { consorcioIds: alcance.consorcioIds },
+        );
+      }
     }
     // El vecino no ve previsualizaciones: todavía pueden cambiar.
     if (alcance.soloEmitidas) {

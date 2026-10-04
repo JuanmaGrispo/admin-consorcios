@@ -36,13 +36,16 @@ export class RubrosGastoController {
     description: 'Con `consorcioId`, los de ese consorcio más los compartidos.',
   })
   @ApiQuery({ name: 'consorcioId', required: false, format: 'uuid' })
-  listar(@Query('consorcioId', new ParseUUIDPipe({ optional: true })) consorcioId?: string) {
-    return this.rubros.listar(consorcioId);
+  listar(
+    @UsuarioActual() usuario: Usuario,
+    @Query('consorcioId', new ParseUUIDPipe({ optional: true })) consorcioId?: string,
+  ) {
+    return this.rubros.listar(usuario, consorcioId);
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.rubros.findOne(id);
+  findOne(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.rubros.findOne(usuario, id);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)

@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CategoriaReclamo, RolUsuario } from '../../database/entities';
+import { gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { CategoriasReclamoRepository } from './categorias-reclamo.repository';
@@ -19,13 +20,16 @@ export class CategoriasReclamoService {
     private readonly consorcios: ConsorciosService,
   ) {}
 
-  listar(consorcioId?: string): Promise<CategoriaReclamo[]> {
-    return this.categorias.listar(consorcioId);
+  async listar(usuario: UsuarioActual, consorcioId?: string): Promise<CategoriaReclamo[]> {
+    return this.categorias.listar(consorcioId, await this.consorcios.idsVisibles(usuario));
   }
 
-  async findOne(id: string): Promise<CategoriaReclamo> {
+  async findOne(usuario: UsuarioActual, id: string): Promise<CategoriaReclamo> {
     const categoria = await this.categorias.findById(id);
-    if (!categoria) throw new NotFoundException(`La categoría ${id} no existe`);
+    const visibles = categoria?.consorcioId ? await this.consorcios.idsVisibles(usuario) : undefined;
+    if (!categoria || (visibles && !visibles.includes(categoria.consorcioId!))) {
+      throw new NotFoundException(`La categoría ${id} no existe`);
+    }
     return categoria;
   }
 
@@ -35,7 +39,9 @@ export class CategoriasReclamoService {
   ): Promise<CategoriaReclamo> {
     const consorcioId = dto.consorcioId ?? null;
     if (consorcioId) {
-      // 404 si el consorcio no existe.
+      if (!gestiona(usuario, consorcioId)) {
+        throw new NotFoundException(`Consorcio ${consorcioId} no existe`);
+      }
       await this.consorcios.findOne(consorcioId);
     } else {
       this.exigirSuperAdmin(usuario);
@@ -43,7 +49,7 @@ export class CategoriasReclamoService {
     await this.exigirNombreLibre(dto.nombre, consorcioId);
 
     const creada = await this.categorias.create(dto);
-    return this.findOne(creada.id);
+    return this.findOne(usuario, creada.id);
   }
 
   async update(
@@ -51,7 +57,7 @@ export class CategoriasReclamoService {
     id: string,
     dto: UpdateCategoriaReclamoDto,
   ): Promise<CategoriaReclamo> {
-    const categoria = await this.findOne(id);
+    const categoria = await this.findOne(usuario, id);
     if (categoria.consorcioId === null) this.exigirSuperAdmin(usuario);
 
     if (dto.nombre !== undefined && dto.nombre.toLowerCase() !== categoria.nombre.toLowerCase()) {
@@ -65,7 +71,7 @@ export class CategoriasReclamoService {
    * con reclamos se queda: sacarla dejaría esos reclamos sin clasificar.
    */
   async remove(usuario: UsuarioActual, id: string): Promise<void> {
-    const categoria = await this.findOne(id);
+    const categoria = await this.findOne(usuario, id);
     if (categoria.consorcioId === null) this.exigirSuperAdmin(usuario);
 
     const enUso = await this.categorias.contarReclamos(id);

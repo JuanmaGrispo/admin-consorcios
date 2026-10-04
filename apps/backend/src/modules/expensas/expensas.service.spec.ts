@@ -26,7 +26,8 @@ import type { ExpensasRepository } from './expensas.repository';
 import { ExpensasService, vencimientoPorDefecto } from './expensas.service';
 import type { BoletaCalculada } from './prorrateo';
 
-const admin: UsuarioActual = { id: 'a1', email: 'a@x', rol: RolUsuario.ADMINISTRADOR };
+const admin: UsuarioActual = { id: 'a1', email: 'a@x', rol: RolUsuario.ADMINISTRADOR, consorcioIds: ['c1'] };
+const adminAjeno: UsuarioActual = { id: 'a2', email: 'b@x', rol: RolUsuario.ADMINISTRADOR, consorcioIds: ['c2'] };
 const vecino: UsuarioActual = { id: 'v1', email: 'v@x', rol: RolUsuario.VECINO };
 
 const CONSORCIO = {
@@ -194,7 +195,7 @@ describe('ExpensasService', () => {
   /** Una liquidación con un gasto de $1.000, lista para previsualizar. */
   async function liquidacionConGasto(periodo = '2026-10') {
     const l = await service.create(admin, { consorcioId: 'c1', periodo });
-    await service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'Luz', monto: 1_000 });
+    await service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'Luz', monto: 1_000 });
     return l;
   }
 
@@ -204,6 +205,20 @@ describe('ExpensasService', () => {
       assert.equal(l.periodo, '2026-10-01');
       assert.equal(l.fechaVencimiento, '2026-11-10');
       assert.equal(l.creadaPorId, 'a1');
+    });
+
+    it('el administrador de otro consorcio no la ve, no la toca ni liquida ahí', async () => {
+      const l = await liquidacionConGasto();
+      await assert.rejects(service.findOne(adminAjeno, l.id), NotFoundException);
+      await assert.rejects(service.previsualizar(adminAjeno, l.id), NotFoundException);
+      await assert.rejects(
+        service.agregarGasto(adminAjeno, l.id, { rubroId: 'r1', descripcion: 'X', monto: 1 }),
+        NotFoundException,
+      );
+      await assert.rejects(
+        service.create(adminAjeno, { consorcioId: 'c1', periodo: '2026-11' }),
+        NotFoundException,
+      );
     });
 
     it('una sola por consorcio y período', async () => {
@@ -216,8 +231,8 @@ describe('ExpensasService', () => {
 
     it('no liquida un período anterior al último emitido', async () => {
       const l = await liquidacionConGasto('2026-10');
-      await service.previsualizar(l.id);
-      await service.emitir(l.id);
+      await service.previsualizar(admin, l.id);
+      await service.emitir(admin, l.id);
       await assert.rejects(
         service.create(admin, { consorcioId: 'c1', periodo: '2026-09' }),
         BadRequestException,
@@ -236,7 +251,7 @@ describe('ExpensasService', () => {
     it('el comprobante tiene que venir de archivos', async () => {
       const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
       await assert.rejects(
-        service.agregarGasto(l.id, {
+        service.agregarGasto(admin, l.id, {
           rubroId: 'r1',
           descripcion: 'X',
           monto: 10,
@@ -249,48 +264,48 @@ describe('ExpensasService', () => {
     it('guarda un comprobante subido a comprobantes', async () => {
       const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
       const url = 'https://storage/comprobantes/a1/f.pdf';
-      const g = await service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'X', monto: 10, comprobanteUrl: url });
+      const g = await service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'X', monto: 10, comprobanteUrl: url });
       assert.equal(g.comprobanteUrl, url);
     });
 
     it('al editar también exige que el comprobante venga de archivos', async () => {
       const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
-      const g = await service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'X', monto: 10 });
+      const g = await service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'X', monto: 10 });
       await assert.rejects(
-        service.actualizarGasto(l.id, g.id, { comprobanteUrl: 'https://otro.com/f.pdf' }),
+        service.actualizarGasto(admin, l.id, g.id, { comprobanteUrl: 'https://otro.com/f.pdf' }),
         BadRequestException,
       );
     });
 
     it('sin naturaleza toma la del rubro', async () => {
       const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
-      const g = await service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'X', monto: 10 });
+      const g = await service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'X', monto: 10 });
       assert.equal(g.naturaleza, NaturalezaGasto.ORDINARIO);
     });
 
     it('las cuotas van juntas', async () => {
       const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
       await assert.rejects(
-        service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'X', monto: 10, cuotaNumero: 2 }),
+        service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'X', monto: 10, cuotaNumero: 2 }),
         BadRequestException,
       );
       await assert.rejects(
-        service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'X', monto: 10, cuotaNumero: 7, cuotaTotal: 6 }),
+        service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'X', monto: 10, cuotaNumero: 7, cuotaTotal: 6 }),
         BadRequestException,
       );
     });
 
     it('un gasto nuevo con la previsualización abierta recalcula las boletas', async () => {
       const l = await liquidacionConGasto();
-      await service.previsualizar(l.id);
-      await service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'Agua', monto: 500 });
+      await service.previsualizar(admin, l.id);
+      await service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'Agua', monto: 500 });
       assert.deepEqual(db.boletas.get(l.id)!.map((b) => b.total), [600, 900]);
     });
 
     it('borrar el último gasto vuelve la liquidación a borrador', async () => {
       const l = await liquidacionConGasto();
-      await service.previsualizar(l.id);
-      await service.borrarGasto(l.id, 'g1');
+      await service.previsualizar(admin, l.id);
+      await service.borrarGasto(admin, l.id, 'g1');
       assert.equal(db.liquidaciones[0].estado, EstadoLiquidacion.BORRADOR);
       assert.deepEqual(db.boletas.get(l.id), []);
     });
@@ -298,7 +313,7 @@ describe('ExpensasService', () => {
     it('un gasto de otra liquidación da 404', async () => {
       const l = await liquidacionConGasto();
       const otra = await service.create(admin, { consorcioId: 'c1', periodo: '2026-11' });
-      await assert.rejects(service.borrarGasto(otra.id, 'g1'), NotFoundException);
+      await assert.rejects(service.borrarGasto(admin, otra.id, 'g1'), NotFoundException);
       assert.equal(l.id, 'l1');
     });
 
@@ -307,7 +322,7 @@ describe('ExpensasService', () => {
 
       it('vincula un reclamo y una votación aprobada del consorcio', async () => {
         const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
-        const g = await service.agregarGasto(l.id, { ...gasto, reclamoId: 'rc1', votacionId: 'vt1' });
+        const g = await service.agregarGasto(admin, l.id, { ...gasto, reclamoId: 'rc1', votacionId: 'vt1' });
         assert.equal(g.reclamoId, 'rc1');
         assert.equal(g.votacionId, 'vt1');
       });
@@ -315,7 +330,7 @@ describe('ExpensasService', () => {
       it('rechaza un reclamo de otro consorcio', async () => {
         const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
         await assert.rejects(
-          service.agregarGasto(l.id, { ...gasto, reclamoId: 'rc-ajeno' }),
+          service.agregarGasto(admin, l.id, { ...gasto, reclamoId: 'rc-ajeno' }),
           BadRequestException,
         );
       });
@@ -324,7 +339,7 @@ describe('ExpensasService', () => {
         const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
         for (const votacionId of ['vt-rechazada', 'vt-ajena', 'vt-inexistente']) {
           await assert.rejects(
-            service.agregarGasto(l.id, { ...gasto, votacionId }),
+            service.agregarGasto(admin, l.id, { ...gasto, votacionId }),
             BadRequestException,
           );
         }
@@ -332,8 +347,8 @@ describe('ExpensasService', () => {
 
       it('null desvincula sin validar', async () => {
         const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
-        const g = await service.agregarGasto(l.id, { ...gasto, reclamoId: 'rc1' });
-        const actualizado = await service.actualizarGasto(l.id, g.id, { reclamoId: null });
+        const g = await service.agregarGasto(admin, l.id, { ...gasto, reclamoId: 'rc1' });
+        const actualizado = await service.actualizarGasto(admin, l.id, g.id, { reclamoId: null });
         assert.equal(actualizado.reclamoId, null);
       });
     });
@@ -342,13 +357,13 @@ describe('ExpensasService', () => {
   describe('previsualizar', () => {
     it('sin gastos no hay nada que calcular', async () => {
       const l = await service.create(admin, { consorcioId: 'c1', periodo: '2026-10' });
-      await assert.rejects(service.previsualizar(l.id), BadRequestException);
+      await assert.rejects(service.previsualizar(admin, l.id), BadRequestException);
     });
 
     it('por coeficiente exige que sumen 100%', async () => {
       db.unidades[1].coeficiente = 50;
       const l = await liquidacionConGasto();
-      await assert.rejects(service.previsualizar(l.id), /suman 90%/);
+      await assert.rejects(service.previsualizar(admin, l.id), /suman 90%/);
     });
 
     it('por partes iguales no mira los coeficientes', async () => {
@@ -358,14 +373,14 @@ describe('ExpensasService', () => {
         periodo: '2026-10',
         criterioProrrateo: CriterioProrrateo.PARTES_IGUALES,
       });
-      await service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'Luz', monto: 1_000 });
-      await service.previsualizar(l.id);
+      await service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'Luz', monto: 1_000 });
+      await service.previsualizar(admin, l.id);
       assert.deepEqual(db.boletas.get(l.id)!.map((b) => b.total), [500, 500]);
     });
 
     it('reparte y deja la liquidación en PREVISUALIZACION', async () => {
       const l = await liquidacionConGasto();
-      await service.previsualizar(l.id);
+      await service.previsualizar(admin, l.id);
       assert.equal(db.liquidaciones[0].estado, EstadoLiquidacion.PREVISUALIZACION);
       assert.deepEqual(db.boletas.get(l.id)!.map((b) => b.total), [400, 600]);
     });
@@ -374,7 +389,7 @@ describe('ExpensasService', () => {
       // Venció el 10/10 y hoy es 9/11: 30 días al 3% mensual.
       db.deudas = [{ unidadId: 'u1', saldo: 1_000, fechaVencimiento: '2026-10-10' }];
       const l = await liquidacionConGasto();
-      await service.previsualizar(l.id);
+      await service.previsualizar(admin, l.id);
       const [u1] = db.boletas.get(l.id)!;
       assert.equal(u1.saldoAnterior, 1_000);
       assert.equal(u1.interesesMora, 30);
@@ -383,11 +398,11 @@ describe('ExpensasService', () => {
 
     it('no toca una liquidación emitida', async () => {
       const l = await liquidacionConGasto();
-      await service.previsualizar(l.id);
-      await service.emitir(l.id);
-      await assert.rejects(service.previsualizar(l.id), BadRequestException);
+      await service.previsualizar(admin, l.id);
+      await service.emitir(admin, l.id);
+      await assert.rejects(service.previsualizar(admin, l.id), BadRequestException);
       await assert.rejects(
-        service.agregarGasto(l.id, { rubroId: 'r1', descripcion: 'X', monto: 1 }),
+        service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'X', monto: 1 }),
         BadRequestException,
       );
     });
@@ -396,20 +411,20 @@ describe('ExpensasService', () => {
   describe('emitir', () => {
     it('exige previsualizar antes', async () => {
       const l = await liquidacionConGasto();
-      await assert.rejects(service.emitir(l.id), /Previsualizá/);
+      await assert.rejects(service.emitir(admin, l.id), /Previsualizá/);
     });
 
     it('no emite si hay un período anterior pendiente', async () => {
       await liquidacionConGasto('2026-09');
       const l = await liquidacionConGasto('2026-10');
-      await service.previsualizar(l.id);
-      await assert.rejects(service.emitir(l.id), /período anterior sin emitir/);
+      await service.previsualizar(admin, l.id);
+      await assert.rejects(service.emitir(admin, l.id), /período anterior sin emitir/);
     });
 
     it('congela, suma el total emitido y avisa a cada vecino', async () => {
       const l = await liquidacionConGasto();
-      await service.previsualizar(l.id);
-      const emitida = await service.emitir(l.id);
+      await service.previsualizar(admin, l.id);
+      const emitida = await service.emitir(admin, l.id);
       assert.equal(emitida.estado, EstadoLiquidacion.EMITIDA);
       assert.equal(emitida.totalEmitido, 1_000);
       assert.ok(emitida.fechaEmision instanceof Date);
@@ -419,18 +434,18 @@ describe('ExpensasService', () => {
     it('un aviso que falla no corta la emisión', async () => {
       db.vecinos.set('u1', ['falla', 'v1']);
       const l = await liquidacionConGasto();
-      await service.previsualizar(l.id);
-      const emitida = await service.emitir(l.id);
+      await service.previsualizar(admin, l.id);
+      const emitida = await service.emitir(admin, l.id);
       assert.equal(emitida.estado, EstadoLiquidacion.EMITIDA);
       assert.ok(entorno.avisos.some((a) => a.destinatarioId === 'v1'));
     });
 
     it('sólo se cierra una emitida', async () => {
       const l = await liquidacionConGasto();
-      await assert.rejects(service.cerrar(l.id), BadRequestException);
-      await service.previsualizar(l.id);
-      await service.emitir(l.id);
-      assert.equal((await service.cerrar(l.id)).estado, EstadoLiquidacion.CERRADA);
+      await assert.rejects(service.cerrar(admin, l.id), BadRequestException);
+      await service.previsualizar(admin, l.id);
+      await service.emitir(admin, l.id);
+      assert.equal((await service.cerrar(admin, l.id)).estado, EstadoLiquidacion.CERRADA);
     });
   });
 
@@ -441,7 +456,7 @@ describe('ExpensasService', () => {
         unidadId: 'u1',
         total: 400,
         ajusteManual: 0,
-        liquidacion: { estado },
+        liquidacion: { estado, consorcioId: 'c1' },
         ...datos,
       }) as Boleta;
 
@@ -455,6 +470,15 @@ describe('ExpensasService', () => {
       await assert.rejects(service.findBoleta(vecino, 'b1'), NotFoundException);
     });
 
+    it('al administrador de otro consorcio, la boleta le da 404', async () => {
+      db.boletaGuardada = boleta(EstadoLiquidacion.EMITIDA);
+      await assert.rejects(service.findBoleta(adminAjeno, 'b1'), NotFoundException);
+      await assert.rejects(
+        service.ajustarBoleta(adminAjeno, 'b1', { ajusteManual: 10, motivoAjuste: 'x' }),
+        NotFoundException,
+      );
+    });
+
     it('el vecino ve la suya emitida', async () => {
       db.boletaGuardada = boleta(EstadoLiquidacion.EMITIDA);
       assert.equal((await service.findBoleta(vecino, 'b1')).id, 'b1');
@@ -462,20 +486,20 @@ describe('ExpensasService', () => {
 
     it('un ajuste pide motivo', async () => {
       db.boletaGuardada = boleta(EstadoLiquidacion.PREVISUALIZACION);
-      await assert.rejects(service.ajustarBoleta('b1', { ajusteManual: -50 }), /motivo/);
+      await assert.rejects(service.ajustarBoleta(admin, 'b1', { ajusteManual: -50 }), /motivo/);
     });
 
     it('un ajuste no puede dejar el total negativo', async () => {
       db.boletaGuardada = boleta(EstadoLiquidacion.PREVISUALIZACION);
       await assert.rejects(
-        service.ajustarBoleta('b1', { ajusteManual: -401, motivoAjuste: 'x' }),
+        service.ajustarBoleta(admin, 'b1', { ajusteManual: -401, motivoAjuste: 'x' }),
         /negativo/,
       );
     });
 
     it('reemplaza el ajuste anterior al recalcular el total', async () => {
       db.boletaGuardada = boleta(EstadoLiquidacion.PREVISUALIZACION, { total: 350, ajusteManual: -50 });
-      await service.ajustarBoleta('b1', { ajusteManual: 25.5, motivoAjuste: 'Cargo por llave' });
+      await service.ajustarBoleta(admin, 'b1', { ajusteManual: 25.5, motivoAjuste: 'Cargo por llave' });
       const [id, datos, linea] = db.ajusteAplicado as [string, { total: number }, { monto: number }];
       assert.equal(id, 'b1');
       assert.equal(datos.total, 425.5);
@@ -485,7 +509,7 @@ describe('ExpensasService', () => {
     it('no se ajusta una boleta emitida', async () => {
       db.boletaGuardada = boleta(EstadoLiquidacion.EMITIDA);
       await assert.rejects(
-        service.ajustarBoleta('b1', { ajusteManual: 10, motivoAjuste: 'x' }),
+        service.ajustarBoleta(admin, 'b1', { ajusteManual: 10, motivoAjuste: 'x' }),
         BadRequestException,
       );
     });
@@ -494,7 +518,7 @@ describe('ExpensasService', () => {
       const emitida = (datos: Partial<Boleta> = {}) =>
         ({
           ...boleta(EstadoLiquidacion.EMITIDA),
-          liquidacion: { estado: EstadoLiquidacion.EMITIDA, periodo: '2026-10-01', fechaVencimiento: '2026-11-10' },
+          liquidacion: { estado: EstadoLiquidacion.EMITIDA, consorcioId: 'c1', periodo: '2026-10-01', fechaVencimiento: '2026-11-10' },
           ...datos,
         }) as Boleta;
 

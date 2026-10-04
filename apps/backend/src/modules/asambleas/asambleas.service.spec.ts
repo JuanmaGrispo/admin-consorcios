@@ -21,7 +21,18 @@ import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { AsambleasRepository } from './asambleas.repository';
 import { AsambleasService } from './asambleas.service';
 
-const admin: UsuarioActual = { id: 'a1', email: 'a@x', rol: RolUsuario.ADMINISTRADOR };
+const admin: UsuarioActual = {
+  id: 'a1',
+  email: 'a@x',
+  rol: RolUsuario.ADMINISTRADOR,
+  consorcioIds: ['c1'],
+};
+const adminAjeno: UsuarioActual = {
+  id: 'a2',
+  email: 'b@x',
+  rol: RolUsuario.ADMINISTRADOR,
+  consorcioIds: ['c2'],
+};
 const vecino: UsuarioActual = { id: 'v1', email: 'v@x', rol: RolUsuario.VECINO };
 
 const FUTURO = new Date(Date.now() + 7 * 24 * 3600 * 1000);
@@ -181,6 +192,26 @@ describe('AsambleasService — crear y editar', () => {
   it('inexistente es 404', async () => {
     const { service } = crearService({ asamblea: null });
     await assert.rejects(service.findOne(admin, 'as1'), NotFoundException);
+  });
+});
+
+describe('AsambleasService — administrador de otro consorcio', () => {
+  it('lista sólo las de sus consorcios', async () => {
+    const { service, escrito } = crearService();
+    await service.listar(adminAjeno, {});
+    assert.deepEqual(escrito.listarFiltro, { consorcioIds: ['c2'], ocultarBorradores: false });
+  });
+
+  it('una asamblea ajena le da 404 y no la gestiona', async () => {
+    const { service } = crearService();
+    await assert.rejects(service.findOne(adminAjeno, 'as1'), NotFoundException);
+    await assert.rejects(service.convocar(adminAjeno, 'as1'), NotFoundException);
+    await assert.rejects(service.listarAsistencias(adminAjeno, 'as1'), NotFoundException);
+  });
+
+  it('no convoca en un consorcio ajeno', async () => {
+    const { service } = crearService();
+    await assert.rejects(service.crear(adminAjeno, crearDto()), NotFoundException);
   });
 });
 

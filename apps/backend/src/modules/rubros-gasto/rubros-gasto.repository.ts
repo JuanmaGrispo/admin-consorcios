@@ -13,10 +13,25 @@ export class RubrosGastoRepository {
   ) {}
 
   /** Con consorcio: los suyos más los compartidos. Sin consorcio: todos. */
-  listar(consorcioId?: string): Promise<RubroGasto[]> {
+  listar(consorcioId?: string, visibles?: string[]): Promise<RubroGasto[]> {
     const qb = this.repo.createQueryBuilder('r').orderBy('r.nombre', 'ASC');
     if (consorcioId) {
-      qb.where('r.consorcioId = :consorcioId', { consorcioId }).orWhere('r.consorcioId IS NULL');
+      qb.andWhere(
+        new Brackets((sub) =>
+          sub
+            .where('r.consorcioId = :consorcioId', { consorcioId })
+            .orWhere('r.consorcioId IS NULL'),
+        ),
+      );
+    }
+    // Los compartidos (`consorcio_id` NULL) los ve cualquiera.
+    if (visibles) {
+      qb.andWhere(
+        new Brackets((sub) => {
+          sub.where('r.consorcioId IS NULL');
+          if (visibles.length > 0) sub.orWhere('r.consorcioId IN (:...visibles)', { visibles });
+        }),
+      );
     }
     return qb.getMany();
   }

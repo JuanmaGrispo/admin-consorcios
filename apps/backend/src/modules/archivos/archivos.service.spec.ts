@@ -9,6 +9,7 @@ import { DestinoArchivo, TipoArchivo } from './tipos-archivo';
 
 const admin: UsuarioActual = { id: 'a1', email: 'a@x', rol: RolUsuario.ADMINISTRADOR };
 const vecino: UsuarioActual = { id: 'v1', email: 'v@x', rol: RolUsuario.VECINO };
+const superAdmin: UsuarioActual = { id: 's1', email: 's@x', rol: RolUsuario.SUPER_ADMIN };
 
 const PREFIJO = 'https://proyecto.supabase.co/storage/v1/object/public/domus/';
 
@@ -153,8 +154,16 @@ describe('ArchivosService', () => {
       assert.equal(entorno.borrados.length, 0);
     });
 
-    it('el administrador borra cualquiera', async () => {
-      await service.borrar(admin, `${PREFIJO}reclamos/otro-vecino/abc.jpg`);
+    it('el administrador no borra lo que subió otro', async () => {
+      await assert.rejects(
+        service.borrar(admin, `${PREFIJO}reclamos/otro-vecino/abc.jpg`),
+        BadRequestException,
+      );
+      assert.equal(entorno.borrados.length, 0);
+    });
+
+    it('el superadmin borra cualquiera', async () => {
+      await service.borrar(superAdmin, `${PREFIJO}reclamos/otro-vecino/abc.jpg`);
       assert.deepEqual(entorno.borrados, ['reclamos/otro-vecino/abc.jpg']);
     });
 

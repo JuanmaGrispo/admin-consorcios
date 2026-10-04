@@ -10,11 +10,11 @@ import {
   PrioridadReclamo,
   Reclamo,
   ReclamoEvento,
-  RolUsuario,
   TipoEventoReclamo,
 } from '../../database/entities';
 import { ArchivosService } from '../archivos/archivos.service';
 import { DestinoArchivo } from '../archivos/tipos-archivo';
+import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { CategoriasReclamoService } from '../categorias-reclamo/categorias-reclamo.service';
 import { ProveedoresService } from '../proveedores/proveedores.service';
@@ -23,16 +23,7 @@ import { CambiarEstadoDto } from './dto/cambiar-estado.dto';
 import { CrearReclamoDto } from './dto/crear-reclamo.dto';
 import { ListarReclamosQuery } from './dto/listar-reclamos.query';
 import { MensajeReclamoDto } from './dto/mensaje-reclamo.dto';
-import { ReclamosRepository } from './reclamos.repository';
-
-/**
- * Quién gestiona reclamos: el administrador y el superadmin, que tiene todos
- * los permisos de un administrador (la misma jerarquía que aplica RolesGuard).
- * Sin él, el superadmin quedaba tratado como un vecino sin unidades y no veía
- * ningún reclamo.
- */
-const esAdmin = (usuario: UsuarioActual) =>
-  usuario.rol === RolUsuario.ADMINISTRADOR || usuario.rol === RolUsuario.SUPER_ADMIN;
+import { type AlcanceReclamos, ReclamosRepository } from './reclamos.repository';
 
 @Injectable()
 export class ReclamosService {
@@ -47,10 +38,7 @@ export class ReclamosService {
   // ── Lectura ────────────────────────────────────────────────────────────────
 
   async listar(usuario: UsuarioActual, query: ListarReclamosQuery) {
-    const { items, total } = await this.reclamos.listar(
-      query,
-      await this.unidadesVisibles(usuario),
-    );
+    const { items, total } = await this.reclamos.listar(query, await this.alcance(usuario));
     const limite = query.limite ?? 20;
     return {
       items,
@@ -63,12 +51,12 @@ export class ReclamosService {
   /** Detalle con la timeline, recortada según quién mira. */
   async findOne(usuario: UsuarioActual, id: string) {
     const reclamo = await this.buscarConPermiso(usuario, id);
-    const eventos = await this.reclamos.findEventos(id, !esAdmin(usuario));
+    const eventos = await this.reclamos.findEventos(id, !esGestor(usuario));
     return { ...reclamo, eventos };
   }
 
   async resumen(usuario: UsuarioActual, consorcioId?: string) {
-    return this.reclamos.resumen(consorcioId, await this.unidadesVisibles(usuario));
+    return this.reclamos.resumen(consorcioId, await this.alcance(usuario));
   }
 
   // ── Alta ───────────────────────────────────────────────────────────────────
@@ -83,13 +71,15 @@ export class ReclamosService {
     const unidadId = await this.resolverUnidad(usuario, dto.unidadId);
 
     const unidad = await this.reclamos.findUnidad(unidadId);
-    if (!unidad) throw new NotFoundException(`La unidad ${unidadId} no existe`);
+    if (!unidad || (esGestor(usuario) && !gestiona(usuario, unidad.consorcioId))) {
+      throw new NotFoundException(`La unidad ${unidadId} no existe`);
+    }
 
     await this.categorias.exigirUsable(dto.categoriaId, unidad.consorcioId);
 
     // La prioridad la fija quien administra. Si la pudiera elegir el vecino,
     // todos los reclamos entrarían en ALTA y el orden dejaría de significar algo.
-    const prioridad = esAdmin(usuario)
+    const prioridad = esGestor(usuario)
       ? (dto.prioridad ?? PrioridadReclamo.MEDIA)
       : PrioridadReclamo.MEDIA;
 
@@ -132,7 +122,7 @@ export class ReclamosService {
 
     // Sólo el administrador escribe notas internas; el vecino no tiene una
     // timeline privada donde esconderlas.
-    const interna = esAdmin(usuario) && dto.interna === true;
+    const interna = esGestor(usuario) && dto.interna === true;
 
     const evento = await this.reclamos.agregarEvento({
       reclamoId: reclamo.id,
@@ -142,7 +132,7 @@ export class ReclamosService {
       visibleParaVecino: !interna,
     });
 
-    if (!interna && esAdmin(usuario)) {
+    if (!interna && esGestor(usuario)) {
       await this.avisar(
         reclamo,
         `Respuesta en tu reclamo ${reclamo.codigo}`,
@@ -262,15 +252,9 @@ export class ReclamosService {
 
   // ── Auxiliares ─────────────────────────────────────────────────────────────
 
-  /**
-   * `undefined` para el administrador —ve todo— y la lista de unidades
-   * vinculadas para el vecino.
-   */
-  private async unidadesVisibles(
-    usuario: UsuarioActual,
-  ): Promise<string[] | undefined> {
-    if (esAdmin(usuario)) return undefined;
-    return this.reclamos.unidadesDelUsuario(usuario.id);
+  private async alcance(usuario: UsuarioActual): Promise<AlcanceReclamos> {
+    if (esGestor(usuario)) return { consorcios: consorciosGestionados(usuario) };
+    return { unidades: await this.reclamos.unidadesDelUsuario(usuario.id) };
   }
 
   private async buscarConPermiso(
@@ -278,13 +262,17 @@ export class ReclamosService {
     id: string,
   ): Promise<Reclamo> {
     const reclamo = await this.reclamos.findById(id);
+    // 404 y no 403: un 403 confirmaría que ese reclamo existe.
     if (!reclamo) throw new NotFoundException(`El reclamo ${id} no existe`);
-
-    if (esAdmin(usuario)) return reclamo;
+    if (esGestor(usuario)) {
+      if (!gestiona(usuario, reclamo.consorcioId)) {
+        throw new NotFoundException(`El reclamo ${id} no existe`);
+      }
+      return reclamo;
+    }
 
     const unidades = await this.reclamos.unidadesDelUsuario(usuario.id);
     if (!unidades.includes(reclamo.unidadId)) {
-      // 404 y no 403: un 403 confirmaría que ese reclamo existe.
       throw new NotFoundException(`El reclamo ${id} no existe`);
     }
     return reclamo;
@@ -298,7 +286,7 @@ export class ReclamosService {
     usuario: UsuarioActual,
     unidadPedida?: string,
   ): Promise<string> {
-    if (esAdmin(usuario)) {
+    if (esGestor(usuario)) {
       if (!unidadPedida) {
         throw new BadRequestException(
           'Indicá la unidad: un administrador no está vinculado a ninguna',

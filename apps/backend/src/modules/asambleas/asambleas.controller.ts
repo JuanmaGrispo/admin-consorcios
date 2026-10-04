@@ -130,8 +130,8 @@ export class AsambleasController {
   @Roles(RolUsuario.ADMINISTRADOR)
   @Get(':id/asistencias')
   @ApiOperation({ summary: 'Padrón completo de asistencia' })
-  listarAsistencias(@Param('id', ParseUUIDPipe) id: string) {
-    return this.asambleas.listarAsistencias(id);
+  listarAsistencias(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.asambleas.listarAsistencias(usuario, id);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)

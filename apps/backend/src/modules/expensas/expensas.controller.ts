@@ -43,15 +43,15 @@ export class ExpensasController {
   @Roles(RolUsuario.ADMINISTRADOR)
   @Get('liquidaciones')
   @ApiOperation({ summary: 'Lista liquidaciones', description: 'Con `cantidadGastos` y `cantidadBoletas`.' })
-  listar(@Query() query: ListarLiquidacionesQuery) {
-    return this.expensas.listar(query);
+  listar(@UsuarioActual() usuario: Usuario, @Query() query: ListarLiquidacionesQuery) {
+    return this.expensas.listar(usuario, query);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Get('liquidaciones/:id')
   @ApiOperation({ summary: 'Liquidación con sus gastos' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.expensas.findOne(id);
+  findOne(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.expensas.findOne(usuario, id);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
@@ -71,16 +71,16 @@ export class ExpensasController {
     summary: 'Cambia criterio de prorrateo o vencimiento',
     description: 'Sólo antes de emitir. Si estaba previsualizada, recalcula las boletas.',
   })
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateLiquidacionDto) {
-    return this.expensas.update(id, dto);
+  update(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateLiquidacionDto) {
+    return this.expensas.update(usuario, id, dto);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Delete('liquidaciones/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Borra una liquidación sin emitir', description: 'Con sus gastos y boletas.' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.expensas.remove(id);
+  remove(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.expensas.remove(usuario, id);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
@@ -91,8 +91,8 @@ export class ExpensasController {
     description:
       'Pasa a PREVISUALIZACION. Se puede repetir; los ajustes manuales se conservan.',
   })
-  previsualizar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.expensas.previsualizar(id);
+  previsualizar(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.expensas.previsualizar(usuario, id);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
@@ -103,16 +103,16 @@ export class ExpensasController {
     description:
       'Recalcula por última vez, congela las boletas y avisa a los vecinos. No se puede deshacer.',
   })
-  emitir(@Param('id', ParseUUIDPipe) id: string) {
-    return this.expensas.emitir(id);
+  emitir(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.expensas.emitir(usuario, id);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Post('liquidaciones/:id/cerrar')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cierra una liquidación emitida' })
-  cerrar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.expensas.cerrar(id);
+  cerrar(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.expensas.cerrar(usuario, id);
   }
 
   // ── Gastos ──
@@ -123,28 +123,30 @@ export class ExpensasController {
     summary: 'Carga un gasto',
     description: 'Sin `naturaleza`, toma la del rubro. Si estaba previsualizada, recalcula.',
   })
-  agregarGasto(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateGastoDto) {
-    return this.expensas.agregarGasto(id, dto);
+  agregarGasto(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateGastoDto) {
+    return this.expensas.agregarGasto(usuario, id, dto);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Patch('liquidaciones/:id/gastos/:gastoId')
   actualizarGasto(
+    @UsuarioActual() usuario: Usuario,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('gastoId', ParseUUIDPipe) gastoId: string,
     @Body() dto: UpdateGastoDto,
   ) {
-    return this.expensas.actualizarGasto(id, gastoId, dto);
+    return this.expensas.actualizarGasto(usuario, id, gastoId, dto);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Delete('liquidaciones/:id/gastos/:gastoId')
   @HttpCode(HttpStatus.NO_CONTENT)
   borrarGasto(
+    @UsuarioActual() usuario: Usuario,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('gastoId', ParseUUIDPipe) gastoId: string,
   ) {
-    return this.expensas.borrarGasto(id, gastoId);
+    return this.expensas.borrarGasto(usuario, id, gastoId);
   }
 
   // ── Boletas ──
@@ -224,7 +226,7 @@ export class ExpensasController {
     summary: 'Ajuste manual',
     description: 'Sólo en previsualización. El motivo es obligatorio y el vecino lo ve.',
   })
-  ajustarBoleta(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AjustarBoletaDto) {
-    return this.expensas.ajustarBoleta(id, dto);
+  ajustarBoleta(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AjustarBoletaDto) {
+    return this.expensas.ajustarBoleta(usuario, id, dto);
   }
 }

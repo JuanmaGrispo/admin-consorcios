@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Consorcio, RolUsuario } from '../../database/entities';
+import { consorciosGestionados, esGestor } from '../auth/alcance';
+import type { UsuarioActual } from '../auth/auth.types';
 import { UsuariosService } from '../usuarios/usuarios.service';
 import { ConsorciosRepository } from './consorcios.repository';
 import { CreateConsorcioDto } from './dto/create-consorcio.dto';
@@ -30,9 +32,23 @@ export class ConsorciosService {
     private readonly usuarios: UsuariosService,
   ) {}
 
-  async findAll(): Promise<ConsorcioConAdministrador[]> {
-    const filas = await this.consorcios.findAll();
+  async findAll(usuario: UsuarioActual): Promise<ConsorcioConAdministrador[]> {
+    const filas = await this.consorcios.findAll(this.alcance(usuario));
     return filas.map((c) => this.recortar(c));
+  }
+
+  /** `undefined` = todos. Para filtrar catálogos que también lee el vecino. */
+  async idsVisibles(usuario: UsuarioActual): Promise<string[] | undefined> {
+    if (esGestor(usuario)) return consorciosGestionados(usuario);
+    const propios = await this.consorcios.findAll({ vecinoId: usuario.id });
+    return propios.map((c) => c.id);
+  }
+
+  /** El de la API: un consorcio fuera del alcance responde como inexistente. */
+  async findVisible(usuario: UsuarioActual, id: string): Promise<ConsorcioConAdministrador> {
+    const [consorcio] = await this.consorcios.findAll({ ...this.alcance(usuario), id });
+    if (!consorcio) throw new NotFoundException(`Consorcio ${id} no existe`);
+    return this.recortar(consorcio);
   }
 
   async findOne(id: string): Promise<ConsorcioConAdministrador> {
@@ -74,6 +90,12 @@ export class ConsorciosService {
         'El administrador asignado tiene que ser un usuario activo con rol ADMINISTRADOR',
       );
     }
+  }
+
+  private alcance(usuario: UsuarioActual) {
+    return esGestor(usuario)
+      ? { ids: consorciosGestionados(usuario) }
+      : { vecinoId: usuario.id };
   }
 
   private recortar(consorcio: Consorcio): ConsorcioConAdministrador {

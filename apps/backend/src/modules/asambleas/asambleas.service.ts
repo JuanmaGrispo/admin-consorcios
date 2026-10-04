@@ -13,10 +13,10 @@ import {
   EstadoAsamblea,
   EstadoAsistencia,
   ModalidadAsamblea,
-  RolUsuario,
 } from '../../database/entities';
 import { ArchivosService } from '../archivos/archivos.service';
 import { DestinoArchivo } from '../archivos/tipos-archivo';
+import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { AsambleasRepository } from './asambleas.repository';
@@ -28,10 +28,6 @@ import { RegistrarAsistenciaDto } from './dto/registrar-asistencia.dto';
 import { ReemplazarOrdenDiaDto } from './dto/reemplazar-orden-dia.dto';
 import { UpdateAsambleaDto } from './dto/update-asamblea.dto';
 import { calcularQuorum, porcentajeDeQuorum } from './quorum';
-
-/** Mismo criterio que reclamos: el superadmin gestiona como un administrador. */
-const esAdmin = (usuario: UsuarioActual) =>
-  usuario.rol === RolUsuario.ADMINISTRADOR || usuario.rol === RolUsuario.SUPER_ADMIN;
 
 const QUORUM_POR_DEFECTO = 60;
 const ULTIMAS_CONFIRMACIONES = 10;
@@ -72,8 +68,8 @@ export class AsambleasService {
   // ── Consultas ──────────────────────────────────────────────────────────────
 
   async listar(usuario: UsuarioActual, query: ListarAsambleasQuery) {
-    const filtro = esAdmin(usuario)
-      ? { ocultarBorradores: false }
+    const filtro = esGestor(usuario)
+      ? { consorcioIds: consorciosGestionados(usuario), ocultarBorradores: false }
       : { consorcioIds: await this.asambleas.consorciosDelUsuario(usuario.id), ocultarBorradores: true };
 
     const asambleas = await this.asambleas.listar(query, filtro);
@@ -94,7 +90,7 @@ export class AsambleasService {
     const quorum =
       asistencias.length > 0 ? calcularQuorum(asistencias, asamblea.quorumRequerido) : null;
 
-    if (esAdmin(usuario)) {
+    if (esGestor(usuario)) {
       const ultimasConfirmaciones = asistencias
         .filter((a) => a.confirmadaAt)
         .sort((x, y) => (y.confirmadaAt as Date).getTime() - (x.confirmadaAt as Date).getTime())
@@ -116,8 +112,8 @@ export class AsambleasService {
     return this.asambleas.proximas(consorcioIds);
   }
 
-  async listarAsistencias(id: string) {
-    await this.exigirAsamblea(id);
+  async listarAsistencias(usuario: UsuarioActual, id: string) {
+    await this.exigirAsamblea(usuario, id);
     const asistencias = await this.asambleas.asistencias(id);
     return asistencias.map(vistaAsistencia);
   }
@@ -125,7 +121,9 @@ export class AsambleasService {
   // ── ABM ────────────────────────────────────────────────────────────────────
 
   async crear(usuario: UsuarioActual, dto: CreateAsambleaDto) {
-    // 404 si el consorcio no existe.
+    if (!gestiona(usuario, dto.consorcioId)) {
+      throw new NotFoundException(`Consorcio ${dto.consorcioId} no existe`);
+    }
     await this.consorcios.findOne(dto.consorcioId);
 
     const modalidad = dto.modalidad ?? ModalidadAsamblea.PRESENCIAL;
@@ -151,7 +149,7 @@ export class AsambleasService {
   }
 
   async editar(usuario: UsuarioActual, id: string, dto: UpdateAsambleaDto) {
-    const asamblea = await this.exigirAsamblea(id);
+    const asamblea = await this.exigirAsamblea(usuario, id);
     exigirEstado(asamblea, [EstadoAsamblea.BORRADOR], 'editar');
 
     // Se valida el resultado final, no sólo lo que vino en el PATCH.
@@ -176,14 +174,14 @@ export class AsambleasService {
   }
 
   async reemplazarOrdenDia(usuario: UsuarioActual, id: string, dto: ReemplazarOrdenDiaDto) {
-    const asamblea = await this.exigirAsamblea(id);
+    const asamblea = await this.exigirAsamblea(usuario, id);
     exigirEstado(asamblea, [EstadoAsamblea.BORRADOR], 'cambiar el orden del día de');
     await this.asambleas.reemplazarOrdenDia(id, dto.puntos);
     return this.findOne(usuario, id);
   }
 
-  async eliminar(_usuario: UsuarioActual, id: string): Promise<void> {
-    const asamblea = await this.exigirAsamblea(id);
+  async eliminar(usuario: UsuarioActual, id: string): Promise<void> {
+    const asamblea = await this.exigirAsamblea(usuario, id);
     exigirEstado(asamblea, [EstadoAsamblea.BORRADOR], 'eliminar');
     await this.asambleas.eliminar(id);
   }
@@ -195,7 +193,7 @@ export class AsambleasService {
    * Si después se edita una unidad, el quórum de esta asamblea no cambia.
    */
   async convocar(usuario: UsuarioActual, id: string) {
-    const asamblea = await this.exigirAsamblea(id);
+    const asamblea = await this.exigirAsamblea(usuario, id);
     exigirEstado(asamblea, [EstadoAsamblea.BORRADOR], 'convocar');
     if (!asamblea.puntoOrdenDias?.length) {
       throw new BadRequestException('Cargá al menos un punto del orden del día antes de convocar');
@@ -217,7 +215,7 @@ export class AsambleasService {
 
   /** No exige quórum: se puede esperar o pasar a segunda convocatoria. */
   async iniciar(usuario: UsuarioActual, id: string) {
-    const asamblea = await this.exigirAsamblea(id);
+    const asamblea = await this.exigirAsamblea(usuario, id);
     exigirEstado(asamblea, [EstadoAsamblea.CONVOCADA], 'iniciar');
     await this.asambleas.actualizar(id, { estado: EstadoAsamblea.EN_CURSO });
     return this.findOne(usuario, id);
@@ -225,7 +223,7 @@ export class AsambleasService {
 
   /** El estado final lo decide el quórum alcanzado, no el administrador. */
   async cerrar(usuario: UsuarioActual, id: string) {
-    const asamblea = await this.exigirAsamblea(id);
+    const asamblea = await this.exigirAsamblea(usuario, id);
     exigirEstado(asamblea, [EstadoAsamblea.EN_CURSO], 'cerrar');
     if ((await this.asambleas.votacionesAbiertas(id)) > 0) {
       throw new ConflictException('Cerrá primero las votaciones abiertas de esta asamblea');
@@ -239,7 +237,7 @@ export class AsambleasService {
 
   /** El PDF se sube antes con `POST /archivos?destino=actas`; acá sólo se guarda su URL. */
   async cargarActa(usuario: UsuarioActual, id: string, dto: CargarActaDto) {
-    const asamblea = await this.exigirAsamblea(id);
+    const asamblea = await this.exigirAsamblea(usuario, id);
     exigirEstado(asamblea, CERRADAS, 'cargar el acta de');
     this.archivos.exigirPropia(dto.actaUrl, DestinoArchivo.ACTAS);
     await this.asambleas.actualizar(id, { actaUrl: dto.actaUrl });
@@ -249,7 +247,7 @@ export class AsambleasService {
   // ── Asistencia ─────────────────────────────────────────────────────────────
 
   async confirmarAsistencia(usuario: UsuarioActual, id: string, dto: ConfirmarAsistenciaDto) {
-    if (esAdmin(usuario)) {
+    if (esGestor(usuario)) {
       throw new ForbiddenException('El administrador registra la asistencia desde el padrón');
     }
     const asamblea = await this.buscarConPermiso(usuario, id);
@@ -273,7 +271,7 @@ export class AsambleasService {
     unidadId: string,
     dto: RegistrarAsistenciaDto,
   ) {
-    const asamblea = await this.exigirAsamblea(id);
+    const asamblea = await this.exigirAsamblea(usuario, id);
     exigirEstado(asamblea, ASISTENCIA_ABIERTA, 'registrar asistencia en');
     const asistencia = await this.exigirAsistencia(id, unidadId);
 
@@ -302,17 +300,20 @@ export class AsambleasService {
 
   // ── Privados ───────────────────────────────────────────────────────────────
 
-  private async exigirAsamblea(id: string): Promise<Asamblea> {
+  /** 404 y no 403 para lo que no puede ver: un 403 confirmaría que existe. */
+  private async exigirAsamblea(usuario: UsuarioActual, id: string): Promise<Asamblea> {
     const asamblea = await this.asambleas.findById(id);
-    if (!asamblea) throw new NotFoundException(`La asamblea ${id} no existe`);
+    if (!asamblea || !gestiona(usuario, asamblea.consorcioId)) {
+      throw new NotFoundException(`La asamblea ${id} no existe`);
+    }
     return asamblea;
   }
 
-  /** Al vecino, 404 y no 403 para lo que no puede ver: un 403 confirmaría que existe. */
   private async buscarConPermiso(usuario: UsuarioActual, id: string): Promise<Asamblea> {
-    const asamblea = await this.exigirAsamblea(id);
-    if (esAdmin(usuario)) return asamblea;
+    if (esGestor(usuario)) return this.exigirAsamblea(usuario, id);
 
+    const asamblea = await this.asambleas.findById(id);
+    if (!asamblea) throw new NotFoundException(`La asamblea ${id} no existe`);
     const consorcios = await this.asambleas.consorciosDelUsuario(usuario.id);
     if (asamblea.estado === EstadoAsamblea.BORRADOR || !consorcios.includes(asamblea.consorcioId)) {
       throw new NotFoundException(`La asamblea ${id} no existe`);

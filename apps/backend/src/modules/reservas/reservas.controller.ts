@@ -57,18 +57,19 @@ export class ReservasController {
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Post('amenities')
-  crearAmenity(@Body() dto: CreateAmenityDto) {
-    return this.reservas.crearAmenity(dto);
+  crearAmenity(@UsuarioActual() usuario: Usuario, @Body() dto: CreateAmenityDto) {
+    return this.reservas.crearAmenity(usuario, dto);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Patch('amenities/:id')
   @ApiOperation({ summary: 'Edita un amenity', description: '`activo: false` lo da de baja.' })
   actualizarAmenity(
+    @UsuarioActual() usuario: Usuario,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateAmenityDto,
   ) {
-    return this.reservas.actualizarAmenity(id, dto);
+    return this.reservas.actualizarAmenity(usuario, id, dto);
   }
 
   @Get('amenities/:id/disponibilidad')
@@ -111,10 +112,11 @@ export class ReservasController {
   @Delete('amenities/:amenityId/bloqueos/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   borrarBloqueo(
+    @UsuarioActual() usuario: Usuario,
     @Param('amenityId', ParseUUIDPipe) amenityId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.reservas.borrarBloqueo(amenityId, id);
+    return this.reservas.borrarBloqueo(usuario, amenityId, id);
   }
 
   // ── Reservas ──
