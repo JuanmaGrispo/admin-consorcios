@@ -63,8 +63,8 @@ export class UnidadesController {
     summary: 'Alta de unidad',
     description: 'La etiqueta es única en el consorcio y los coeficientes activos no pueden pasar el 100%.',
   })
-  create(@Body() dto: CreateUnidadDto) {
-    return this.unidades.create(dto);
+  create(@UsuarioActual() usuario: Usuario, @Body() dto: CreateUnidadDto) {
+    return this.unidades.create(usuario, dto);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
@@ -73,8 +73,12 @@ export class UnidadesController {
     summary: 'Edita la unidad',
     description: 'Con `activa: false` se da de baja. No hay DELETE: boletas, pagos y reclamos la referencian.',
   })
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUnidadDto) {
-    return this.unidades.update(id, dto);
+  update(
+    @UsuarioActual() usuario: Usuario,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUnidadDto,
+  ) {
+    return this.unidades.update(usuario, id, dto);
   }
 
   // ── Vínculos ──
@@ -84,10 +88,11 @@ export class UnidadesController {
   @ApiOperation({ summary: 'Vecinos vinculados a la unidad' })
   @ApiQuery({ name: 'incluirTerminados', required: false, type: Boolean })
   listarVinculos(
+    @UsuarioActual() usuario: Usuario,
     @Param('id', ParseUUIDPipe) id: string,
     @Query('incluirTerminados') incluirTerminados?: string,
   ) {
-    return this.unidades.listarVinculos(id, incluirTerminados === 'true');
+    return this.unidades.listarVinculos(usuario, id, incluirTerminados === 'true');
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
@@ -96,8 +101,12 @@ export class UnidadesController {
     summary: 'Vincula un vecino a la unidad',
     description: 'Como propietario o inquilino. Hay un solo titular vigente por unidad.',
   })
-  vincular(@Param('id', ParseUUIDPipe) id: string, @Body() dto: VincularUsuarioDto) {
-    return this.unidades.vincular(id, dto);
+  vincular(
+    @UsuarioActual() usuario: Usuario,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VincularUsuarioDto,
+  ) {
+    return this.unidades.vincular(usuario, id, dto);
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
@@ -109,9 +118,10 @@ export class UnidadesController {
       'Le pone fecha de fin hoy y queda en el historial. Si todavía no había empezado a regir, se borra.',
   })
   desvincular(
+    @UsuarioActual() usuario: Usuario,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('vinculoId', ParseUUIDPipe) vinculoId: string,
   ) {
-    return this.unidades.desvincular(id, vinculoId);
+    return this.unidades.desvincular(usuario, id, vinculoId);
   }
 }

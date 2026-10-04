@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { RolUsuario, Unidad, UnidadUsuario } from '../../database/entities';
+import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
@@ -18,8 +19,6 @@ import { UnidadesRepository } from './unidades.repository';
 export type VinculoPublico = Omit<UnidadUsuario, 'usuario' | 'unidad'> & {
   usuario: { id: string; nombre: string; apellido: string; email: string };
 };
-
-const esVecino = (usuario: UsuarioActual) => usuario.rol === RolUsuario.VECINO;
 
 /**
  * Los coeficientes se guardan con 4 decimales. Comparar en diezmilésimos
@@ -37,32 +36,31 @@ export class UnidadesService {
 
   // ── Unidades ───────────────────────────────────────────────────────────────
 
-  /** El administrador ve todas; el vecino, sólo aquellas a las que está vinculado. */
+  /** El administrador ve las de sus consorcios; el vecino, sólo aquellas a las que está vinculado. */
   async listar(usuario: UsuarioActual, query: ListarUnidadesQuery): Promise<Unidad[]> {
+    const gestor = esGestor(usuario);
     return this.unidades.listar({
       consorcioId: query.consorcioId,
-      ids: esVecino(usuario)
-        ? await this.unidades.unidadesDelUsuario(usuario.id)
-        : undefined,
+      consorcioIds: gestor ? consorciosGestionados(usuario) : undefined,
+      ids: gestor ? undefined : await this.unidades.unidadesDelUsuario(usuario.id),
       incluirInactivas: query.incluirInactivas ?? false,
     });
   }
 
   async findOne(usuario: UsuarioActual, id: string): Promise<Unidad> {
+    if (esGestor(usuario)) return this.exigirUnidad(usuario, id);
     const unidad = await this.unidades.findById(id);
-    // Al vecino, una unidad ajena le da 404 y no 403: un 403 confirmaría que existe.
-    if (
-      !unidad ||
-      (esVecino(usuario) &&
-        !(await this.unidades.unidadesDelUsuario(usuario.id)).includes(id))
-    ) {
+    // Una unidad ajena da 404 y no 403: un 403 confirmaría que existe.
+    if (!unidad || !(await this.unidades.unidadesDelUsuario(usuario.id)).includes(id)) {
       throw new NotFoundException(`La unidad ${id} no existe`);
     }
     return unidad;
   }
 
-  async create(dto: CreateUnidadDto): Promise<Unidad> {
-    // 404 si el consorcio no existe.
+  async create(usuario: UsuarioActual, dto: CreateUnidadDto): Promise<Unidad> {
+    if (!gestiona(usuario, dto.consorcioId)) {
+      throw new NotFoundException(`Consorcio ${dto.consorcioId} no existe`);
+    }
     await this.consorcios.findOne(dto.consorcioId);
     await this.exigirEtiquetaLibre(dto.consorcioId, dto.etiqueta);
     await this.exigirCoeficienteDisponible(dto.consorcioId, dto.coeficiente);
@@ -71,9 +69,8 @@ export class UnidadesService {
     return (await this.unidades.findById(creada.id))!;
   }
 
-  async update(id: string, dto: UpdateUnidadDto): Promise<Unidad> {
-    const unidad = await this.unidades.findById(id);
-    if (!unidad) throw new NotFoundException(`La unidad ${id} no existe`);
+  async update(usuario: UsuarioActual, id: string, dto: UpdateUnidadDto): Promise<Unidad> {
+    const unidad = await this.exigirUnidad(usuario, id);
 
     if (dto.etiqueta !== undefined && dto.etiqueta !== unidad.etiqueta) {
       await this.exigirEtiquetaLibre(unidad.consorcioId, dto.etiqueta, id);
@@ -103,14 +100,22 @@ export class UnidadesService {
     return this.unidades.vinculosDelUsuario(usuarioId);
   }
 
-  async listarVinculos(unidadId: string, incluirTerminados: boolean): Promise<VinculoPublico[]> {
-    await this.exigirUnidad(unidadId);
+  async listarVinculos(
+    usuario: UsuarioActual,
+    unidadId: string,
+    incluirTerminados: boolean,
+  ): Promise<VinculoPublico[]> {
+    await this.exigirUnidad(usuario, unidadId);
     const vinculos = await this.unidades.listarVinculos(unidadId, incluirTerminados);
     return vinculos.map((v) => this.recortar(v));
   }
 
-  async vincular(unidadId: string, dto: VincularUsuarioDto): Promise<VinculoPublico> {
-    const unidad = await this.exigirUnidad(unidadId);
+  async vincular(
+    usuario: UsuarioActual,
+    unidadId: string,
+    dto: VincularUsuarioDto,
+  ): Promise<VinculoPublico> {
+    const unidad = await this.exigirUnidad(usuario, unidadId);
     if (!unidad.activa) {
       throw new BadRequestException(
         `La unidad ${unidad.etiqueta} está dada de baja: reactivala antes de vincular vecinos`,
@@ -119,8 +124,8 @@ export class UnidadesService {
 
     // Los vínculos son para vecinos. Un administrador opera el consorcio
     // entero; vincularlo a una unidad lo haría pasar por vecino en reclamos.
-    const usuario = await this.usuarios.findOne(dto.usuarioId);
-    if (!usuario || !usuario.activo || usuario.rol !== RolUsuario.VECINO) {
+    const vecino = await this.usuarios.findOne(dto.usuarioId);
+    if (!vecino || !vecino.activo || vecino.rol !== RolUsuario.VECINO) {
       throw new BadRequestException(
         'Sólo se puede vincular a un usuario activo con rol VECINO',
       );
@@ -128,7 +133,7 @@ export class UnidadesService {
 
     if (await this.unidades.findVinculoVigente(unidadId, dto.usuarioId)) {
       throw new ConflictException(
-        `${usuario.nombre} ${usuario.apellido} ya está vinculado a la unidad ${unidad.etiqueta}`,
+        `${vecino.nombre} ${vecino.apellido} ya está vinculado a la unidad ${unidad.etiqueta}`,
       );
     }
 
@@ -160,7 +165,8 @@ export class UnidadesService {
    * futura) no hay historia que cuidar: se borra. Además la base exige
    * `hasta > desde`, así que no podría cerrarse con fecha de hoy.
    */
-  async desvincular(unidadId: string, vinculoId: string): Promise<void> {
+  async desvincular(usuario: UsuarioActual, unidadId: string, vinculoId: string): Promise<void> {
+    await this.exigirUnidad(usuario, unidadId);
     const vinculo = await this.unidades.findVinculo(vinculoId);
     if (!vinculo || vinculo.unidadId !== unidadId) {
       throw new NotFoundException(`El vínculo ${vinculoId} no existe en esta unidad`);
@@ -180,9 +186,12 @@ export class UnidadesService {
 
   // ── Auxiliares ─────────────────────────────────────────────────────────────
 
-  private async exigirUnidad(id: string): Promise<Unidad> {
+  /** Una unidad de otro consorcio responde como inexistente. */
+  private async exigirUnidad(usuario: UsuarioActual, id: string): Promise<Unidad> {
     const unidad = await this.unidades.findById(id);
-    if (!unidad) throw new NotFoundException(`La unidad ${id} no existe`);
+    if (!unidad || !gestiona(usuario, unidad.consorcioId)) {
+      throw new NotFoundException(`La unidad ${id} no existe`);
+    }
     return unidad;
   }
 

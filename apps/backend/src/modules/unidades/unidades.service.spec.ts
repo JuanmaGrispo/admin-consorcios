@@ -9,7 +9,8 @@ import type { UnidadesRepository } from './unidades.repository';
 import { UnidadesService } from './unidades.service';
 
 const CONSORCIO = 'c1';
-const admin: UsuarioActual = { id: 'a1', email: 'a@x', rol: RolUsuario.ADMINISTRADOR };
+const admin: UsuarioActual = { id: 'a1', email: 'a@x', rol: RolUsuario.ADMINISTRADOR, consorcioIds: [CONSORCIO] };
+const adminAjeno: UsuarioActual = { id: 'a2', email: 'b@x', rol: RolUsuario.ADMINISTRADOR, consorcioIds: ['c2'] };
 const vecino: UsuarioActual = { id: 'v1', email: 'v@x', rol: RolUsuario.VECINO };
 
 const unidad = (datos: Partial<Unidad> = {}) =>
@@ -25,8 +26,12 @@ function crearRepo() {
     terminados: [] as { id: string; hasta: string }[],
   };
   const repo = {
-    listar: async (f: { ids?: string[] }) =>
-      estado.unidades.filter((u) => !f.ids || f.ids.includes(u.id)),
+    listar: async (f: { ids?: string[]; consorcioIds?: string[] }) =>
+      estado.unidades.filter(
+        (u) =>
+          (!f.ids || f.ids.includes(u.id)) &&
+          (!f.consorcioIds || f.consorcioIds.includes(u.consorcioId)),
+      ),
     findById: async (id: string) => estado.unidades.find((u) => u.id === id) ?? null,
     findByEtiqueta: async (c: string, e: string) =>
       estado.unidades.find((u) => u.consorcioId === c && u.etiqueta === e) ?? null,
@@ -79,19 +84,19 @@ describe('UnidadesService', () => {
     it('rechaza un alta que haría pasar el 100%', async () => {
       estado.unidades.push(unidad({ coeficiente: 95 }));
       await assert.rejects(
-        service.create({ consorcioId: CONSORCIO, etiqueta: '2º A', coeficiente: 5.0001 }),
+        service.create(admin, { consorcioId: CONSORCIO, etiqueta: '2º A', coeficiente: 5.0001 }),
         BadRequestException,
       );
     });
 
     it('acepta llegar justo al 100% sin error de redondeo', async () => {
       estado.unidades.push(unidad({ coeficiente: 33.3333 }), unidad({ id: 'u2', etiqueta: '2º A', coeficiente: 33.3333 }));
-      await service.create({ consorcioId: CONSORCIO, etiqueta: '3º A', coeficiente: 33.3334 });
+      await service.create(admin, { consorcioId: CONSORCIO, etiqueta: '3º A', coeficiente: 33.3334 });
     });
 
     it('no cuenta las unidades inactivas', async () => {
       estado.unidades.push(unidad({ coeficiente: 95, activa: false }));
-      await service.create({ consorcioId: CONSORCIO, etiqueta: '2º A', coeficiente: 50 });
+      await service.create(admin, { consorcioId: CONSORCIO, etiqueta: '2º A', coeficiente: 50 });
     });
 
     it('revisa el tope al reactivar una unidad', async () => {
@@ -99,19 +104,19 @@ describe('UnidadesService', () => {
         unidad({ id: 'u1', coeficiente: 20, activa: false }),
         unidad({ id: 'u2', etiqueta: '2º A', coeficiente: 90 }),
       );
-      await assert.rejects(service.update('u1', { activa: true }), BadRequestException);
+      await assert.rejects(service.update(admin, 'u1', { activa: true }), BadRequestException);
     });
 
     it('al editar no se cuenta a sí misma', async () => {
       estado.unidades.push(unidad({ coeficiente: 60 }), unidad({ id: 'u2', etiqueta: '2º A', coeficiente: 30 }));
-      await service.update('u1', { coeficiente: 70 });
+      await service.update(admin, 'u1', { coeficiente: 70 });
     });
   });
 
   it('rechaza una etiqueta repetida en el consorcio', async () => {
     estado.unidades.push(unidad());
     await assert.rejects(
-      service.create({ consorcioId: CONSORCIO, etiqueta: '1º A', coeficiente: 1 }),
+      service.create(admin, { consorcioId: CONSORCIO, etiqueta: '1º A', coeficiente: 1 }),
       ConflictException,
     );
   });
@@ -129,9 +134,28 @@ describe('UnidadesService', () => {
       assert.deepEqual(vistas.map((u) => u.id), ['u2']);
     });
 
-    it('el administrador ve cualquiera', async () => {
+    it('el administrador ve las de su consorcio', async () => {
       estado.unidades.push(unidad());
       assert.equal((await service.findOne(admin, 'u1')).id, 'u1');
+    });
+
+    it('al administrador de otro consorcio, la unidad le da 404', async () => {
+      estado.unidades.push(unidad());
+      await assert.rejects(service.findOne(adminAjeno, 'u1'), NotFoundException);
+      assert.deepEqual(await service.listar(adminAjeno, {}), []);
+    });
+
+    it('el administrador de otro consorcio no la edita, ni carga unidades en el ajeno', async () => {
+      estado.unidades.push(unidad());
+      await assert.rejects(service.update(adminAjeno, 'u1', { coeficiente: 5 }), NotFoundException);
+      await assert.rejects(
+        service.create(adminAjeno, { consorcioId: CONSORCIO, etiqueta: '9º A', coeficiente: 1 }),
+        NotFoundException,
+      );
+      await assert.rejects(
+        service.vincular(adminAjeno, 'u1', { usuarioId: 'v1', vinculo: VinculoUnidad.INQUILINO }),
+        NotFoundException,
+      );
     });
   });
 
@@ -140,7 +164,7 @@ describe('UnidadesService', () => {
 
     it('sólo vincula usuarios con rol VECINO', async () => {
       await assert.rejects(
-        service.vincular('u1', { usuarioId: 'a1', vinculo: VinculoUnidad.PROPIETARIO }),
+        service.vincular(admin, 'u1', { usuarioId: 'a1', vinculo: VinculoUnidad.PROPIETARIO }),
         BadRequestException,
       );
     });
@@ -148,7 +172,7 @@ describe('UnidadesService', () => {
     it('no vincula a una unidad dada de baja', async () => {
       estado.unidades[0].activa = false;
       await assert.rejects(
-        service.vincular('u1', { usuarioId: 'v1', vinculo: VinculoUnidad.INQUILINO }),
+        service.vincular(admin, 'u1', { usuarioId: 'v1', vinculo: VinculoUnidad.INQUILINO }),
         BadRequestException,
       );
     });
@@ -156,7 +180,7 @@ describe('UnidadesService', () => {
     it('no admite un segundo titular vigente', async () => {
       estado.vinculos.push({ id: 't', unidadId: 'u1', usuarioId: 'otro', esTitular: true, hasta: null } as UnidadUsuario);
       await assert.rejects(
-        service.vincular('u1', { usuarioId: 'v1', vinculo: VinculoUnidad.PROPIETARIO, esTitular: true }),
+        service.vincular(admin, 'u1', { usuarioId: 'v1', vinculo: VinculoUnidad.PROPIETARIO, esTitular: true }),
         ConflictException,
       );
     });
@@ -164,33 +188,33 @@ describe('UnidadesService', () => {
     it('no duplica un vínculo vigente', async () => {
       estado.vinculos.push({ id: 'x', unidadId: 'u1', usuarioId: 'v1', hasta: null } as UnidadUsuario);
       await assert.rejects(
-        service.vincular('u1', { usuarioId: 'v1', vinculo: VinculoUnidad.INQUILINO }),
+        service.vincular(admin, 'u1', { usuarioId: 'v1', vinculo: VinculoUnidad.INQUILINO }),
         ConflictException,
       );
     });
 
     it('el vínculo sale sin el hash del usuario', async () => {
-      const v = await service.vincular('u1', { usuarioId: 'v1', vinculo: VinculoUnidad.INQUILINO });
+      const v = await service.vincular(admin, 'u1', { usuarioId: 'v1', vinculo: VinculoUnidad.INQUILINO });
       assert.equal('passwordHash' in v.usuario, false);
     });
 
     it('termina hoy un vínculo que ya regía', async () => {
       estado.vinculos.push({ id: 'x', unidadId: 'u1', desde: '2025-01-10', hasta: null } as UnidadUsuario);
-      await service.desvincular('u1', 'x');
+      await service.desvincular(admin, 'u1', 'x');
       assert.deepEqual(estado.terminados, [{ id: 'x', hasta: '2026-09-25' }]);
       assert.deepEqual(estado.borrados, []);
     });
 
     it('borra un vínculo que todavía no había empezado', async () => {
       estado.vinculos.push({ id: 'x', unidadId: 'u1', desde: '2026-09-25', hasta: null } as UnidadUsuario);
-      await service.desvincular('u1', 'x');
+      await service.desvincular(admin, 'u1', 'x');
       assert.deepEqual(estado.borrados, ['x']);
       assert.deepEqual(estado.terminados, []);
     });
 
     it('un vínculo de otra unidad da 404', async () => {
       estado.vinculos.push({ id: 'x', unidadId: 'otra', desde: '2025-01-10', hasta: null } as UnidadUsuario);
-      await assert.rejects(service.desvincular('u1', 'x'), NotFoundException);
+      await assert.rejects(service.desvincular(admin, 'u1', 'x'), NotFoundException);
     });
   });
 });

@@ -25,6 +25,8 @@ export class UnidadesRepository {
   /** Cada unidad sale con cuántos vecinos tiene vinculados hoy. */
   listar(filtro: {
     consorcioId?: string;
+    /** Si viene, sólo unidades de esos consorcios (el administrador ve los suyos). */
+    consorcioIds?: string[];
     /** Si viene, sólo esas unidades (el vecino ve las suyas). */
     ids?: string[];
     incluirInactivas: boolean;
@@ -38,6 +40,10 @@ export class UnidadesRepository {
 
     if (filtro.consorcioId) {
       qb.andWhere('u.consorcioId = :consorcioId', { consorcioId: filtro.consorcioId });
+    }
+    if (filtro.consorcioIds) {
+      if (filtro.consorcioIds.length === 0) qb.andWhere('1 = 0');
+      else qb.andWhere('u.consorcioId IN (:...consorcioIds)', { consorcioIds: filtro.consorcioIds });
     }
     if (filtro.ids) {
       // `IN ()` es un error de sintaxis en Postgres: sin ids no hay nada que ver.
