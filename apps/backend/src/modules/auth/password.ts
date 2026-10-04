@@ -4,3 +4,5 @@ import * as bcrypt from 'bcryptjs';
 export const BCRYPT_ROUNDS = 10;
 
 export const hashearPassword = (password: string) => bcrypt.hash(password, BCRYPT_ROUNDS);
+
+export const coincidePassword = (password: string, hash: string) => bcrypt.compare(password, hash);

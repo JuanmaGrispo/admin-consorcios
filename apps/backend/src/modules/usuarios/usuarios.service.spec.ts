@@ -1,8 +1,15 @@
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import { RolUsuario, Usuario } from '../../database/entities';
+import type { ArchivosService } from '../archivos/archivos.service';
 import type { UsuarioActual } from '../auth/auth.types';
+import { hashearPassword } from '../auth/password';
 import type { UsuariosRepository } from './usuarios.repository';
 import { UsuariosService } from './usuarios.service';
 
@@ -45,7 +52,12 @@ describe('UsuariosService', () => {
       findByEmail: async (email: string) => cuentas.find((u) => u.email === email) ?? null,
       update: async (u: Usuario, d: Partial<Usuario>) => Object.assign(u, d),
     } as unknown as UsuariosRepository;
-    service = new UsuariosService(repo);
+    const archivos = {
+      exigirPropia: (url: string) => {
+        if (!url.startsWith('https://storage/avatares/')) throw new BadRequestException('ajena');
+      },
+    } as unknown as ArchivosService;
+    service = new UsuariosService(repo, archivos);
   });
 
   describe('alcance del administrador', () => {
@@ -110,6 +122,35 @@ describe('UsuariosService', () => {
     it('no la de un vecino de otro consorcio', async () => {
       await assert.rejects(service.resetearPassword(admin, 'v2', 'nueva-clave'), NotFoundException);
       assert.equal(cuentas[1].passwordHash, 'hash');
+    });
+  });
+
+  describe('perfil propio', () => {
+    it('sale sin el hash', async () => {
+      const propio = await service.perfil('v1');
+      assert.equal('passwordHash' in propio, false);
+    });
+
+    it('el avatar tiene que venir de archivos', async () => {
+      await assert.rejects(
+        service.actualizarPerfil('v1', { avatarUrl: 'https://otro.com/yo.jpg' }),
+        BadRequestException,
+      );
+      const propio = await service.actualizarPerfil('v1', {
+        avatarUrl: 'https://storage/avatares/v1/a.jpg',
+      });
+      assert.equal(propio.avatarUrl, 'https://storage/avatares/v1/a.jpg');
+    });
+
+    it('cambiar la contraseña pide la actual', async () => {
+      cuentas[0].passwordHash = await hashearPassword('vieja-clave');
+      await assert.rejects(
+        service.cambiarPassword('v1', { actual: 'otra', nueva: 'nueva-clave' }),
+        BadRequestException,
+      );
+      const antes = cuentas[0].passwordHash;
+      await service.cambiarPassword('v1', { actual: 'vieja-clave', nueva: 'nueva-clave' });
+      assert.notEqual(cuentas[0].passwordHash, antes);
     });
   });
 });

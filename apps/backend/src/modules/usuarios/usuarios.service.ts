@@ -6,9 +6,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { RolUsuario, Usuario } from '../../database/entities';
+import { ArchivosService } from '../archivos/archivos.service';
+import { DestinoArchivo } from '../archivos/tipos-archivo';
 import { consorciosGestionados, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
-import { hashearPassword } from '../auth/password';
+import { coincidePassword, hashearPassword } from '../auth/password';
+import { ActualizarPerfilDto } from './dto/actualizar-perfil.dto';
+import { CambiarPasswordDto } from './dto/cambiar-password.dto';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { NuevoVecinoDto } from './dto/nuevo-vecino.dto';
 import { ListarUsuariosQuery } from './dto/listar-usuarios.query';
@@ -25,7 +29,10 @@ const esSuperAdmin = (usuario: UsuarioActual) => usuario.rol === RolUsuario.SUPE
 
 @Injectable()
 export class UsuariosService {
-  constructor(private readonly usuarios: UsuariosRepository) {}
+  constructor(
+    private readonly usuarios: UsuariosRepository,
+    private readonly archivos: ArchivosService,
+  ) {}
 
   /**
    * El superadmin ve todas las cuentas; el administrador, los vecinos que hoy
@@ -110,6 +117,33 @@ export class UsuariosService {
   async resetearPassword(usuario: UsuarioActual, id: string, password: string): Promise<void> {
     const objetivo = await this.exigirGestionable(usuario, id);
     await this.usuarios.update(objetivo, { passwordHash: await hashearPassword(password) });
+  }
+
+  // ── Perfil propio ──────────────────────────────────────────────────────────
+
+  async perfil(usuarioId: string): Promise<UsuarioPublico> {
+    return this.sinHash(await this.exigirPropio(usuarioId));
+  }
+
+  async actualizarPerfil(usuarioId: string, dto: ActualizarPerfilDto): Promise<UsuarioPublico> {
+    const propio = await this.exigirPropio(usuarioId);
+    if (dto.avatarUrl) this.archivos.exigirPropia(dto.avatarUrl, DestinoArchivo.AVATARES);
+    return this.sinHash(await this.usuarios.update(propio, dto));
+  }
+
+  async cambiarPassword(usuarioId: string, dto: CambiarPasswordDto): Promise<void> {
+    const propio = await this.exigirPropio(usuarioId);
+    // 400 y no 401: un 401 haría que el front lo trate como sesión vencida.
+    if (!(await coincidePassword(dto.actual, propio.passwordHash))) {
+      throw new BadRequestException('La contraseña actual no es correcta');
+    }
+    await this.usuarios.update(propio, { passwordHash: await hashearPassword(dto.nueva) });
+  }
+
+  private async exigirPropio(usuarioId: string): Promise<Usuario> {
+    const propio = await this.usuarios.findById(usuarioId);
+    if (!propio) throw new NotFoundException('Tu cuenta no existe');
+    return propio;
   }
 
   private async buscarPorEmail(
