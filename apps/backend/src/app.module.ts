@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { CoreModule } from './core/core.module';
+import { MensajeriaModule } from './core/mensajeria/mensajeria.module';
 import { NotificacionesModule } from './core/notificaciones/notificaciones.module';
 import { DatabaseModule } from './database/database.module';
 import { ArchivosModule } from './modules/archivos/archivos.module';
@@ -43,6 +44,7 @@ import { VotacionesModule } from './modules/votaciones/votaciones.module';
     ConfigModule.forRoot({ isGlobal: true }),
     DatabaseModule,
     CoreModule,
+    MensajeriaModule,
     NotificacionesModule,
 
     // ── Módulos de negocio ──
