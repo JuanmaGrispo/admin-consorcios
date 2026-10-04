@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
+import type { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import type { Aviso, Notificador } from '../../core/notificaciones/notificador';
 import {
   Boleta,
@@ -142,6 +143,11 @@ function crearEntorno() {
     },
   } as unknown as Notificador;
 
+  const publicados: unknown[][] = [];
+  const eventos = {
+    publicar: (...args: unknown[]) => void publicados.push(args),
+  } as unknown as PublicadorEventos;
+
   const service = new ExpensasService(
     repo,
     { findOne: async () => CONSORCIO } as unknown as ConsorciosService,
@@ -162,9 +168,10 @@ function crearEntorno() {
         if (!url.startsWith('https://storage/comprobantes/')) throw new BadRequestException('ajena');
       },
     } as unknown as ArchivosService,
+    eventos,
   );
 
-  return { db, service, avisos };
+  return { db, service, avisos, publicados };
 }
 
 describe('vencimientoPorDefecto', () => {
@@ -421,23 +428,25 @@ describe('ExpensasService', () => {
       await assert.rejects(service.emitir(admin, l.id), /período anterior sin emitir/);
     });
 
-    it('congela, suma el total emitido y avisa a cada vecino', async () => {
+    it('congela, suma el total emitido y publica expensas.emitidas', async () => {
       const l = await liquidacionConGasto();
       await service.previsualizar(admin, l.id);
       const emitida = await service.emitir(admin, l.id);
       assert.equal(emitida.estado, EstadoLiquidacion.EMITIDA);
       assert.equal(emitida.totalEmitido, 1_000);
       assert.ok(emitida.fechaEmision instanceof Date);
-      assert.deepEqual(entorno.avisos.map((a) => a.destinatarioId).sort(), ['v1', 'v2', 'v3']);
-    });
-
-    it('un aviso que falla no corta la emisión', async () => {
-      db.vecinos.set('u1', ['falla', 'v1']);
-      const l = await liquidacionConGasto();
-      await service.previsualizar(admin, l.id);
-      const emitida = await service.emitir(admin, l.id);
-      assert.equal(emitida.estado, EstadoLiquidacion.EMITIDA);
-      assert.ok(entorno.avisos.some((a) => a.destinatarioId === 'v1'));
+      assert.deepEqual(entorno.publicados, [
+        [
+          'expensas.emitidas',
+          'c1',
+          {
+            liquidacion_id: l.id,
+            periodo: '2026-10',
+            unidades_afectadas: ['u1', 'u2'],
+            fecha_vencimiento: '2026-11-10',
+          },
+        ],
+      ]);
     });
 
     it('sólo se cierra una emitida', async () => {

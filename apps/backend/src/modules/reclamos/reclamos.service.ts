@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import { Notificador } from '../../core/notificaciones/notificador';
 import {
   EstadoReclamo,
@@ -33,6 +34,7 @@ export class ReclamosService {
     private readonly categorias: CategoriasReclamoService,
     private readonly proveedores: ProveedoresService,
     private readonly archivos: ArchivosService,
+    private readonly eventos: PublicadorEventos,
   ) {}
 
   // ── Lectura ────────────────────────────────────────────────────────────────
@@ -225,12 +227,23 @@ export class ReclamosService {
       visibleParaVecino: true,
     });
 
-    await this.avisar(
-      actualizado,
-      `Tu reclamo ${actualizado.codigo} cambió de estado`,
-      `Pasó de ${estadoAnterior} a ${dto.estado}.` +
-        (dto.mensaje ? ` ${dto.mensaje.trim()}` : ''),
-    );
+    if (dto.estado === EstadoReclamo.RESUELTO) {
+      this.eventos.publicar('reclamo.cerrado', actualizado.consorcioId, {
+        reclamo_id: actualizado.id,
+        codigo: actualizado.codigo,
+        unidad_id: actualizado.unidadId,
+        usuario_id: actualizado.creadoPorId,
+        categoria: actualizado.categoria?.nombre ?? 'Sin categoría',
+        resolucion: dto.mensaje?.trim() || null,
+      });
+    } else {
+      await this.avisar(
+        actualizado,
+        `Tu reclamo ${actualizado.codigo} cambió de estado`,
+        `Pasó de ${estadoAnterior} a ${dto.estado}.` +
+          (dto.mensaje ? ` ${dto.mensaje.trim()}` : ''),
+      );
+    }
 
     return actualizado;
   }

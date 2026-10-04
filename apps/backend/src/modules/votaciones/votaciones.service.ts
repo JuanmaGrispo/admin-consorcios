@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import { Notificador } from '../../core/notificaciones/notificador';
 import {
   EstadoAsamblea,
@@ -68,6 +69,7 @@ export class VotacionesService {
     private readonly expensas: ExpensasService,
     private readonly archivos: ArchivosService,
     private readonly notificador: Notificador,
+    private readonly eventos: PublicadorEventos,
   ) {}
 
   // ── Consultas ──────────────────────────────────────────────────────────────
@@ -235,7 +237,18 @@ export class VotacionesService {
     }
 
     await this.votaciones.actualizar(id, { estado: EstadoVotacion.ABIERTA });
-    await this.avisarPublicacion(votacion);
+    // El evento es para las independientes: las de asamblea ya se anunciaron
+    // con la convocatoria, así que a esas les llega un aviso a cada vecino.
+    if (votacion.asambleaId) {
+      await this.avisarPublicacion(votacion);
+    } else {
+      this.eventos.publicar('votacion.nueva', votacion.consorcioId, {
+        votacion_id: votacion.id,
+        titulo: votacion.titulo,
+        fecha_cierre: votacion.cierre.toISOString(),
+        mayoria_necesaria: votacion.mayoria,
+      });
+    }
     return this.findOne(usuario, id);
   }
 
@@ -344,6 +357,12 @@ export class VotacionesService {
     await this.votaciones.actualizar(votacion.id, {
       estado: EstadoVotacion.CERRADA,
       resultado: escrutinio.resultado,
+    });
+    this.eventos.publicar('votacion.cerrada', votacion.consorcioId, {
+      votacion_id: votacion.id,
+      titulo: votacion.titulo,
+      resultado: escrutinio.resultado.toLowerCase() as 'aprobada' | 'rechazada' | 'sin_quorum',
+      participacion_pct: escrutinio.participacion,
     });
     return escrutinio.resultado;
   }

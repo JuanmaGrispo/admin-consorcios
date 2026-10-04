@@ -3,10 +3,9 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Notificador } from '../../core/notificaciones/notificador';
+import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import {
   Asamblea,
   Asistencia,
@@ -27,6 +26,7 @@ import { ListarAsambleasQuery } from './dto/listar-asambleas.query';
 import { RegistrarAsistenciaDto } from './dto/registrar-asistencia.dto';
 import { ReemplazarOrdenDiaDto } from './dto/reemplazar-orden-dia.dto';
 import { UpdateAsambleaDto } from './dto/update-asamblea.dto';
+import { datosDeAsamblea } from './datos-evento';
 import { calcularQuorum, porcentajeDeQuorum } from './quorum';
 
 const QUORUM_POR_DEFECTO = 60;
@@ -56,12 +56,10 @@ function vistaAsistencia(a: Asistencia) {
 
 @Injectable()
 export class AsambleasService {
-  private readonly logger = new Logger(AsambleasService.name);
-
   constructor(
     private readonly asambleas: AsambleasRepository,
     private readonly consorcios: ConsorciosService,
-    private readonly notificador: Notificador,
+    private readonly eventos: PublicadorEventos,
     private readonly archivos: ArchivosService,
   ) {}
 
@@ -209,7 +207,7 @@ export class AsambleasService {
       id,
       unidades.map((u) => ({ unidadId: u.id, coeficienteAplicado: u.coeficiente })),
     );
-    await this.avisarConvocatoria(asamblea);
+    this.eventos.publicar('asamblea.creada', asamblea.consorcioId, datosDeAsamblea(asamblea));
     return this.findOne(usuario, id);
   }
 
@@ -347,29 +345,6 @@ export class AsambleasService {
       throw new ForbiddenException('No tenés unidades en este consorcio');
     }
     return unidades[0];
-  }
-
-  /** Nunca corta la operación: si el aviso falla, la asamblea ya quedó convocada. */
-  private async avisarConvocatoria(asamblea: Asamblea) {
-    try {
-      const vecinos = await this.asambleas.vecinosDelConsorcio(asamblea.consorcioId);
-      const cuando = asamblea.fechaHora.toLocaleString('es-AR', {
-        timeZone: 'America/Argentina/Buenos_Aires',
-      });
-      const donde = asamblea.lugar ?? asamblea.linkVideollamada ?? '';
-      await Promise.allSettled(
-        vecinos.map((destinatarioId) =>
-          this.notificador.enviar({
-            destinatarioId,
-            asunto: `Citación: ${asamblea.titulo}`,
-            cuerpo: `Se convocó la asamblea "${asamblea.titulo}" para el ${cuando} en ${donde}. Confirmá tu asistencia desde el portal.`,
-            origen: `asamblea:${asamblea.id}`,
-          }),
-        ),
-      );
-    } catch (error) {
-      this.logger.warn(`No se pudo avisar la convocatoria de ${asamblea.id}: ${String(error)}`);
-    }
   }
 }
 
