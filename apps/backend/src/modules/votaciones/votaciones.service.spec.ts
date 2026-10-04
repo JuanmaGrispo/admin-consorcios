@@ -31,7 +31,18 @@ import type { UnidadParaPadron } from './padron';
 import type { VotacionesRepository } from './votaciones.repository';
 import { VotacionesService } from './votaciones.service';
 
-const admin: UsuarioActual = { id: 'a1', email: 'a@x', rol: RolUsuario.ADMINISTRADOR };
+const admin: UsuarioActual = {
+  id: 'a1',
+  email: 'a@x',
+  rol: RolUsuario.ADMINISTRADOR,
+  consorcioIds: ['c1'],
+};
+const adminAjeno: UsuarioActual = {
+  id: 'a2',
+  email: 'b@x',
+  rol: RolUsuario.ADMINISTRADOR,
+  consorcioIds: ['c2'],
+};
 const p1: UsuarioActual = { id: 'p1', email: 'p1@x', rol: RolUsuario.VECINO };
 const inquilino: UsuarioActual = { id: 'i2', email: 'i2@x', rol: RolUsuario.VECINO };
 
@@ -423,6 +434,13 @@ describe('VotacionesService — voto presencial', () => {
 });
 
 describe('VotacionesService — visibilidad', () => {
+  it('al administrador de otro consorcio, la votación le da 404 y no la gestiona', async () => {
+    const { service } = crearService();
+    await assert.rejects(service.findOne(adminAjeno, 'vt1'), NotFoundException);
+    await assert.rejects(service.cerrar(adminAjeno, 'vt1'), NotFoundException);
+    await assert.rejects(service.padronConVotos(adminAjeno, 'vt1'), NotFoundException);
+  });
+
   it('el vecino no ve borradores', async () => {
     const { service } = crearService({ votacion: votacion({ estado: EstadoVotacion.BORRADOR }) });
     await assert.rejects(service.findOne(p1, 'vt1'), NotFoundException);

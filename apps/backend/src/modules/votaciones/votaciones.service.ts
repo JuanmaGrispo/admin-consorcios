@@ -19,6 +19,7 @@ import {
 import { ArchivosService } from '../archivos/archivos.service';
 import { DestinoArchivo } from '../archivos/tipos-archivo';
 import { calcularQuorum } from '../asambleas/quorum';
+import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ExpensasService } from '../expensas/expensas.service';
@@ -32,8 +33,6 @@ import { escrutar, type Escrutinio } from './escrutinio';
 import { armarPadron, pesoTotal, type UnidadHabilitada } from './padron';
 import { ETIQUETA_A_FAVOR, ETIQUETA_EN_CONTRA, VotacionesRepository } from './votaciones.repository';
 
-const esAdmin = (usuario: UsuarioActual) =>
-  usuario.rol === RolUsuario.ADMINISTRADOR || usuario.rol === RolUsuario.SUPER_ADMIN;
 
 /** Si una votación de asamblea no dice cuánto dura, se toma la asamblea entera. */
 const HORAS_POR_DEFECTO = 3;
@@ -75,8 +74,8 @@ export class VotacionesService {
 
   async listar(usuario: UsuarioActual, query: ListarVotacionesQuery) {
     await this.cerrarVencidas();
-    const filtro = esAdmin(usuario)
-      ? { ocultarBorradores: false }
+    const filtro = esGestor(usuario)
+      ? { consorcioIds: consorciosGestionados(usuario), ocultarBorradores: false }
       : { consorcioIds: await this.votaciones.consorciosDelUsuario(usuario.id), ocultarBorradores: true };
     return this.votaciones.listar(query, filtro);
   }
@@ -87,7 +86,7 @@ export class VotacionesService {
     const { padron, votos, escrutinio } = await this.contar(votacion);
     const total = pesoTotal(padron);
 
-    if (esAdmin(usuario)) {
+    if (esGestor(usuario)) {
       return {
         ...votacion,
         padron: { unidades: padron.size, pesoTotal: total },
@@ -112,9 +111,9 @@ export class VotacionesService {
   }
 
   /** El padrón con quién votó y por qué canal: para que el admin sepa a quién le falta. */
-  async padronConVotos(id: string) {
+  async padronConVotos(usuario: UsuarioActual, id: string) {
     await this.cerrarVencidas();
-    const votacion = await this.exigirVotacion(id);
+    const votacion = await this.exigirVotacion(usuario, id);
     const { padron, votos } = await this.contar(votacion);
     return [...padron.values()].map((u) => {
       const voto = votos.find((v) => v.unidadId === u.unidadId);
@@ -133,6 +132,9 @@ export class VotacionesService {
   // ── ABM ────────────────────────────────────────────────────────────────────
 
   async crear(usuario: UsuarioActual, dto: CreateVotacionDto) {
+    if (!gestiona(usuario, dto.consorcioId)) {
+      throw new NotFoundException(`Consorcio ${dto.consorcioId} no existe`);
+    }
     let asambleaId: string | null = null;
     let apertura = dto.apertura ? new Date(dto.apertura) : undefined;
     let cierre = dto.cierre ? new Date(dto.cierre) : undefined;
@@ -156,7 +158,6 @@ export class VotacionesService {
       apertura ??= punto.asamblea.fechaHora;
       cierre ??= new Date(apertura.getTime() + HORAS_POR_DEFECTO * HORA_MS);
     } else {
-      // 404 si el consorcio no existe.
       await this.consorcios.findOne(dto.consorcioId);
       if (!apertura || !cierre) {
         throw new BadRequestException('Una votación independiente necesita apertura y cierre');
@@ -191,7 +192,7 @@ export class VotacionesService {
   }
 
   async editar(usuario: UsuarioActual, id: string, dto: UpdateVotacionDto) {
-    const votacion = await this.exigirVotacion(id);
+    const votacion = await this.exigirVotacion(usuario, id);
     exigirEstado(votacion, [EstadoVotacion.BORRADOR], 'editar');
 
     const apertura = dto.apertura ? new Date(dto.apertura) : votacion.apertura;
@@ -207,14 +208,14 @@ export class VotacionesService {
   }
 
   async reemplazarOpciones(usuario: UsuarioActual, id: string, dto: ReemplazarOpcionesDto) {
-    const votacion = await this.exigirVotacion(id);
+    const votacion = await this.exigirVotacion(usuario, id);
     exigirEstado(votacion, [EstadoVotacion.BORRADOR], 'cambiar las opciones de');
     await this.votaciones.reemplazarOpciones(id, exigirExtrasValidas(dto.opciones));
     return this.findOne(usuario, id);
   }
 
-  async eliminar(id: string): Promise<void> {
-    const votacion = await this.exigirVotacion(id);
+  async eliminar(usuario: UsuarioActual, id: string): Promise<void> {
+    const votacion = await this.exigirVotacion(usuario, id);
     exigirEstado(votacion, [EstadoVotacion.BORRADOR], 'eliminar');
     await this.votaciones.eliminar(id);
   }
@@ -222,7 +223,7 @@ export class VotacionesService {
   // ── Ciclo ──────────────────────────────────────────────────────────────────
 
   async publicar(usuario: UsuarioActual, id: string) {
-    const votacion = await this.exigirVotacion(id);
+    const votacion = await this.exigirVotacion(usuario, id);
     exigirEstado(votacion, [EstadoVotacion.BORRADOR], 'publicar');
 
     if (votacion.asamblea) {
@@ -239,7 +240,7 @@ export class VotacionesService {
   }
 
   async cerrar(usuario: UsuarioActual, id: string) {
-    const votacion = await this.exigirVotacion(id);
+    const votacion = await this.exigirVotacion(usuario, id);
     exigirEstado(votacion, [EstadoVotacion.ABIERTA], 'cerrar');
     await this.cerrarVotacion(votacion);
     return this.findOne(usuario, id);
@@ -248,7 +249,7 @@ export class VotacionesService {
   // ── Votos ──────────────────────────────────────────────────────────────────
 
   async votar(usuario: UsuarioActual, id: string, dto: VotarDto) {
-    if (esAdmin(usuario)) {
+    if (esGestor(usuario)) {
       throw new ForbiddenException('La administración carga votos presenciales, por unidad');
     }
     await this.cerrarVencidas();
@@ -263,7 +264,7 @@ export class VotacionesService {
 
   async votarPresencial(usuario: UsuarioActual, id: string, unidadId: string, dto: VotoPresencialDto) {
     await this.cerrarVencidas();
-    const votacion = await this.exigirVotacion(id);
+    const votacion = await this.exigirVotacion(usuario, id);
     exigirQueAcepteVotos(votacion, 'presencial');
 
     const unidad = (await this.padronDe(votacion)).get(unidadId);
@@ -354,17 +355,20 @@ export class VotacionesService {
     }
   }
 
-  private async exigirVotacion(id: string): Promise<Votacion> {
+  /** 404 y no 403 para lo que no puede ver: un 403 confirmaría que existe. */
+  private async exigirVotacion(usuario: UsuarioActual, id: string): Promise<Votacion> {
     const votacion = await this.votaciones.findById(id);
-    if (!votacion) throw new NotFoundException(`La votación ${id} no existe`);
+    if (!votacion || !gestiona(usuario, votacion.consorcioId)) {
+      throw new NotFoundException(`La votación ${id} no existe`);
+    }
     return votacion;
   }
 
-  /** Al vecino, 404 y no 403 para lo que no puede ver: un 403 confirmaría que existe. */
   private async buscarConPermiso(usuario: UsuarioActual, id: string): Promise<Votacion> {
-    const votacion = await this.exigirVotacion(id);
-    if (esAdmin(usuario)) return votacion;
+    if (esGestor(usuario)) return this.exigirVotacion(usuario, id);
 
+    const votacion = await this.votaciones.findById(id);
+    if (!votacion) throw new NotFoundException(`La votación ${id} no existe`);
     const consorcios = await this.votaciones.consorciosDelUsuario(usuario.id);
     if (votacion.estado === EstadoVotacion.BORRADOR || !consorcios.includes(votacion.consorcioId)) {
       throw new NotFoundException(`La votación ${id} no existe`);
