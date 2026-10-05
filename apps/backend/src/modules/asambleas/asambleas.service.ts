@@ -104,6 +104,15 @@ export class AsambleasService {
   }
 
   /** Para la pantalla de inicio: las asambleas convocadas o en curso de sus consorcios. */
+  /** Publica `asamblea.recordatorio` para las que empiezan dentro de 48 h. Lo dispara el cron. */
+  async enviarRecordatorios(): Promise<number> {
+    const asambleas = await this.asambleas.marcarParaRecordatorio();
+    for (const asamblea of asambleas) {
+      this.eventos.publicar('asamblea.recordatorio', asamblea.consorcioId, datosDeAsamblea(asamblea));
+    }
+    return asambleas.length;
+  }
+
   async proximasDelVecino(usuario: UsuarioActual): Promise<Asamblea[]> {
     const consorcioIds = await this.asambleas.consorciosDelUsuario(usuario.id);
     if (consorcioIds.length === 0) return [];

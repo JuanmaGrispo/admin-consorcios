@@ -119,6 +119,7 @@ function crearService(
     unidadesDelUsuarioEnConsorcio: async () => opts.unidadesDelVecino ?? [],
     vecinosDelConsorcio: async () => ['v1'],
     votacionesAbiertas: async () => opts.votacionesAbiertas ?? 0,
+    marcarParaRecordatorio: async () => [asamblea({ estado: EstadoAsamblea.CONVOCADA })],
     proximas: async (consorcioIds: string[]) => {
       escrito.proximasConsorcios = consorcioIds;
       return [asamblea({ estado: EstadoAsamblea.CONVOCADA })];
@@ -215,6 +216,17 @@ describe('AsambleasService — administrador de otro consorcio', () => {
   it('no convoca en un consorcio ajeno', async () => {
     const { service } = crearService();
     await assert.rejects(service.crear(adminAjeno, crearDto()), NotFoundException);
+  });
+});
+
+describe('AsambleasService — recordatorio', () => {
+  it('publica asamblea.recordatorio por cada asamblea que marcó el repositorio', async () => {
+    const { service, escrito } = crearService();
+    assert.equal(await service.enviarRecordatorios(), 1);
+    const [tipo, consorcio, payload] = escrito.publicados[0] as [string, string, { asamblea_id: string }];
+    assert.equal(tipo, 'asamblea.recordatorio');
+    assert.equal(consorcio, 'c1');
+    assert.equal(payload.asamblea_id, 'as1');
   });
 });
 

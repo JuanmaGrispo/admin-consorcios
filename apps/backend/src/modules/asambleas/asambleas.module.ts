@@ -13,6 +13,7 @@ import { ConsorciosModule } from '../consorcios/consorcios.module';
 import { AsambleasController } from './asambleas.controller';
 import { AsambleasRepository } from './asambleas.repository';
 import { AsambleasService } from './asambleas.service';
+import { RecordatorioAsambleas } from './recordatorio-asambleas';
 
 @Module({
   imports: [
@@ -32,7 +33,7 @@ import { AsambleasService } from './asambleas.service';
     ArchivosModule,
   ],
   controllers: [AsambleasController],
-  providers: [AsambleasService, AsambleasRepository],
+  providers: [AsambleasService, AsambleasRepository, RecordatorioAsambleas],
   exports: [AsambleasService],
 })
 export class AsambleasModule {}
