@@ -62,6 +62,9 @@ export class Asamblea {
   @Column({ type: 'timestamptz', name: 'updated_at', default: () => 'now()' })
   updatedAt: Date;
 
+  @Column({ type: 'timestamptz', name: 'recordatorio_enviado_at', nullable: true })
+  recordatorioEnviadoAt: Date | null;
+
   @OneToMany(() => Asistencia, (row) => row.asamblea)
   asistencias?: Asistencia[];
 
