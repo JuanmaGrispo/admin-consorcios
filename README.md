@@ -442,14 +442,11 @@ Una URL que no salió de ahí responde 400.
 
 ### Avisos
 
-El service llama a `Notificador` (`core/notificaciones/`), que por ahora sólo
-deja registro en el log. Cuando exista el módulo de notificaciones con
-NodeMailer detrás, implementa esa misma interfaz y reclamos no se toca. Avisar
-nunca corta la operación: si el aviso falla, la respuesta ya quedó guardada.
-
-El diseño de ese módulo (eventos de dominio publicados en RabbitMQ y
-consumidos por email y el muro de novedades) está en
-[`docs/mensajeria.md`](docs/mensajeria.md).
+Las respuestas, la asignación y los cambios de estado le llegan por mail a
+quien abrió el reclamo, vía `Notificador` (ver [Mensajería](#mensajería)).
+Resolverlo publica el evento `reclamo.cerrado`, que sólo escucha el mail: es
+información del vecino, no una novedad del edificio. Avisar nunca corta la
+operación: si el aviso falla, la respuesta ya quedó guardada.
 
 ## Expensas
 
@@ -626,9 +623,10 @@ total            = la suma de todo
 
 ### Avisos al emitir
 
-Cada vecino vinculado hoy a cada unidad recibe un aviso con el total y el
-vencimiento, por el mismo `Notificador` que usa reclamos. Si un aviso falla,
-queda en el log y la emisión sigue.
+Emitir publica `expensas.emitidas`. El consumidor de mail le escribe a cada
+vecino vinculado hoy a las unidades liquidadas, con el total de cada una (uno
+por persona, aunque tenga varias unidades), y el muro publica la novedad del
+período. Publicar no espera a nadie: la emisión no depende del mail.
 
 ### PDF de la boleta
 
@@ -638,7 +636,8 @@ saldo de hoy, y `pdf_url` queda sin usar.
 
 ### Pendiente
 
-- Marca de envío (`enviada_at`): es del módulo de notificaciones.
+- Marca de envío (`enviada_at`): el registro de cada mail queda en
+  `envio_notificacion`, pero la boleta todavía no se marca.
 - Importe en letras en el PDF (el servicio SOAP de [producto.md](docs/producto.md)).
 
 ## Pagos
@@ -937,7 +936,7 @@ Después, las tres variables de `.env.example`: `SUPABASE_URL`,
 apenas abre, para que el celular no encadene cuatro llamadas antes de pintar
 la primera pantalla. El módulo (`modules/inicio/`) no tiene tablas ni
 repository: compone lo que ya saben usuarios, unidades, expensas, reclamos,
-asambleas y reservas.
+asambleas, reservas, votaciones y novedades.
 
 ```jsonc
 {
@@ -958,6 +957,10 @@ asambleas y reservas.
       "fin": "2026-10-06T01:00:00Z", "unidadId": "…", "amenityId": "…" },
     { "tipo": "ASAMBLEA", "id": "…", "titulo": "Asamblea ordinaria", "fecha": "2026-10-12T22:00:00Z",
       "lugar": "SUM del edificio", "estado": "CONVOCADA", "consorcioId": "…" }
+  ],
+  "novedades": [                     // las últimas 5 del muro, fijadas primero
+    { "id": "…", "titulo": "Corte de agua el martes", "cuerpo": "…", "fijada": true,
+      "publicadaAt": "2026-10-03T12:00:00Z", "leida": false, "novedadAdjuntos": [] }
   ]
 }
 ```
@@ -969,13 +972,6 @@ varios consorcios); el front elige cuál muestra arriba.
 consorcios, sus reservas aprobadas que todavía no empezaron (de los próximos
 30 días) y las votaciones abiertas (con `fecha` = cuándo cierran). Acá un `[]`
 sí quiere decir que no tiene nada por delante.
-
-### Pendiente
-
-Falta el **muro de novedades**: necesita el módulo de novedades. No viaja como
-lista vacía a propósito: un `[]` le haría creer al front que no hay novedades,
-cuando lo que pasa es que nadie las sabe todavía. Se agrega a esta misma
-respuesta cuando exista ese módulo.
 
 ## Asambleas
 
@@ -1024,9 +1020,14 @@ o de otro destino— responde 400.
 No se puede cerrar una asamblea con votaciones abiertas (409): primero se
 cierran sus votaciones.
 
-### Pendiente
+### Avisos
 
-Eventos `asamblea.creada` / `asamblea.recordatorio` por RabbitMQ.
+Convocar publica `asamblea.creada`: mail a los vecinos y novedad en el muro.
+48 h antes, `asamblea.recordatorio` sale sólo por mail. Lo dispara un cron cada
+10 minutos (`recordatorio-asambleas.ts`), el único del proyecto: los demás
+estados que resuelve el tiempo se actualizan al leer, pero este aviso tiene que
+salir aunque nadie abra la app. El mismo `UPDATE` que elige las asambleas marca
+`recordatorio_enviado_at`, así sale una sola vez aunque haya dos instancias.
 
 ## Votaciones
 
@@ -1090,12 +1091,108 @@ El vecino ve sus unidades habilitadas con su peso ("tu voto vale 1,74%") y su
 voto; el parcial, sólo si `mostrarParcial` o ya cerró. El presupuesto adjunto
 (`adjuntoUrl`) tiene que venir de `POST /archivos?destino=votaciones`.
 
+### Avisos
+
+Publicar una independiente emite `votacion.nueva` y cerrar cualquiera,
+`votacion.cerrada` (también la que se cierra sola al vencer): mail y novedad en
+el muro. Las de asamblea, al publicarse, avisan por mail a cada vecino sin
+pasar por el muro, que ya anunció la asamblea.
+
 ### Pendiente
 
-- Eventos `votacion.nueva` / `votacion.cerrada` por RabbitMQ.
 - El padrón no se congela al publicar: se calcula con las unidades y vínculos
   de hoy, también al mirar una votación ya cerrada. El resultado guardado no
   cambia, pero el peso total que se muestra sí podría.
+
+## Novedades
+
+El muro de cada edificio (`modules/novedades/`). Hay dos tipos de novedad: los
+comunicados que escribe el administrador y los avisos automáticos que publica
+el muro por eventos de dominio (ver [Mensajería](#mensajería)).
+
+| Método | Ruta | Quién |
+|---|---|---|
+| GET | `/novedades` | admin: las de sus consorcios, con `lecturas` · vecino: las activas de donde vive, con `leida` |
+| GET | `/novedades/:id` | idem; ajena, 404 |
+| POST | `/novedades` | administrador: `{ consorcioId, titulo, cuerpo, fijada?, adjuntos? }` |
+| PATCH | `/novedades/:id` | administrador: título, cuerpo, `fijada`; `activa: false` la saca del muro |
+| PUT | `/novedades/:id/lectura` | vecino: la marca como leída (repetirlo no hace nada) |
+
+- Fijadas primero, después de la más nueva a la más vieja. Filtros: `consorcioId`,
+  `incluirInactivas` (sólo admin), `pagina`, `limite`.
+- Los adjuntos se suben antes con `POST /archivos?destino=novedades`; una URL que
+  no salió de ahí responde 400.
+- Publicar un comunicado emite `novedad.publicada`, que les llega por mail a los
+  vecinos. Las novedades automáticas salen en nombre del administrador del
+  consorcio.
+
+## Mensajería
+
+Implementa [docs/mensajeria.md](docs/mensajeria.md): pub/sub con RabbitMQ. Los
+services publican **eventos de dominio** sin saber quién los escucha; los
+consumidores deciden qué hacer con cada uno.
+
+```
+services ──publicar()──▶ exchange domus.eventos (topic)
+                            ├─ q.email-notificador        (#)  → mail a quien corresponda
+                            └─ q.muro-novedades-publicador (asamblea.creada, votacion.nueva,
+                                                            votacion.cerrada, expensas.emitidas) → novedad
+```
+
+| Evento | Lo publica | Mail | Muro |
+|---|---|---|---|
+| `expensas.emitidas` | emitir una liquidación | vecinos de las unidades, con su total | ✓ |
+| `asamblea.creada` | convocar una asamblea | vecinos del consorcio | ✓ |
+| `asamblea.recordatorio` | cron, 48 h antes | vecinos del consorcio | — |
+| `votacion.nueva` | publicar una votación independiente | vecinos del consorcio | ✓ |
+| `votacion.cerrada` | cerrar una votación (o que venza) | vecinos del consorcio | ✓ |
+| `reclamo.cerrado` | resolver un reclamo | quien lo abrió | — |
+| `novedad.publicada` | publicar un comunicado | vecinos del consorcio | — |
+| `aviso.directo` | `Notificador.enviar()`: reservas, pagos, respuestas, recordatorios de deuda | una persona | — |
+
+### Piezas
+
+- `core/mensajeria/`: conexión (`amqplib` + `amqp-connection-manager`, que
+  reconecta sola), el sobre común validado de los dos lados (`eventos.ts`), la
+  topología y `PublicadorEventos`. Publicar **nunca bloquea ni lanza**: no
+  espera la confirmación del broker, y un error queda en el log.
+- `core/notificaciones/Notificador`: los avisos a una persona. Publica
+  `aviso.directo`; los módulos siguen hablando con él y no con el broker.
+- `modules/email/`: `EmailNotificador` manda con NodeMailer. Cada mail queda en
+  `envio_notificacion` (PENDIENTE, ENVIADO o FALLIDO), y un reintento no repite
+  los que ya salieron.
+- `modules/novedades/`: `MuroNovedadesPublicador`. La novedad se guarda junto con
+  la marca en `evento_procesado`, así un evento repetido no la duplica.
+
+### Reintentos y DLQ
+
+Cada consumidor tiene tres colas: la principal, `.reintento` (TTL de 30 s que
+devuelve el mensaje a la principal) y `.dlq`. El ack es manual: si el handler
+falla, el mensaje vuelve hasta 3 veces y después queda en la DLQ para mirarlo a
+mano. Un sobre que no cumple el contrato va directo a la DLQ.
+
+### Configurar
+
+En `apps/backend/.env` (ver `.env.example`):
+
+- `RABBITMQ_URL`: el grupo usa **CloudAMQP** (plan gratis), con la "AMQP URL"
+  del panel. Para un broker propio, `docker compose up -d rabbitmq` en la raíz
+  del repo levanta uno con panel en `http://localhost:15672`.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` y `MAIL_FROM`: en desarrollo,
+  **Mailtrap** (Email Testing → Inbox → SMTP). Los mails quedan en la bandeja de
+  prueba y no le llegan a nadie.
+
+Sin `RABBITMQ_URL` los eventos quedan en el log; sin `SMTP_HOST`, los mails. La
+app anda igual en los dos casos. Si todos usan el mismo CloudAMQP, los backends
+de cada uno compiten por las mismas colas; como la base también es compartida,
+no importa quién procese cada mensaje.
+
+### Pendiente
+
+- Si el broker está caído y el proceso se reinicia antes de reconectar, los
+  eventos que retenía en memoria se pierden. Lo robusto es una tabla outbox.
+- No se respeta `preferencia_notificacion` ni se llena la bandeja in-app
+  (`notificacion`): todavía no hay pantallas para eso.
 
 ## Datos de demo
 
