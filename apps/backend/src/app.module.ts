@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { CoreModule } from './core/core.module';
+import { MensajeriaModule } from './core/mensajeria/mensajeria.module';
 import { NotificacionesModule } from './core/notificaciones/notificaciones.module';
 import { DatabaseModule } from './database/database.module';
 import { ArchivosModule } from './modules/archivos/archivos.module';
@@ -11,8 +13,10 @@ import { CategoriasReclamoModule } from './modules/categorias-reclamo/categorias
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { ConsorciosModule } from './modules/consorcios/consorcios.module';
+import { EmailModule } from './modules/email/email.module';
 import { ExpensasModule } from './modules/expensas/expensas.module';
 import { InicioModule } from './modules/inicio/inicio.module';
+import { NovedadesModule } from './modules/novedades/novedades.module';
 import { PagosModule } from './modules/pagos/pagos.module';
 import { ProveedoresModule } from './modules/proveedores/proveedores.module';
 import { ReclamosModule } from './modules/reclamos/reclamos.module';
@@ -41,8 +45,10 @@ import { VotacionesModule } from './modules/votaciones/votaciones.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     CoreModule,
+    MensajeriaModule,
     NotificacionesModule,
 
     // ── Módulos de negocio ──
@@ -62,6 +68,9 @@ import { VotacionesModule } from './modules/votaciones/votaciones.module';
     ReservasModule,
     AsambleasModule,
     VotacionesModule,
+    NovedadesModule,
+    // Consumidor de la cola de mails: no expone rutas.
+    EmailModule,
     // Compone la pantalla de inicio del vecino: va último porque depende de
     // todos los anteriores.
     InicioModule,

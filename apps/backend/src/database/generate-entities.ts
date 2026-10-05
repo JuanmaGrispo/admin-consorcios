@@ -171,6 +171,8 @@ function generarEntidad(
 ): string {
   const deLaTabla = constraints.filter((c) => c.table_name === tabla);
   const pk = deLaTabla.find((c) => c.constraint_type === 'PRIMARY KEY');
+  // Una PK compuesta llega como `evento_id,consumidor`: cada columna es @PrimaryColumn.
+  const columnasPk = new Set(pk?.columnas.split(',') ?? []);
   const fks = deLaTabla.filter((c) => c.constraint_type === 'FOREIGN KEY');
   const uniques = deLaTabla.filter((c) => c.constraint_type === 'UNIQUE');
   const fksEntrantes = constraints.filter(
@@ -201,7 +203,7 @@ function generarEntidad(
     if (enums.has(col.udt_name)) importsEnums.add(pascal(col.udt_name));
 
     // ── Clave primaria ──
-    if (pk?.columnas === col.column_name) {
+    if (columnasPk.has(col.column_name)) {
       if (col.column_default?.includes('gen_random_uuid')) {
         typeorm.add('PrimaryGeneratedColumn');
         cuerpo.push(`  @PrimaryGeneratedColumn('uuid')\n  ${prop}: ${ts};`);

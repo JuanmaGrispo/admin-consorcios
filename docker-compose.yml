@@ -1,0 +1,21 @@
+# RabbitMQ local, opcional. El grupo usa CloudAMQP (ver README → Mensajería);
+# esto es para quien prefiera un broker propio:
+#
+#   docker compose up -d rabbitmq
+#   RABBITMQ_URL=amqp://domus:domus@localhost:5672
+#
+# Panel de administración en http://localhost:15672 (domus / domus).
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: domus
+      RABBITMQ_DEFAULT_PASS: domus
+    volumes:
+      - rabbitmq-datos:/var/lib/rabbitmq
+
+volumes:
+  rabbitmq-datos:

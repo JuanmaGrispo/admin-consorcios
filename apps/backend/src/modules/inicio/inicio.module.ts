@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AsambleasModule } from '../asambleas/asambleas.module';
 import { ExpensasModule } from '../expensas/expensas.module';
+import { NovedadesModule } from '../novedades/novedades.module';
 import { ReclamosModule } from '../reclamos/reclamos.module';
 import { ReservasModule } from '../reservas/reservas.module';
 import { UnidadesModule } from '../unidades/unidades.module';
@@ -22,6 +23,7 @@ import { InicioService } from './inicio.service';
     AsambleasModule,
     ReservasModule,
     VotacionesModule,
+    NovedadesModule,
   ],
   controllers: [InicioController],
   providers: [InicioService],

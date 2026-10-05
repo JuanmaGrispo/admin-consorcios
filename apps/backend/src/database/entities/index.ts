@@ -10,6 +10,7 @@ export * from './boleta_detalle.entity';
 export * from './categoria_reclamo.entity';
 export * from './consorcio.entity';
 export * from './envio_notificacion.entity';
+export * from './evento_procesado.entity';
 export * from './gasto.entity';
 export * from './liquidacion.entity';
 export * from './notificacion.entity';

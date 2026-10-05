@@ -20,6 +20,14 @@ En vez de resolver un único evento aislado, se eligió el mecanismo que atravie
 | `votacion.nueva` | Se abrió una votación digital independiente | Votaciones |
 | `votacion.cerrada` | Una votación llegó a su cierre y tiene resultado | Votaciones |
 | `reclamo.cerrado` | Un reclamo pasó a estado resuelto | Reclamos |
+| `novedad.publicada` | El administrador publicó un comunicado en el muro | Novedades |
+| `aviso.directo` | Un aviso a una persona (reserva aprobada, pago recibido, respuesta a un reclamo, recordatorio de deuda) | `Notificador`, desde cualquier módulo |
+
+Los dos últimos se sumaron al implementar. `novedad.publicada` hace que un
+comunicado también llegue por mail; `aviso.directo` es lo que antes era
+`Notificador.enviar()`, y así todos los mails salen fuera del request y con
+reintentos. Ninguno de los dos llega al muro: el comunicado ya está ahí, y un
+aviso personal no es una novedad del edificio.
 
 ---
 
@@ -74,7 +82,7 @@ ReclamoService     ─┤ publica:              │──┘              ▼   
 
 | Consumidor | Routing keys que consume |
 |---|---|
-| `EmailNotificador` | `#` (todos los eventos, sin excepción) |
+| `EmailNotificador` | `#` (todos los eventos, sin excepción, incluidos `novedad.publicada` y `aviso.directo`) |
 | `MuroNovedadesPublicador` | `asamblea.creada`, `votacion.nueva`, `votacion.cerrada`, `expensas.emitidas` |
 
 ---
@@ -93,7 +101,7 @@ ReclamoService     ─┤ publica:              │──┘              ▼   
 {
   "evento_id": "uuid",
   "tipo_evento": "expensas.emitidas | asamblea.creada | asamblea.recordatorio | votacion.nueva | votacion.cerrada | reclamo.cerrado",
-  "consorcio_id": "uuid",
+  "consorcio_id": "uuid | null (sólo aviso.directo)",
   "timestamp": "2026-09-25T12:00:00Z",
   "payload": { /* específico de cada evento */ }
 }
@@ -107,8 +115,15 @@ ReclamoService     ─┤ publica:              │──┘              ▼   
 | `asamblea.creada` | `asamblea_id`, `titulo`, `fecha`, `hora`, `lugar` |
 | `asamblea.recordatorio` | `asamblea_id`, `titulo`, `fecha`, `hora`, `lugar` |
 | `votacion.nueva` | `votacion_id`, `titulo`, `fecha_cierre`, `mayoria_necesaria` |
-| `votacion.cerrada` | `votacion_id`, `resultado` (`aprobada` \| `rechazada`), `participacion_pct` |
-| `reclamo.cerrado` | `reclamo_id`, `unidad_id`, `usuario_id`, `categoria`, `resolucion` |
+| `votacion.cerrada` | `votacion_id`, `titulo`, `resultado` (`aprobada` \| `rechazada` \| `sin_quorum`), `participacion_pct` |
+| `reclamo.cerrado` | `reclamo_id`, `codigo`, `unidad_id`, `usuario_id`, `categoria`, `resolucion` (puede ser `null`) |
+| `novedad.publicada` | `novedad_id`, `titulo` |
+| `aviso.directo` | `destinatario_id`, `asunto`, `cuerpo`, `origen` |
+
+Respecto del diseño original, `votacion.cerrada` suma `titulo` y el resultado
+`sin_quorum` (una votación de asamblea sin quórum no decide nada), y
+`reclamo.cerrado` suma `codigo`: los dos los necesita el mail. En asambleas,
+`fecha` va como `AAAA-MM-DD` y `hora` como `HH:mm`, en hora de Buenos Aires.
 
 ---
 
@@ -214,33 +229,42 @@ channel.consume(qMuro.queue, (msg) => {
 
 ---
 
-## 6. Punto de partida en el repo
+## 6. Dónde está implementado
 
-- Hoy existe `Notificador` en `apps/backend/src/core/notificaciones/`: un
-  provider global que los módulos llaman con un `Aviso` y que por ahora sólo
-  deja registro en el log. `ReclamosService` ya lo usa.
-- De los módulos emisores, sólo **reclamos** existe como módulo
-  (`src/modules/reclamos/`). Liquidación, asambleas y votaciones todavía no.
-- La infraestructura de mensajería (conexión, declaración del exchange,
-  publicación del sobre común) es transversal: va en `src/core/`, igual que
-  `notificaciones`, no en un módulo de negocio.
-- Los consumidores (`EmailNotificador`, `MuroNovedadesPublicador`) cumplen la
-  regla de capas: el consumer recibe el mensaje y delega en un service; nada
-  de SQL ni SMTP en el handler.
+| Pieza | Archivo |
+|---|---|
+| Conexión, topología, publicador y sobre | `apps/backend/src/core/mensajeria/` |
+| `Notificador` → `aviso.directo` | `apps/backend/src/core/notificaciones/notificador.ts` |
+| `EmailNotificador` (NodeMailer) | `apps/backend/src/modules/email/` |
+| `MuroNovedadesPublicador` | `apps/backend/src/modules/novedades/muro.consumer.ts` |
+| Recordatorio 48 h antes (`@nestjs/schedule`) | `apps/backend/src/modules/asambleas/recordatorio-asambleas.ts` |
+
+- **Broker:** CloudAMQP compartido por el grupo (`RABBITMQ_URL`), o uno local
+  con el `docker-compose.yml` de la raíz.
+- **Consumidores:** corren en el mismo proceso de Nest y arrancan con la app.
+  El handler sólo delega en un service, como pide la regla de capas.
+- **Reintentos:** cada cola tiene una `.reintento` (TTL 30 s, vuelve a la
+  principal) y una `.dlq`. Hasta 3 reintentos, con el contador en el header
+  `x-intentos`.
+- **Idempotencia:** el mail registra cada envío en `envio_notificacion` y no
+  repite uno ya ENVIADO. El muro guarda la novedad y la marca en
+  `evento_procesado` en la misma transacción.
+- **Recordatorio sin duplicados:** el mismo `UPDATE` que elige las asambleas
+  marca `asamblea.recordatorio_enviado_at`.
 
 ---
 
 ## 7. Checklist para la implementación
 
-- [ ] Levantar RabbitMQ (local con Docker, o servicio administrado).
-- [ ] Instalar `amqplib` (o el wrapper de `@nestjs/microservices`) en el/los proyectos NestJS.
-- [ ] Declarar el exchange `domus.eventos` (`topic`, `durable: true`) una sola vez, idealmente en un módulo compartido de infraestructura de mensajería.
-- [ ] Implementar el publish en cada servicio emisor (`LiquidacionService`, `AsambleaService` ×2, `VotacionService` ×2, `ReclamoService`), validando el "sobre" común antes de serializar.
-- [ ] Programar la tarea que publica `asamblea.recordatorio` 48 h antes de cada asamblea (por ejemplo con `@nestjs/schedule`), sin publicarlo dos veces para la misma asamblea.
-- [ ] Implementar cada consumidor como su propio proceso/worker (o módulo NestJS) con su cola durable y sus bindings específicos, según la tabla de la sección 3.
-- [ ] Usar `ack` manual (no autoAck) para no perder mensajes si el consumidor cae a mitad de proceso.
-- [ ] Definir una dead-letter queue (DLQ) para mensajes que fallan repetidamente al procesarse.
-- [ ] Testear el filtro de `reclamo.cerrado` y `asamblea.recordatorio`: confirmar que el muro NO los recibe.
+- [x] Levantar RabbitMQ (CloudAMQP, o local con Docker).
+- [x] Instalar `amqplib` (con `amqp-connection-manager` para reconectar).
+- [x] Declarar el exchange `domus.eventos` (`topic`, `durable: true`) en un módulo compartido de infraestructura (`core/mensajeria`).
+- [x] Implementar el publish en cada servicio emisor, validando el sobre común antes de serializar.
+- [x] Programar la tarea que publica `asamblea.recordatorio` 48 h antes (`@nestjs/schedule`), sin publicarlo dos veces para la misma asamblea.
+- [x] Implementar cada consumidor con su cola durable y sus bindings específicos, según la tabla de la sección 3.
+- [x] Usar `ack` manual (no autoAck).
+- [x] Definir una dead-letter queue (DLQ) para mensajes que fallan repetidamente.
+- [x] Testear el filtro de `reclamo.cerrado` y `asamblea.recordatorio`: el muro no los recibe (`muro.ts` y sus tests).
 
 ---
 

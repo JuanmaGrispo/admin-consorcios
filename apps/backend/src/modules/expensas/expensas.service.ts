@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import { Notificador } from '../../core/notificaciones/notificador';
 import {
   Boleta,
@@ -127,6 +128,7 @@ export class ExpensasService {
     private readonly reclamos: ReclamosService,
     private readonly notificador: Notificador,
     private readonly archivos: ArchivosService,
+    private readonly eventos: PublicadorEventos,
   ) {}
 
   // ── Liquidaciones ──────────────────────────────────────────────────────────
@@ -310,7 +312,12 @@ export class ExpensasService {
       totalEmitido,
     });
 
-    await this.avisarEmision(liquidacion, boletas);
+    this.eventos.publicar('expensas.emitidas', liquidacion.consorcioId, {
+      liquidacion_id: liquidacion.id,
+      periodo: liquidacion.periodo.slice(0, 7),
+      unidades_afectadas: boletas.map((b) => b.unidadId),
+      fecha_vencimiento: liquidacion.fechaVencimiento,
+    });
     return this.findOne(usuario, id);
   }
 
@@ -767,33 +774,6 @@ export class ExpensasService {
       return;
     }
     await this.recalcular(liquidacion);
-  }
-
-  /**
-   * Un aviso por vecino vinculado a cada unidad. Avisar nunca corta la
-   * emisión: si falla, las boletas ya quedaron emitidas igual.
-   */
-  private async avisarEmision(
-    liquidacion: Liquidacion,
-    boletas: { unidadId: string; total: number }[],
-  ): Promise<void> {
-    const vecinos = await this.expensas.vecinosPorUnidad(boletas.map((b) => b.unidadId));
-    const mes = liquidacion.periodo.slice(0, 7);
-
-    for (const boleta of boletas) {
-      for (const destinatarioId of vecinos.get(boleta.unidadId) ?? []) {
-        try {
-          await this.notificador.enviar({
-            destinatarioId,
-            asunto: `Expensas de ${mes}`,
-            cuerpo: `Ya está tu boleta de expensas por $${boleta.total.toFixed(2)}. Vence el ${liquidacion.fechaVencimiento}.`,
-            origen: `liquidacion:${liquidacion.id}`,
-          });
-        } catch (error) {
-          this.logger.warn(`No se pudo avisar a ${destinatarioId}: ${String(error)}`);
-        }
-      }
-    }
   }
 
   /** Una liquidación de otro consorcio responde como inexistente. */

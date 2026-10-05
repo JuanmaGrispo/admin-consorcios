@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import type { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import type { Notificador } from '../../core/notificaciones/notificador';
 import { Reclamo, RolUsuario } from '../../database/entities';
 import type { ArchivosService } from '../archivos/archivos.service';
@@ -37,6 +38,7 @@ function crearService() {
         if (!url.startsWith('https://storage/reclamos/')) throw new BadRequestException('ajena');
       },
     } as unknown as ArchivosService,
+    { publicar: () => undefined } as unknown as PublicadorEventos,
   );
   return { service, llamadas };
 }

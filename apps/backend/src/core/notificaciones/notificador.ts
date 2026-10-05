@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { PublicadorEventos } from '../mensajeria/publicador-eventos';
 
 /** Un aviso a una persona, sin decir por qué canal sale. */
 export interface Aviso {
@@ -11,24 +12,24 @@ export interface Aviso {
 }
 
 /**
- * Punto de extensión para los avisos. Hoy sólo deja registro en el log.
+ * Los avisos personales (una reserva aprobada, un pago recibido) viajan como
+ * evento `aviso.directo`: sólo lo escucha el consumidor de email, y el mail se
+ * manda fuera del request, con reintentos. Los módulos de negocio siguen
+ * dependiendo de `Notificador`, no del broker.
  *
- * El módulo de notificaciones —que tiene sus propias tablas (`notificacion`,
- * `envio_notificacion`, `preferencia_notificacion`)— va a implementar esta
- * misma interfaz con NodeMailer detrás. Los módulos de negocio dependen de
- * `Notificador`, no de SMTP, así que ese día no hay que tocarlos.
- *
- * Regla del alcance: notificar nunca bloquea la operación principal. Si el
- * aviso falla, la respuesta al reclamo ya quedó guardada igual.
+ * Notificar nunca bloquea la operación principal: publicar no espera al broker
+ * ni lanza.
  */
 @Injectable()
 export class Notificador {
-  private readonly logger = new Logger(Notificador.name);
+  constructor(private readonly eventos: PublicadorEventos) {}
 
   async enviar(aviso: Aviso): Promise<void> {
-    this.logger.log(
-      `[pendiente de envío] ${aviso.origen} → usuario ${aviso.destinatarioId}: ${aviso.asunto}`,
-    );
-    return Promise.resolve();
+    this.eventos.publicar('aviso.directo', null, {
+      destinatario_id: aviso.destinatarioId,
+      asunto: aviso.asunto,
+      cuerpo: aviso.cuerpo,
+      origen: aviso.origen,
+    });
   }
 }

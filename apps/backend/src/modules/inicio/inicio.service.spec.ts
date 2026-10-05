@@ -11,6 +11,7 @@ import {
 import type { AsambleasService } from '../asambleas/asambleas.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ExpensasService } from '../expensas/expensas.service';
+import type { NovedadesService } from '../novedades/novedades.service';
 import type { ReclamosService } from '../reclamos/reclamos.service';
 import type { ListarReservasQuery } from '../reservas/dto/listar-reservas.query';
 import type { ReservasService } from '../reservas/reservas.service';
@@ -41,6 +42,7 @@ function crearService(
       },
     } as unknown as ReservasService,
     { abiertasDelVecino: async () => opts.votaciones ?? [] } as unknown as VotacionesService,
+    { ultimasDelVecino: async () => [] } as unknown as NovedadesService,
   );
   return { service, pedidas };
 }

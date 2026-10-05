@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import type { Notificador } from '../../core/notificaciones/notificador';
+import type { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import {
   Asamblea,
   Asistencia,
@@ -82,6 +82,7 @@ function crearService(
     asistencia: [] as unknown[],
     listarFiltro: null as unknown,
     proximasConsorcios: null as unknown,
+    publicados: [] as unknown[][],
   };
   const asistencias = opts.asistencias ?? [];
   const repo = {
@@ -118,20 +119,23 @@ function crearService(
     unidadesDelUsuarioEnConsorcio: async () => opts.unidadesDelVecino ?? [],
     vecinosDelConsorcio: async () => ['v1'],
     votacionesAbiertas: async () => opts.votacionesAbiertas ?? 0,
+    marcarParaRecordatorio: async () => [asamblea({ estado: EstadoAsamblea.CONVOCADA })],
     proximas: async (consorcioIds: string[]) => {
       escrito.proximasConsorcios = consorcioIds;
       return [asamblea({ estado: EstadoAsamblea.CONVOCADA })];
     },
   } as unknown as AsambleasRepository;
   const consorcios = { findOne: async () => ({ id: 'c1' }) } as unknown as ConsorciosService;
-  const notificador = { enviar: async () => undefined } as unknown as Notificador;
+  const eventos = {
+    publicar: (...args: unknown[]) => void escrito.publicados.push(args),
+  } as unknown as PublicadorEventos;
   // Sólo son nuestras las URLs de actas que subió `archivos`.
   const archivos = {
     exigirPropia: (url: string) => {
       if (!url.startsWith('https://storage/actas/')) throw new BadRequestException('ajena');
     },
   } as unknown as ArchivosService;
-  return { service: new AsambleasService(repo, consorcios, notificador, archivos), escrito };
+  return { service: new AsambleasService(repo, consorcios, eventos, archivos), escrito };
 }
 
 const crearDto = (over = {}) => ({
@@ -215,6 +219,17 @@ describe('AsambleasService — administrador de otro consorcio', () => {
   });
 });
 
+describe('AsambleasService — recordatorio', () => {
+  it('publica asamblea.recordatorio por cada asamblea que marcó el repositorio', async () => {
+    const { service, escrito } = crearService();
+    assert.equal(await service.enviarRecordatorios(), 1);
+    const [tipo, consorcio, payload] = escrito.publicados[0] as [string, string, { asamblea_id: string }];
+    assert.equal(tipo, 'asamblea.recordatorio');
+    assert.equal(consorcio, 'c1');
+    assert.equal(payload.asamblea_id, 'as1');
+  });
+});
+
 describe('AsambleasService — ciclo de vida', () => {
   it('convocar copia el coeficiente de cada unidad activa', async () => {
     const { service, escrito } = crearService({
@@ -228,6 +243,10 @@ describe('AsambleasService — ciclo de vida', () => {
       { unidadId: 'u1', coeficienteAplicado: 12.5 },
       { unidadId: 'u2', coeficienteAplicado: 87.5 },
     ]);
+    const [tipo, consorcio, payload] = escrito.publicados[0] as [string, string, { asamblea_id: string }];
+    assert.equal(tipo, 'asamblea.creada');
+    assert.equal(consorcio, 'c1');
+    assert.equal(payload.asamblea_id, 'as1');
   });
 
   it('convocar sin orden del día es 400', async () => {

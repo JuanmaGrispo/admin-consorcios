@@ -109,6 +109,35 @@ export class AsambleasRepository {
     });
   }
 
+  /**
+   * Elige y marca en el mismo UPDATE las convocadas que empiezan dentro de
+   * 48 h y todavía no tuvieron recordatorio. Si dos instancias corren el cron
+   * a la vez, cada asamblea la marca una sola.
+   */
+  async marcarParaRecordatorio(): Promise<Asamblea[]> {
+    const { raw } = await this.asambleas
+      .createQueryBuilder()
+      .update(Asamblea)
+      .set({ recordatorioEnviadoAt: () => 'now()' })
+      .where('estado = :estado', { estado: EstadoAsamblea.CONVOCADA })
+      .andWhere('recordatorio_enviado_at IS NULL')
+      .andWhere('fecha_hora > now()')
+      .andWhere("fecha_hora <= now() + interval '48 hours'")
+      .returning(['id', 'consorcio_id', 'titulo', 'fecha_hora', 'lugar', 'link_videollamada'])
+      .execute();
+    return (raw as Record<string, unknown>[]).map(
+      (fila) =>
+        ({
+          id: fila.id,
+          consorcioId: fila.consorcio_id,
+          titulo: fila.titulo,
+          fechaHora: new Date(fila.fecha_hora as string),
+          lugar: fila.lugar,
+          linkVideollamada: fila.link_videollamada,
+        }) as Asamblea,
+    );
+  }
+
   findById(id: string): Promise<Asamblea | null> {
     return this.asambleas.findOne({
       where: { id },

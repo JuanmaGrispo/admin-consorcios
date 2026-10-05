@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import type { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import type { Notificador } from '../../core/notificaciones/notificador';
 import {
   Asamblea,
@@ -117,6 +118,7 @@ function crearService(
     extras: null as unknown,
     actualizada: [] as unknown[],
     votos: [] as Partial<Voto>[],
+    publicados: [] as unknown[][],
   };
   const votos = opts.votos ?? [];
   const repo = {
@@ -159,6 +161,7 @@ function crearService(
       },
     } as unknown as ArchivosService,
     { enviar: async () => undefined } as unknown as Notificador,
+    { publicar: (...args: unknown[]) => void escrito.publicados.push(args) } as unknown as PublicadorEventos,
   );
   return { service, escrito };
 }
@@ -292,6 +295,25 @@ describe('VotacionesService — ciclo', () => {
       estado: EstadoVotacion.CERRADA,
       resultado: ResultadoVotacion.APROBADA,
     });
+    const [tipo, consorcio, payload] = escrito.publicados[0] as [string, string, { resultado: string }];
+    assert.equal(tipo, 'votacion.cerrada');
+    assert.equal(consorcio, 'c1');
+    assert.equal(payload.resultado, 'aprobada');
+  });
+
+  it('publicar una independiente anuncia votacion.nueva', async () => {
+    const { service, escrito } = crearService({ votacion: votacion({ estado: EstadoVotacion.BORRADOR }) });
+    await service.publicar(admin, 'vt1');
+    assert.deepEqual(escrito.publicados[0], [
+      'votacion.nueva',
+      'c1',
+      {
+        votacion_id: 'vt1',
+        titulo: 'Bomba de agua',
+        fecha_cierre: (escrito.publicados[0] as [string, string, { fecha_cierre: string }])[2].fecha_cierre,
+        mayoria_necesaria: MayoriaRequerida.SIMPLE_PRESENTES,
+      },
+    ]);
   });
 
   it('de asamblea sin quórum cierra SIN_QUORUM', async () => {
