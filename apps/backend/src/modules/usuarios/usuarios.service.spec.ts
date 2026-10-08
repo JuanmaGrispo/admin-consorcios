@@ -49,6 +49,7 @@ describe('UsuariosService', () => {
       viveEn: async (id: string, consorcioIds: string[]) =>
         (viveEn[id] ?? []).some((c) => consorcioIds.includes(c)),
       findById: async (id: string) => cuentas.find((u) => u.id === id) ?? null,
+      findConPassword: async (id: string) => cuentas.find((u) => u.id === id) ?? null,
       findByEmail: async (email: string) => cuentas.find((u) => u.email === email) ?? null,
       update: async (u: Usuario, d: Partial<Usuario>) => Object.assign(u, d),
     } as unknown as UsuariosRepository;

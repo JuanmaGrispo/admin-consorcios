@@ -15,6 +15,13 @@ import dataSource from './data-source';
 
 const OUT_DIR = path.join(__dirname, 'entities');
 
+/**
+ * Columnas que TypeORM no trae salvo que se pidan con `addSelect`. Un join a
+ * `usuario` desde cualquier módulo devolvería el hash en la respuesta; así
+ * sólo lo ve quien lo pide a propósito (el login y el cambio de contraseña).
+ */
+const COLUMNAS_OCULTAS = new Set(['usuario.password_hash']);
+
 // ── Tipos de lo que devuelve la introspección ────────────────────────────────
 
 interface Col {
@@ -241,6 +248,7 @@ function generarEntidad(
     if (nullable) opciones.push('nullable: true');
     const def = defaultDeColumna(col);
     if (def) opciones.push(`default: ${def}`);
+    if (COLUMNAS_OCULTAS.has(`${tabla}.${col.column_name}`)) opciones.push('select: false');
 
     cuerpo.push(
       `  @Column({ ${opciones.join(', ')} })\n  ${prop}: ${ts}${nullable ? ' | null' : ''};`,

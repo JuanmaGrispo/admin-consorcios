@@ -132,7 +132,8 @@ export class UsuariosService {
   }
 
   async cambiarPassword(usuarioId: string, dto: CambiarPasswordDto): Promise<void> {
-    const propio = await this.exigirPropio(usuarioId);
+    const propio = await this.usuarios.findConPassword(usuarioId);
+    if (!propio) throw new NotFoundException('Tu cuenta no existe');
     // 400 y no 401: un 401 haría que el front lo trate como sesión vencida.
     if (!(await coincidePassword(dto.actual, propio.passwordHash))) {
       throw new BadRequestException('La contraseña actual no es correcta');
