@@ -415,7 +415,9 @@ async function main() {
     const desactualizados: string[] = [];
     for (const [nombre, contenido] of archivos) {
       const ruta = path.join(OUT_DIR, nombre);
-      const actual = fs.existsSync(ruta) ? fs.readFileSync(ruta, 'utf8') : null;
+      // Sin los \r: en Windows git puede dejar el archivo con CRLF y el
+      // contenido es el mismo.
+      const actual = fs.existsSync(ruta) ? fs.readFileSync(ruta, 'utf8').replace(/\r\n/g, '\n') : null;
       if (actual !== contenido) desactualizados.push(nombre);
     }
     const sobran = fs.existsSync(OUT_DIR)
