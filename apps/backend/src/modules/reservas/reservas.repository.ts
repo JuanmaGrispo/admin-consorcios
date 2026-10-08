@@ -11,6 +11,7 @@ import {
 } from '../../database/entities';
 import { ListarAmenitiesQuery } from './dto/listar-amenities.query';
 import { ListarReservasQuery } from './dto/listar-reservas.query';
+import { ZONA_POR_DEFECTO } from './horario';
 
 /**
  * Lo que ocupa el calendario. Es exactamente el `WHERE` del EXCLUDE
@@ -301,11 +302,19 @@ export class ReservasRepository {
     if (query.situacion === 'proximas') qb.andWhere('r.inicio > now()');
     if (query.situacion === 'pasadas') qb.andWhere('r.inicio <= now()');
     // `CAST(... AS date)` y no `::date`: TypeORM lee `::` como un parámetro más.
+    // Los días se cortan en la zona del edificio y no en la de la sesión (UTC):
+    // si no, una reserva del sábado a las 22:00 caería en el domingo.
     if (query.desde) {
-      qb.andWhere('r.inicio >= CAST(:desde AS date)', { desde: query.desde });
+      qb.andWhere('r.inicio >= CAST(CAST(:desde AS date) AS timestamp) AT TIME ZONE :zona', {
+        desde: query.desde,
+        zona: ZONA_POR_DEFECTO,
+      });
     }
     if (query.hasta) {
-      qb.andWhere('r.inicio < CAST(:hasta AS date) + 1', { hasta: query.hasta });
+      qb.andWhere('r.inicio < CAST(CAST(:hasta AS date) + 1 AS timestamp) AT TIME ZONE :zona', {
+        hasta: query.hasta,
+        zona: ZONA_POR_DEFECTO,
+      });
     }
 
     const [items, total] = await qb.getManyAndCount();
