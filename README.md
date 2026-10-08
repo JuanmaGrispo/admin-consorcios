@@ -667,6 +667,7 @@ antes de cada lectura de boletas, sin cron.
 | GET    | `/pagos/:id/recibo`               | el recibo en PDF, sólo de un pago aprobado |
 | POST   | `/pagos`                          | administrador: pago manual `{ boletaId, monto, medio, fechaPago? }` |
 | POST   | `/pagos/mercadopago/preferencia`  | dueño de la boleta o administrador: `{ boletaId }` → `{ pagoId, initPoint }` |
+| POST   | `/pagos/:id/sincronizar`          | mismos permisos que el detalle: le pregunta a Mercado Pago cómo quedó el pago, sin esperar al webhook |
 | POST   | `/pagos/webhook/mercadopago`      | público, protegido por firma: lo llama Mercado Pago |
 
 ### Reglas
@@ -718,8 +719,14 @@ una columna del consorcio y la secuencia se vuelve una por punto de venta.
 ### Configurar Mercado Pago
 
 En `apps/backend/.env`, con credenciales **de prueba**: `MP_ACCESS_TOKEN`,
-`MP_WEBHOOK_SECRET`, `MP_NOTIFICATION_URL` y `FRONTEND_URL` (ver
-`.env.example`). En local, el webhook necesita una URL pública: un túnel a
+`MP_WEBHOOK_SECRET`, `MP_NOTIFICATION_URL`, `FRONTEND_URL` y `MP_RETURN_PATH`
+(ver `.env.example`). El vecino vuelve a `FRONTEND_URL + MP_RETURN_PATH` con
+`?pago=aprobado|pendiente|rechazado`, y Mercado Pago agrega
+`external_reference`, que es el id de nuestro pago. Con ese id el front llama a
+`POST /pagos/:id/sincronizar` para mostrar el resultado: así no depende de que
+el webhook ya haya llegado. Los dos aplican la misma transición, y es
+condicional (sólo si el pago sigue en el estado que se leyó), así que el recibo
+se numera y el aviso sale una sola vez aunque lleguen juntos. En local, el webhook necesita una URL pública: un túnel a
 `http://localhost:4000/api/pagos/webhook/mercadopago`. Sin token, la
 preferencia responde 503 y el resto de la app anda igual.
 

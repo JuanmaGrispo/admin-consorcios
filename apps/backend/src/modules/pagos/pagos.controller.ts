@@ -68,6 +68,17 @@ export class PagosController {
     });
   }
 
+  @Post(':id/sincronizar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Confirma con Mercado Pago cómo quedó un pago',
+    description:
+      'Lo llama el front al volver del checkout (el id viene como external_reference). Le pregunta a Mercado Pago sin esperar al webhook y devuelve el pago actualizado. Sobre un pago que no está pendiente, lo devuelve tal cual.',
+  })
+  sincronizar(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.pagos.sincronizar(usuario, id);
+  }
+
   @Roles(RolUsuario.ADMINISTRADOR)
   @Post()
   @ApiOperation({

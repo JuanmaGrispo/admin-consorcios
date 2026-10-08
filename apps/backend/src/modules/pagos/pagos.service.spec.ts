@@ -48,6 +48,10 @@ function crearEntorno() {
     },
     actualizar: async (id: string, d: Partial<Pago>) =>
       Object.assign(db.pagos.find((p) => p.id === id)!, d),
+    actualizarSiEstado: async (id: string, estado: EstadoPago, d: Partial<Pago>) => {
+      const pago = db.pagos.find((p) => p.id === id)!;
+      return pago.estado === estado ? Object.assign(pago, d) : null;
+    },
     findConRelaciones: async (id: string) => {
       const pago = db.pagos.find((p) => p.id === id);
       return pago ? { ...pago, unidad: { consorcioId: 'c1', etiqueta: '3º B' } } : null;
@@ -111,6 +115,7 @@ function crearEntorno() {
     pagos: new Map<string, PagoMercadoPago>(),
     preferenciaFalla: false,
     preferencias: 0,
+    busquedas: 0,
   };
   const mercadoPago = {
     crearPreferencia: async () => {
@@ -123,6 +128,10 @@ function crearEntorno() {
       initPoint: `https://mp/checkout/${id.replace('pref', '')}`,
     }),
     obtenerPago: async (id: string) => mp.pagos.get(id)!,
+    ultimoIntento: async () => {
+      mp.busquedas += 1;
+      return [...mp.pagos.values()].at(-1) ?? null;
+    },
     firmaValida: (firma?: string) => firma === 'ok',
   } as unknown as MercadoPagoClient;
 
@@ -224,6 +233,38 @@ describe('PagosService', () => {
       await webhook('101');
       assert.equal(entorno.db.pagos[0].mpPaymentId, '100');
       assert.ok(entorno.avisos.some((a) => a.destinatarioId === 'a1' && a.asunto.startsWith('Cobro duplicado')));
+    });
+
+    describe('al volver del checkout', () => {
+      it('le pregunta a Mercado Pago sin esperar al webhook', async () => {
+        const { pagoId } = await service.crearPreferencia(admin, 'b1');
+        entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
+        const pago = await service.sincronizar(admin, pagoId);
+        assert.equal(pago.estado, EstadoPago.APROBADO);
+        assert.equal(entorno.db.pagos[0].reciboNumero, '0001-00000001');
+      });
+
+      it('si todavía no hay intento, el pago sigue pendiente', async () => {
+        const { pagoId } = await service.crearPreferencia(admin, 'b1');
+        const pago = await service.sincronizar(admin, pagoId);
+        assert.equal(pago.estado, EstadoPago.PENDIENTE);
+      });
+
+      it('un pago que ya no está pendiente no vuelve a consultar', async () => {
+        const { pagoId } = await service.crearPreferencia(admin, 'b1');
+        entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
+        await webhook('100');
+        await service.sincronizar(admin, pagoId);
+        assert.equal(entorno.mp.busquedas, 0);
+      });
+
+      it('webhook y sincronizar a la vez: un recibo y un aviso', async () => {
+        const { pagoId } = await service.crearPreferencia(admin, 'b1');
+        entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
+        await Promise.all([webhook('100'), service.sincronizar(admin, pagoId)]);
+        assert.equal(entorno.db.correlativo, 1);
+        assert.equal(entorno.avisos.filter((a) => a.destinatarioId === 'v1').length, 1);
+      });
     });
 
     it('si Mercado Pago falla, el pago no queda pendiente para siempre', async () => {

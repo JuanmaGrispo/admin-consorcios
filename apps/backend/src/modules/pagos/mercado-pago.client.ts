@@ -67,6 +67,7 @@ export class MercadoPagoClient {
     referencia: string;
   }): Promise<PreferenciaCreada> {
     const frontend = this.config.get<string>('FRONTEND_URL', 'http://localhost:3000');
+    const vuelta = `${frontend}${this.config.get<string>('MP_RETURN_PATH', '/expensas/pago')}`;
     const respuesta = await this.llamar<{ id: string; init_point: string }>(
       'POST',
       '/checkout/preferences',
@@ -75,9 +76,9 @@ export class MercadoPagoClient {
         external_reference: datos.referencia,
         notification_url: this.config.get<string>('MP_NOTIFICATION_URL'),
         back_urls: {
-          success: `${frontend}/boletas?pago=aprobado`,
-          pending: `${frontend}/boletas?pago=pendiente`,
-          failure: `${frontend}/boletas?pago=rechazado`,
+          success: `${vuelta}?pago=aprobado`,
+          pending: `${vuelta}?pago=pendiente`,
+          failure: `${vuelta}?pago=rechazado`,
         },
         auto_return: 'approved',
       },
@@ -96,6 +97,18 @@ export class MercadoPagoClient {
 
   obtenerPago(id: string): Promise<PagoMercadoPago> {
     return this.llamar('GET', `/v1/payments/${encodeURIComponent(id)}`);
+  }
+
+  /**
+   * El intento más reciente de un pago nuestro, buscado por `external_reference`.
+   * Es lo que permite confirmar un pago aunque el webhook no haya llegado.
+   */
+  async ultimoIntento(referencia: string): Promise<PagoMercadoPago | null> {
+    const { results } = await this.llamar<{ results: PagoMercadoPago[] }>(
+      'GET',
+      `/v1/payments/search?external_reference=${encodeURIComponent(referencia)}&sort=date_created&criteria=desc`,
+    );
+    return results[0] ?? null;
   }
 
   firmaValida(firma: string | undefined, requestId: string | undefined, dataId: string): boolean {

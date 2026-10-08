@@ -14,7 +14,7 @@ import { ExpensasService } from '../expensas/expensas.service';
 import { aCentavos } from '../expensas/prorrateo';
 import { ListarPagosQuery } from './dto/listar-pagos.query';
 import { RegistrarPagoDto } from './dto/registrar-pago.dto';
-import { MercadoPagoClient } from './mercado-pago.client';
+import { MercadoPagoClient, type PagoMercadoPago } from './mercado-pago.client';
 import { PagosRepository } from './pagos.repository';
 import { formatearNumeroRecibo } from './recibo';
 import { generarReciboPdf } from './recibo-pdf';
@@ -203,7 +203,27 @@ export class PagosService {
       this.logger.warn(`Pago de MP ${mp.id} sin pago nuestro (ref ${mp.external_reference})`);
       return;
     }
+    await this.aplicarMercadoPago(pago, mp);
+  }
 
+  /**
+   * Lo que hace el vecino al volver del checkout: le pregunta a Mercado Pago
+   * cómo quedó su pago, sin esperar al webhook (que puede tardar, o no llegar
+   * nunca en local sin un túnel). Aplica lo mismo que el webhook, así que da
+   * igual cuál de los dos llegue primero.
+   */
+  async sincronizar(usuario: UsuarioActual, id: string): Promise<Pago> {
+    const pago = await this.findOne(usuario, id);
+    if (pago.medio !== MedioPago.MERCADO_PAGO || pago.estado !== EstadoPago.PENDIENTE) {
+      return pago;
+    }
+    const mp = await this.mercadoPago.ultimoIntento(pago.id);
+    if (mp) await this.aplicarMercadoPago(pago, mp);
+    return this.findOne(usuario, id);
+  }
+
+  /** Lleva el pago al estado que dice Mercado Pago. Idempotente. */
+  private async aplicarMercadoPago(pago: Pago, mp: PagoMercadoPago): Promise<void> {
     // Una preferencia admite varios intentos (uno rechazado, después otro
     // aprobado). Un aviso tardío de otro intento no pisa un pago ya aprobado.
     const mpPaymentId = String(mp.id);
@@ -217,15 +237,21 @@ export class PagosService {
     }
 
     const estadoAnterior = pago.estado;
-    const actualizado = await this.pagos.actualizar(pago.id, {
+    const datos = {
       estado: estadoSegunMercadoPago(mp.status),
       mpPaymentId,
       mpStatusDetail: mp.status_detail,
       monto: mp.transaction_amount,
       fechaPago: mp.date_approved ? new Date(mp.date_approved) : null,
-    });
-
-    if (actualizado.estado === estadoAnterior) return;
+    };
+    if (datos.estado === estadoAnterior) {
+      await this.pagos.actualizar(pago.id, datos);
+      return;
+    }
+    // Sólo si nadie lo movió desde que se leyó: el webhook y el "sincronizar"
+    // del vecino pueden llegar juntos, y el recibo y el aviso salen una vez.
+    const actualizado = await this.pagos.actualizarSiEstado(pago.id, estadoAnterior, datos);
+    if (!actualizado) return;
     if (actualizado.estado === EstadoPago.APROBADO) await this.alAprobarse(actualizado);
     // Un reintegro baja lo pagado: la boleta vuelve atrás.
     else await this.expensas.sincronizarEstado(actualizado.boletaId!);

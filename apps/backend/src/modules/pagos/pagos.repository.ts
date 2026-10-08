@@ -90,6 +90,12 @@ export class PagosRepository {
     return this.pagos.save(this.pagos.create(data));
   }
 
+  /** Actualiza sólo si el pago sigue en `estado`; null si otro lo movió antes. */
+  async actualizarSiEstado(id: string, estado: EstadoPago, data: Partial<Pago>): Promise<Pago | null> {
+    const { affected } = await this.pagos.update({ id, estado }, data);
+    return affected ? this.findById(id) : null;
+  }
+
   async actualizar(id: string, data: Partial<Pago>): Promise<Pago> {
     await this.pagos.update({ id }, data);
     return (await this.findById(id))!;
