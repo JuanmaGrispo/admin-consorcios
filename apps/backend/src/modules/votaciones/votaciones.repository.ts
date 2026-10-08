@@ -13,10 +13,12 @@ import {
 } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import {
+  Asamblea,
   Asistencia,
   EstadoVotacion,
   OpcionVoto,
   PuntoOrdenDia,
+  TipoPuntoOrden,
   Unidad,
   UnidadUsuario,
   VinculoUnidad,
@@ -104,9 +106,41 @@ export class VotacionesRepository {
     return (await this.votaciones.count({ where: { puntoOrdenDiaId } })) > 0;
   }
 
-  /** La votación nace con sus dos opciones fijas: sin ellas no hay resultado posible. */
-  crear(datos: DeepPartial<Votacion>, extras: string[]): Promise<string> {
+  findAsamblea(id: string): Promise<Asamblea | null> {
+    return this.dataSource.getRepository(Asamblea).findOneBy({ id });
+  }
+
+  /**
+   * La votación nace con sus dos opciones fijas: sin ellas no hay resultado
+   * posible. Con `nuevoPunto`, además se suma al final del orden del día de esa
+   * asamblea, en la misma transacción: una votación sin su punto no se ve en la
+   * asamblea, y un punto sin su votación no se puede votar.
+   */
+  crear(
+    datos: DeepPartial<Votacion>,
+    extras: string[],
+    nuevoPunto?: { asambleaId: string; titulo: string; descripcion: string | null },
+  ): Promise<string> {
     return this.dataSource.transaction(async (m) => {
+      if (nuevoPunto) {
+        // Dos votaciones agregadas a la vez leerían el mismo último orden y
+        // chocarían contra uq_punto_orden: se bloquea la asamblea primero.
+        await m.query('SELECT 1 FROM asamblea WHERE id = $1 FOR UPDATE', [nuevoPunto.asambleaId]);
+        const { ultimo } = (await m
+          .getRepository(PuntoOrdenDia)
+          .createQueryBuilder('p')
+          .select('coalesce(max(p.orden), 0)', 'ultimo')
+          .where('p.asambleaId = :id', { id: nuevoPunto.asambleaId })
+          .getRawOne<{ ultimo: number }>())!;
+        const punto = await m.save(
+          m.create(PuntoOrdenDia, {
+            ...nuevoPunto,
+            orden: Number(ultimo) + 1,
+            tipo: TipoPuntoOrden.CON_VOTACION,
+          }),
+        );
+        datos = { ...datos, puntoOrdenDiaId: punto.id };
+      }
       const votacion = await m.save(m.create(Votacion, datos));
       await m.save([
         m.create(OpcionVoto, { votacionId: votacion.id, etiqueta: ETIQUETA_A_FAVOR, orden: 1, esFija: true }),

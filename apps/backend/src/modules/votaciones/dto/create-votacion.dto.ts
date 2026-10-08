@@ -32,6 +32,15 @@ export class CreateVotacionDto {
   @IsUUID()
   puntoOrdenDiaId?: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Asamblea a la que se suma como un punto nuevo del orden del día (aunque ya esté convocada). No va junto con puntoOrdenDiaId.',
+  })
+  @IsOptional()
+  @IsUUID()
+  asambleaId?: string;
+
   @ApiProperty({ example: 'Cambio de la bomba de agua' })
   @IsString()
   @IsNotEmpty()

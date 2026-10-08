@@ -106,6 +106,7 @@ function crearService(
     votacion?: Votacion | null;
     votos?: Partial<Voto>[];
     punto?: PuntoOrdenDia | null;
+    asamblea?: { id: string; consorcioId: string; estado: EstadoAsamblea; fechaHora: Date } | null;
     puntoTieneVotacion?: boolean;
     conDeuda?: boolean;
     vencidas?: Votacion[];
@@ -116,6 +117,7 @@ function crearService(
   const escrito = {
     creada: null as unknown,
     extras: null as unknown,
+    nuevoPunto: null as unknown,
     actualizada: [] as unknown[],
     votos: [] as Partial<Voto>[],
     publicados: [] as unknown[][],
@@ -127,10 +129,12 @@ function crearService(
     abiertasVencidas: async () => opts.vencidas ?? [],
     abiertas: async () => [],
     findPunto: async () => opts.punto ?? null,
+    findAsamblea: async () => opts.asamblea ?? null,
     puntoTieneVotacion: async () => opts.puntoTieneVotacion ?? false,
-    crear: async (datos: unknown, extras: unknown) => {
+    crear: async (datos: unknown, extras: unknown, nuevoPunto: unknown) => {
       escrito.creada = datos;
       escrito.extras = extras;
+      escrito.nuevoPunto = nuevoPunto;
       return 'vt1';
     },
     actualizar: async (_id: string, cambios: unknown) => {
@@ -204,6 +208,58 @@ describe('VotacionesService — alta', () => {
       service.crear(admin, { consorcioId: 'c1', titulo: 'X', puntoOrdenDiaId: 'pt1' }),
       BadRequestException,
     );
+  });
+
+  describe('sumada a una asamblea', () => {
+    const asamblea = (estado = EstadoAsamblea.CONVOCADA, consorcioId = 'c1') => ({
+      id: 'as1',
+      consorcioId,
+      estado,
+      fechaHora: enHoras(24),
+    });
+
+    it('con la asamblea convocada, crea su punto al final del orden del día', async () => {
+      const a = asamblea();
+      const { service, escrito } = crearService({ asamblea: a });
+      await service.crear(admin, {
+        consorcioId: 'c1',
+        asambleaId: 'as1',
+        titulo: 'Cambio de la bomba',
+        descripcion: 'Presupuesto en 3 cuotas',
+      });
+      assert.deepEqual(escrito.nuevoPunto, {
+        asambleaId: 'as1',
+        titulo: 'Cambio de la bomba',
+        descripcion: 'Presupuesto en 3 cuotas',
+      });
+      const creada = escrito.creada as { asambleaId: string; apertura: Date };
+      assert.equal(creada.asambleaId, 'as1');
+      assert.equal(creada.apertura.getTime(), a.fechaHora.getTime());
+    });
+
+    it('no se suma a una asamblea cerrada', async () => {
+      const { service } = crearService({ asamblea: asamblea(EstadoAsamblea.CERRADA) });
+      await assert.rejects(
+        service.crear(admin, { consorcioId: 'c1', asambleaId: 'as1', titulo: 'X' }),
+        ConflictException,
+      );
+    });
+
+    it('ni a una de otro consorcio', async () => {
+      const { service } = crearService({ asamblea: asamblea(EstadoAsamblea.CONVOCADA, 'c2') });
+      await assert.rejects(
+        service.crear(admin, { consorcioId: 'c1', asambleaId: 'as1', titulo: 'X' }),
+        BadRequestException,
+      );
+    });
+
+    it('asamblea y punto no van juntos', async () => {
+      const { service } = crearService({ asamblea: asamblea() });
+      await assert.rejects(
+        service.crear(admin, { consorcioId: 'c1', asambleaId: 'as1', puntoOrdenDiaId: 'pt1', titulo: 'X' }),
+        BadRequestException,
+      );
+    });
   });
 
   it('un punto no puede tener dos votaciones', async () => {

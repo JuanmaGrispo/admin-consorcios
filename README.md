@@ -1104,7 +1104,9 @@ Módulo `src/modules/votaciones/`. Diseño en
   Si pasa el cierre y sigue abierta, se cierra sola en la próxima consulta
   (sin cron, como las reservas vencidas).
 - **De asamblea**: se crea sobre un punto `CON_VOTACION` del orden del día
-  (uno por punto). Se vota con la asamblea `EN_CURSO`; con
+  (uno por punto), o con `asambleaId`, que suma un punto nuevo al final del
+  orden del día aunque la asamblea ya esté convocada (el "Agregar votación"
+  del detalle). El punto y la votación se crean en la misma transacción. Se vota con la asamblea `EN_CURSO`; con
   `permiteVotoAnticipado`, el vecino también puede votar desde la app con la
   asamblea convocada, y el voto queda `anticipado`. La cierra el admin.
 
