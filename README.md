@@ -964,7 +964,8 @@ asambleas, reservas, votaciones y novedades.
     "expensas": {                       // null si el consorcio nunca emitió
       "boletaId": "…", "periodo": "2026-08", "fechaVencimiento": "2026-09-10",
       "total": 145320.5, "pagado": 0, "saldo": 145320.5,
-      "estado": "PENDIENTE", "diasParaVencer": 6
+      "estado": "PENDIENTE", "diasParaVencer": 6,
+      "ultimoPago": null               // { id, fecha }: "Pagaste … el 04/09" y "Ver recibo"
     },
     "reclamosAbiertos": 1
   }],
@@ -972,7 +973,12 @@ asambleas, reservas, votaciones y novedades.
     { "tipo": "RESERVA", "id": "…", "titulo": "SUM", "fecha": "2026-10-05T21:00:00Z",
       "fin": "2026-10-06T01:00:00Z", "unidadId": "…", "amenityId": "…" },
     { "tipo": "ASAMBLEA", "id": "…", "titulo": "Asamblea ordinaria", "fecha": "2026-10-12T22:00:00Z",
-      "lugar": "SUM del edificio", "estado": "CONVOCADA", "consorcioId": "…" }
+      "lugar": "SUM del edificio", "estado": "CONVOCADA", "consorcioId": "…",
+      "quorumPorcentaje": 54.3, "quorumRequerido": 60, "miAsistencia": "SIN_RESPONDER" }
+  ],
+  "amenities": [                     // los accesos rápidos: "Reservar SUM · Libre hoy"
+    { "id": "…", "nombre": "SUM", "icono": "deck", "consorcioId": "…",
+      "reservasHoy": 0, "bloqueadoHoy": false, "libreHoy": true }
   ],
   "novedades": [                     // las últimas 5 del muro, fijadas primero
     { "id": "…", "titulo": "Corte de agua el martes", "cuerpo": "…", "fijada": true,

@@ -96,6 +96,8 @@ export interface SaldoDeUnidad {
   estado: EstadoBoleta;
   /** Negativo si ya venció. */
   diasParaVencer: number;
+  /** El último pago aprobado de esta boleta ("Pagaste … el 04/09" y "Ver recibo"). */
+  ultimoPago: { id: string; fecha: Date } | null;
 }
 
 const MS_POR_DIA = 86_400_000;
@@ -476,7 +478,8 @@ export class ExpensasService {
     if (!boletaId) return null;
 
     const boleta = (await this.expensas.findBoleta(boletaId))!;
-    const pagado = await this.expensas.pagadoDe(boletaId);
+    const pago = (await this.expensas.pagosPorBoleta([boletaId])).get(boletaId);
+    const pagado = pago?.pagado ?? 0;
     const saldo = aPesos(Math.max(0, aCentavos(boleta.total) - aCentavos(pagado)));
 
     return {
@@ -488,6 +491,7 @@ export class ExpensasService {
       saldo,
       estado: boleta.estado,
       diasParaVencer: diasEntre(await this.expensas.hoy(), boleta.liquidacion.fechaVencimiento),
+      ultimoPago: pago ? { id: pago.ultimoPagoId, fecha: pago.fechaUltimoPago } : null,
     };
   }
 

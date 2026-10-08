@@ -54,6 +54,11 @@ function vistaAsistencia(a: Asistencia) {
   };
 }
 
+export type AsambleaDelVecino = Asamblea & {
+  quorumPorcentaje: number | null;
+  miAsistencia: EstadoAsistencia | null;
+};
+
 @Injectable()
 export class AsambleasService {
   constructor(
@@ -113,10 +118,34 @@ export class AsambleasService {
     return asambleas.length;
   }
 
-  async proximasDelVecino(usuario: UsuarioActual): Promise<Asamblea[]> {
+  /**
+   * Para la pantalla de inicio: las convocadas o en curso de sus consorcios,
+   * con el quórum de hoy y lo que respondió por sus unidades ("Confirmá tu
+   * asistencia · quórum 54%"). `miAsistencia` es null si no tiene unidad convocada.
+   */
+  async proximasDelVecino(usuario: UsuarioActual): Promise<AsambleaDelVecino[]> {
     const consorcioIds = await this.asambleas.consorciosDelUsuario(usuario.id);
     if (consorcioIds.length === 0) return [];
-    return this.asambleas.proximas(consorcioIds);
+    const asambleas = await this.asambleas.proximas(consorcioIds);
+    const ids = asambleas.map((a) => a.id);
+    const [agregados, mias] = await Promise.all([
+      this.asambleas.agregadosQuorum(ids),
+      this.asambleas.unidadesDelUsuario(usuario.id).then((u) => this.asambleas.asistenciasDeUnidades(ids, u)),
+    ]);
+
+    return asambleas.map((a) => {
+      const agregado = agregados.get(a.id);
+      const respuestas = mias.filter((m) => m.asambleaId === a.id);
+      return {
+        ...a,
+        quorumPorcentaje: agregado ? porcentajeDeQuorum(agregado.presente, agregado.total) : null,
+        // Con varias unidades, alcanza con que falte responder por una.
+        miAsistencia:
+          respuestas.length === 0
+            ? null
+            : (respuestas.find((r) => r.estado === EstadoAsistencia.SIN_RESPONDER) ?? respuestas[0]).estado,
+      };
+    });
   }
 
   async listarAsistencias(usuario: UsuarioActual, id: string) {

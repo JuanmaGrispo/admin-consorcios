@@ -90,7 +90,7 @@ function crearService(
       escrito.listarFiltro = filtro;
       return [];
     },
-    agregadosQuorum: async () => new Map(),
+    agregadosQuorum: async () => new Map([['as1', { presente: 54.3, total: 100 }]]),
     findById: async () => (opts.asamblea === undefined ? asamblea() : opts.asamblea),
     crear: async (datos: unknown) => {
       escrito.creada = datos;
@@ -117,6 +117,11 @@ function crearService(
     },
     consorciosDelUsuario: async () => opts.consorciosDelVecino ?? ['c1'],
     unidadesDelUsuarioEnConsorcio: async () => opts.unidadesDelVecino ?? [],
+    unidadesDelUsuario: async () => opts.unidadesDelVecino ?? [],
+    asistenciasDeUnidades: async (_ids: string[], unidadIds: string[]) =>
+      asistencias
+        .filter((a) => unidadIds.includes(a.unidadId))
+        .map((a) => ({ ...a, asambleaId: 'as1' })),
     vecinosDelConsorcio: async () => ['v1'],
     votacionesAbiertas: async () => opts.votacionesAbiertas ?? 0,
     marcarParaRecordatorio: async () => [asamblea({ estado: EstadoAsamblea.CONVOCADA })],
@@ -480,6 +485,27 @@ describe('AsambleasService — próximas del vecino', () => {
     const proximas = await service.proximasDelVecino(vecino);
     assert.deepEqual(escrito.proximasConsorcios, ['c1', 'c2']);
     assert.equal(proximas.length, 1);
+  });
+
+  it('trae el quórum de hoy y lo que respondió por su unidad', async () => {
+    const { service } = crearService({
+      unidadesDelVecino: ['u1', 'u2'],
+      asistencias: [
+        asistencia('u1', EstadoAsistencia.ASISTE, 50),
+        asistencia('u2', EstadoAsistencia.SIN_RESPONDER, 50),
+        asistencia('u3', EstadoAsistencia.NO_ASISTE, 50),
+      ],
+    });
+    const [proxima] = await service.proximasDelVecino(vecino);
+    assert.equal(proxima.quorumPorcentaje, 54.3);
+    // Con una unidad sin responder, todavía le falta confirmar.
+    assert.equal(proxima.miAsistencia, EstadoAsistencia.SIN_RESPONDER);
+  });
+
+  it('sin unidad convocada, miAsistencia es null', async () => {
+    const { service } = crearService({ unidadesDelVecino: [] });
+    const [proxima] = await service.proximasDelVecino(vecino);
+    assert.equal(proxima.miAsistencia, null);
   });
 
   it('sin consorcios no consulta y devuelve vacío', async () => {

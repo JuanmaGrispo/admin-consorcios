@@ -153,6 +153,32 @@ export class ReservasService {
     };
   }
 
+  /**
+   * Para los accesos rápidos del inicio ("Reservar SUM · Libre hoy"): los
+   * amenities activos que ve el usuario y si hoy tienen algo tomado.
+   */
+  async ocupacionDeHoy(usuario: UsuarioActual, fecha: string) {
+    const amenities = (await this.listarAmenities(usuario, {})).filter((a) => a.activo);
+    const { inicio, fin } = await this.reservas.instantes(fecha, '00:00', '24:00', ZONA_POR_DEFECTO);
+    return Promise.all(
+      amenities.map(async (a) => {
+        const [reservas, bloqueos] = await Promise.all([
+          this.reservas.reservasEnRango(a.id, inicio, fin),
+          this.reservas.bloqueosEnRango(a.id, inicio, fin),
+        ]);
+        return {
+          id: a.id,
+          nombre: a.nombre,
+          icono: a.icono,
+          consorcioId: a.consorcioId,
+          reservasHoy: reservas.length,
+          bloqueadoHoy: bloqueos.length > 0,
+          libreHoy: reservas.length === 0 && bloqueos.length === 0,
+        };
+      }),
+    );
+  }
+
   // ── Bloqueos ───────────────────────────────────────────────────────────────
 
   async listarBloqueos(

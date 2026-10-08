@@ -225,6 +225,22 @@ export class AsambleasRepository {
     return filas.map((f) => f.consorcioId);
   }
 
+  /** Las respuestas de estas unidades en estas asambleas: para el inicio del vecino. */
+  asistenciasDeUnidades(asambleaIds: string[], unidadIds: string[]): Promise<Asistencia[]> {
+    if (asambleaIds.length === 0 || unidadIds.length === 0) return Promise.resolve([]);
+    return this.asistenciasRepo.find({
+      where: { asambleaId: In(asambleaIds), unidadId: In(unidadIds) },
+    });
+  }
+
+  async unidadesDelUsuario(usuarioId: string): Promise<string[]> {
+    const filas = await this.vinculosVigentes()
+      .select('v.unidad_id', 'unidadId')
+      .andWhere('v.usuario_id = :usuarioId', { usuarioId })
+      .getRawMany<{ unidadId: string }>();
+    return filas.map((f) => f.unidadId);
+  }
+
   async unidadesDelUsuarioEnConsorcio(usuarioId: string, consorcioId: string): Promise<string[]> {
     const filas = await this.vinculosVigentes()
       .select('v.unidad_id', 'unidadId')

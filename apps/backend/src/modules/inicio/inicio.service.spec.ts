@@ -40,6 +40,7 @@ function crearService(
         pedidas.push(query);
         return { items: opts.reservas ?? [], total: 0, pagina: 1, paginas: 1 };
       },
+      ocupacionDeHoy: async () => [],
     } as unknown as ReservasService,
     { abiertasDelVecino: async () => opts.votaciones ?? [] } as unknown as VotacionesService,
     { ultimasDelVecino: async () => [] } as unknown as NovedadesService,
