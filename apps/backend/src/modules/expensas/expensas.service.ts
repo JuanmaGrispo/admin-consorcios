@@ -573,6 +573,13 @@ export class ExpensasService {
     return { boleta, saldo: aPesos(saldo) };
   }
 
+  /** Sin chequeo de permisos: para pagos, que ya sabe qué boleta es (el webhook no tiene usuario). */
+  async findBoletaInterna(id: string): Promise<Boleta> {
+    const boleta = await this.expensas.findBoleta(id);
+    if (!boleta) throw new NotFoundException(`La boleta ${id} no existe`);
+    return boleta;
+  }
+
   /** Las unidades que ve un vecino; `undefined` para quien administra (lo acota por consorcio). */
   async unidadesVisibles(usuario: UsuarioActual): Promise<string[] | undefined> {
     return esGestor(usuario) ? undefined : this.expensas.unidadesDelUsuario(usuario.id);

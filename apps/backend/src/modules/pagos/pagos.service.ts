@@ -136,6 +136,22 @@ export class PagosService {
     boletaId: string,
   ): Promise<{ pagoId: string; initPoint: string }> {
     const { boleta, saldo } = await this.expensas.boletaPagable(usuario, boletaId);
+
+    // Un segundo "Pagar" (otra pestaña, un doble click) vuelve al checkout que
+    // ya está abierto: dos preferencias por el mismo saldo son dos cobros posibles.
+    const abierto = await this.pagos.pendienteDeMercadoPago(boleta.id);
+    if (abierto && aCentavos(abierto.monto) === aCentavos(saldo)) {
+      const preferencia = await this.mercadoPago.obtenerPreferencia(abierto.mpPreferenceId!);
+      return { pagoId: abierto.id, initPoint: preferencia.initPoint };
+    }
+    // Si el saldo cambió (entró un pago manual), ese checkout cobraría de más.
+    if (abierto) {
+      await this.pagos.actualizar(abierto.id, {
+        estado: EstadoPago.RECHAZADO,
+        mpStatusDetail: 'reemplazado_por_otro_saldo',
+      });
+    }
+
     const pago = await this.pagos.crear({
       concepto: ConceptoPago.EXPENSA,
       boletaId: boleta.id,
@@ -193,6 +209,10 @@ export class PagosService {
     const mpPaymentId = String(mp.id);
     if (pago.mpPaymentId && pago.mpPaymentId !== mpPaymentId && pago.estado === EstadoPago.APROBADO) {
       this.logger.warn(`Pago ${pago.id} ya aprobado con ${pago.mpPaymentId}: ignoro el intento ${mpPaymentId}`);
+      // Si ese otro intento también se cobró, la plata entró dos veces.
+      if (estadoSegunMercadoPago(mp.status) === EstadoPago.APROBADO) {
+        await this.avisarCobroDeMas(pago.boletaId!, mp.transaction_amount, `operación ${mpPaymentId}`);
+      }
       return;
     }
 
@@ -219,6 +239,11 @@ export class PagosService {
     const conRecibo = await this.numerarRecibo(pago);
     const boleta = await this.expensas.sincronizarEstado(pago.boletaId!);
 
+    // Dos checkouts pagados (o uno abierto con un saldo viejo) cobran de más.
+    // No se puede rechazar plata que ya entró: hay que devolverla a mano.
+    const sobra = aCentavos(await this.pagos.aprobadoDe(boleta.id)) - aCentavos(boleta.total);
+    if (sobra > 0) await this.avisarCobroDeMas(boleta.id, sobra / 100, `recibo ${conRecibo.reciboNumero}`);
+
     for (const destinatarioId of await this.expensas.vecinosDe(pago.unidadId)) {
       try {
         await this.notificador.enviar({
@@ -230,6 +255,23 @@ export class PagosService {
       } catch (error) {
         this.logger.warn(`No se pudo avisar a ${destinatarioId}: ${String(error)}`);
       }
+    }
+  }
+
+  /** Le avisa al administrador del consorcio que tiene que devolver un cobro duplicado. */
+  private async avisarCobroDeMas(boletaId: string, monto: number, referencia: string): Promise<void> {
+    this.logger.warn(`Cobro de más en la boleta ${boletaId}: $${monto.toFixed(2)} (${referencia})`);
+    try {
+      const boleta = await this.expensas.findBoletaInterna(boletaId);
+      const consorcio = await this.consorcios.findOne(boleta.liquidacion.consorcioId);
+      await this.notificador.enviar({
+        destinatarioId: consorcio.administradorId,
+        asunto: `Cobro duplicado en la unidad ${boleta.unidad.etiqueta}`,
+        cuerpo: `La boleta de ${boleta.liquidacion.periodo.slice(0, 7)} se cobró $${monto.toFixed(2)} de más (${referencia}). Devolvé la diferencia desde Mercado Pago.`,
+        origen: `boleta:${boletaId}`,
+      });
+    } catch (error) {
+      this.logger.error(`No se pudo avisar el cobro de más de ${boletaId}: ${String(error)}`);
     }
   }
 

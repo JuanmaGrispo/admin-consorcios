@@ -683,6 +683,13 @@ antes de cada lectura de boletas, sin cron.
   `refunded`/`charged_back` → `REINTEGRADO`. Es idempotente, y un intento
   rechazado que llega tarde no pisa uno aprobado. Un reintegro vuelve la
   boleta atrás.
+- **Un checkout abierto por boleta.** Pedir otra preferencia con un pago
+  `PENDIENTE` por el mismo saldo devuelve ese mismo checkout (otra pestaña o
+  un doble click no abren un segundo cobro). Si el saldo cambió, el viejo se
+  marca `RECHAZADO` y se abre uno nuevo. Si igual entra plata de más (se pagó
+  el checkout viejo, o dos intentos de la misma preferencia), el pago se
+  registra porque el cobro ya ocurrió, y se le avisa al administrador para que
+  devuelva la diferencia desde Mercado Pago.
 - Al aprobarse un pago se avisa a los vecinos de la unidad por `Notificador`;
   si el aviso falla, el pago queda igual.
 
