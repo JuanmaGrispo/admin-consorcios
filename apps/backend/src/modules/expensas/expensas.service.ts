@@ -410,6 +410,8 @@ export class ExpensasService {
           periodo: dto.periodo,
           situacion: dto.situacion,
         })),
+        // Una boleta ajena no entra: el alcance del administrador ya la recorta.
+        boletaId: dto.boletaId,
         // Nunca a quien ya pagó, aunque el filtro diga otra cosa.
         conSaldo: true,
         // Recordar una previsualización sería reclamar una deuda que no existe.

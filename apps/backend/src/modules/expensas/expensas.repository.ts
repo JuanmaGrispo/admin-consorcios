@@ -25,6 +25,7 @@ const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
  * sólo lo traduce a SQL.
  */
 export interface AlcanceBoletas {
+  boletaId?: string;
   liquidacionId?: string;
   consorcioId?: string;
   unidadId?: string;
@@ -539,6 +540,7 @@ export class ExpensasRepository {
         { emitidas: EMITIDAS },
       );
     }
+    if (alcance.boletaId) qb.andWhere('b.id = :boleta', { boleta: alcance.boletaId });
     if (alcance.liquidacionId) qb.andWhere('b.liquidacionId = :liq', { liq: alcance.liquidacionId });
     if (alcance.unidadId) qb.andWhere('b.unidadId = :uni', { uni: alcance.unidadId });
     if (alcance.estado) qb.andWhere('b.estado = :est', { est: alcance.estado });

@@ -549,7 +549,8 @@ una dependencia nueva y Excel abre este archivo igual.
 
 **`POST /boletas/recordatorios`** manda un aviso por `Notificador` a cada
 vecino de cada boleta **con saldo** del alcance
-(`{ liquidacionId?, consorcioId?, periodo?, situacion?, mensaje? }`). Nunca a
+(`{ boletaId?, liquidacionId?, consorcioId?, periodo?, situacion?, mensaje? }`;
+`boletaId` es el botón de enviar de una sola fila). Nunca a
 quien ya pagó, y nunca por una liquidación sin emitir: reclamar una deuda que
 todavía no existe es peor que no avisar. Devuelve
 `{ boletas, avisos, sinDestinatario, fallidos }`; un aviso que falla no corta
