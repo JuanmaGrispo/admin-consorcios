@@ -495,7 +495,7 @@ El estado `PRORRATEO` del enum no se usa.
 | GET    | `/boletas/resumen`                          | emitido, cobrado, saldo, intereses y el conteo de cada solapa |
 | GET    | `/boletas/exportar`                         | la grilla en CSV, sin paginar |
 | POST   | `/boletas/recordatorios`                    | administrador: avisa a quienes tienen saldo |
-| GET    | `/boletas/:id`                              | con el detalle línea por línea; al vecino, 404 si no es suya o no se emitió |
+| GET    | `/boletas/:id`                              | con el detalle línea por línea (cada una con su gasto y rubro, para agrupar por rubro); al vecino, 404 si no es suya o no se emitió |
 | GET    | `/boletas/:id/pdf`                          | la boleta en PDF, mismos permisos que el detalle |
 | PATCH  | `/boletas/:id/ajuste`                       | administrador, sólo en previsualización |
 | GET    | `/rubros-gasto`                             | cualquier logueado (`?consorcioId=`: los suyos más los compartidos) |
@@ -517,6 +517,7 @@ reclamarle:
     "coeficienteAplicado": 1.86,
     "emitido": 155520, "pagado": 60000, "saldo": 95520,
     "medio": "TRANSFERENCIA",       // el del último pago aprobado; null si no hubo
+    "ultimoPago": { "id": "…", "fecha": "2026-09-04T17:38:00Z" },  // "Pagado el…" y su recibo
     "estado": "VENCIDA", "interesesMora": 1240.5
   }],
   "total": 48, "pagina": 1, "paginas": 3

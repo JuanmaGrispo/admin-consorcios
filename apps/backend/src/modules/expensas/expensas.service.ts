@@ -719,6 +719,7 @@ export class ExpensasService {
         pagado,
         saldo: aPesos(Math.max(0, aCentavos(boleta.total) - aCentavos(pagado))),
         medio: pago?.medio ?? null,
+        ultimoPago: pago ? { id: pago.ultimoPagoId, fecha: pago.fechaUltimoPago } : null,
         estado: boleta.estado,
         interesesMora: boleta.interesesMora,
       };

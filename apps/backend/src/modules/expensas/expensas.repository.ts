@@ -69,6 +69,8 @@ export interface CobranzaDeLiquidacion {
 export interface PagoDeBoleta {
   pagado: number;
   medio: MedioPago;
+  ultimoPagoId: string;
+  fechaUltimoPago: Date;
 }
 
 /**
@@ -471,12 +473,21 @@ export class ExpensasRepository {
     const porBoleta = new Map<string, PagoDeBoleta>();
     if (boletaIds.length === 0) return porBoleta;
 
-    const filas: { boletaId: string; pagado: string; medio: MedioPago }[] =
+    const filas: {
+      boletaId: string;
+      pagado: string;
+      medio: MedioPago;
+      ultimoPagoId: string;
+      fechaUltimoPago: Date;
+    }[] =
       await this.dataSource.query(
         `SELECT boleta_id AS "boletaId",
                 sum(monto)::text AS pagado,
-                -- El medio del último pago: es el que la grilla muestra.
-                (array_agg(medio ORDER BY coalesce(fecha_pago, created_at) DESC))[1] AS medio
+                -- El último pago: su medio es el que la grilla muestra, y su
+                -- fecha e id son el "Pagado el 08/08" y el "Ver recibo" del vecino.
+                (array_agg(medio ORDER BY coalesce(fecha_pago, created_at) DESC))[1] AS medio,
+                (array_agg(id ORDER BY coalesce(fecha_pago, created_at) DESC))[1] AS "ultimoPagoId",
+                max(coalesce(fecha_pago, created_at)) AS "fechaUltimoPago"
            FROM pago
           WHERE estado = 'APROBADO'
             AND boleta_id = ANY($1::uuid[])
@@ -485,7 +496,12 @@ export class ExpensasRepository {
       );
 
     for (const f of filas) {
-      porBoleta.set(f.boletaId, { pagado: Number(f.pagado), medio: f.medio });
+      porBoleta.set(f.boletaId, {
+        pagado: Number(f.pagado),
+        medio: f.medio,
+        ultimoPagoId: f.ultimoPagoId,
+        fechaUltimoPago: f.fechaUltimoPago,
+      });
     }
     return porBoleta;
   }
@@ -594,7 +610,8 @@ export class ExpensasRepository {
   async findBoleta(id: string): Promise<Boleta | null> {
     const boleta = await this.boletas.findOne({
       where: { id },
-      relations: { liquidacion: true, unidad: true, boletaDetalles: true },
+      // El rubro de cada línea es lo que permite agrupar "Gastos por rubro".
+      relations: { liquidacion: true, unidad: true, boletaDetalles: { gasto: { rubro: true } } },
     });
     boleta?.boletaDetalles?.sort(
       (a, b) =>
