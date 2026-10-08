@@ -746,6 +746,7 @@ al que debe expensas).
 | POST   | `/amenities`                               | administrador |
 | PATCH  | `/amenities/:id`                           | administrador (`activo: false` lo da de baja) |
 | GET    | `/amenities/:id/disponibilidad?fecha=`     | cualquier logueado: la ventana del día y lo ocupado |
+| GET    | `/amenities/:id/calendario?desde=&hasta=`  | cualquier logueado: `DISPONIBLE`, `PARCIAL`, `SIN_LUGAR` o `PASADO` por día (hasta 62 días), para el calendario mensual |
 | GET    | `/amenities/:id/bloqueos`                  | administrador (filtros `desde`, `hasta`) |
 | POST   | `/amenities/:id/bloqueos`                  | administrador |
 | DELETE | `/amenities/:id/bloqueos/:bloqueoId`       | administrador |

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cierraAlDiaSiguiente, franjaEnMinutos, largoDeVentana, validarFranja } from './horario';
+import {
+  cierraAlDiaSiguiente,
+  estadoDelDia,
+  franjaEnMinutos,
+  largoDeVentana,
+  validarFranja,
+} from './horario';
 
 const PARRILLA = { horaApertura: '10:00', horaCierre: '22:00', duracionMaximaHoras: 4 };
 const SUM = { horaApertura: '10:00', horaCierre: '02:00', duracionMaximaHoras: 6 };
@@ -71,5 +77,38 @@ describe('validarFranja', () => {
 
   it('un fin antes del inicio en una ventana diurna queda fuera de horario', () => {
     assert.equal(validarFranja('16:00', '12:00', PARRILLA), 'FUERA_DE_HORARIO');
+  });
+});
+
+describe('estadoDelDia', () => {
+  const h = (hora: string) => new Date(`2026-09-13T${hora}:00-03:00`);
+  const ventana = { inicio: h('10:00'), fin: h('22:00') };
+  const temprano = h('08:00');
+
+  it('sin nada tomado, disponible', () => {
+    assert.equal(estadoDelDia(ventana, [], temprano), 'DISPONIBLE');
+  });
+
+  it('con una reserva, parcial', () => {
+    assert.equal(estadoDelDia(ventana, [{ inicio: h('12:00'), fin: h('16:00') }], temprano), 'PARCIAL');
+  });
+
+  it('tapado entre reservas y un bloqueo que se solapan, sin lugar', () => {
+    const ocupado = [
+      { inicio: h('10:00'), fin: h('15:00') },
+      { inicio: h('14:00'), fin: h('18:00') },
+      { inicio: h('08:00'), fin: h('23:00') },
+    ];
+    assert.equal(estadoDelDia(ventana, ocupado.slice(0, 2), temprano), 'PARCIAL');
+    assert.equal(estadoDelDia(ventana, ocupado, temprano), 'SIN_LUGAR');
+  });
+
+  it('a la tarde sólo cuenta lo que queda del día', () => {
+    // Libre a la mañana, que ya pasó; ocupado desde las 16 hasta el cierre.
+    assert.equal(estadoDelDia(ventana, [{ inicio: h('16:00'), fin: h('22:00') }], h('16:30')), 'SIN_LUGAR');
+  });
+
+  it('un día que ya cerró es pasado', () => {
+    assert.equal(estadoDelDia(ventana, [], h('22:00')), 'PASADO');
   });
 });

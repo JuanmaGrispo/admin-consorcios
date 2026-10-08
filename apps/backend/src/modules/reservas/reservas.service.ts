@@ -20,6 +20,7 @@ import { ExpensasService } from '../expensas/expensas.service';
 import { CrearBloqueoDto } from './dto/crear-bloqueo.dto';
 import { CrearReservaDto } from './dto/crear-reserva.dto';
 import { CreateAmenityDto } from './dto/create-amenity.dto';
+import { CalendarioQuery } from './dto/calendario.query';
 import { DisponibilidadQuery } from './dto/disponibilidad.query';
 import { ListarAmenitiesQuery } from './dto/listar-amenities.query';
 import { ListarBloqueosQuery } from './dto/listar-bloqueos.query';
@@ -28,6 +29,7 @@ import { RechazarReservaDto } from './dto/rechazar-reserva.dto';
 import { UpdateAmenityDto } from './dto/update-amenity.dto';
 import {
   cierraAlDiaSiguiente,
+  estadoDelDia,
   largoDeVentana,
   ProblemaFranja,
   validarFranja,
@@ -36,6 +38,9 @@ import {
 import { ReservasRepository } from './reservas.repository';
 
 const CANCELABLES = [EstadoReserva.PENDIENTE, EstadoReserva.APROBADA];
+
+/** Un mes y algo: el calendario del vecino nunca pide más. */
+const DIAS_MAXIMOS_CALENDARIO = 62;
 
 @Injectable()
 export class ReservasService {
@@ -150,6 +155,49 @@ export class ReservasService {
         estado: r.estado,
       })),
       bloqueos: bloqueos.map((b) => ({ desde: b.desde, hasta: b.hasta, motivo: b.motivo })),
+    };
+  }
+
+  /**
+   * El estado de cada día de un rango (el calendario mensual del vecino):
+   * disponible, parcial, sin lugar o pasado. Una sola consulta de reservas y
+   * otra de bloqueos para todo el rango, en vez de una disponibilidad por día.
+   */
+  async calendario(usuario: UsuarioActual, id: string, query: CalendarioQuery) {
+    if (query.hasta < query.desde) {
+      throw new BadRequestException('hasta no puede ser anterior a desde');
+    }
+    const dias = (Date.parse(query.hasta) - Date.parse(query.desde)) / 86_400_000 + 1;
+    if (dias > DIAS_MAXIMOS_CALENDARIO) {
+      throw new BadRequestException(`El calendario abarca hasta ${DIAS_MAXIMOS_CALENDARIO} días`);
+    }
+
+    await this.reservas.cerrarVencidas();
+    const amenity = await this.findAmenity(usuario, id);
+    const { ventanas, ahora } = await this.reservas.ventanasDelRango(
+      query.desde,
+      query.hasta,
+      amenity.horaApertura,
+      amenity.horaCierre,
+      ZONA_POR_DEFECTO,
+    );
+    const inicio = ventanas[0].inicio;
+    const fin = ventanas[ventanas.length - 1].fin;
+    const [reservas, bloqueos] = await Promise.all([
+      this.reservas.reservasEnRango(id, inicio, fin),
+      this.reservas.bloqueosEnRango(id, inicio, fin),
+    ]);
+    const ocupado = [
+      ...reservas.map((r) => ({ inicio: r.inicio, fin: r.fin })),
+      ...bloqueos.map((b) => ({ inicio: b.desde, fin: b.hasta })),
+    ];
+
+    return {
+      amenityId: amenity.id,
+      horaApertura: amenity.horaApertura,
+      horaCierre: amenity.horaCierre,
+      cierraAlDiaSiguiente: cierraAlDiaSiguiente(amenity.horaApertura, amenity.horaCierre),
+      dias: ventanas.map((v) => ({ fecha: v.fecha, estado: estadoDelDia(v, ocupado, ahora) })),
     };
   }
 
