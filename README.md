@@ -987,6 +987,48 @@ consorcios, sus reservas aprobadas que todavía no empezaron (de los próximos
 30 días) y las votaciones abiertas (con `fecha` = cuándo cierran). Acá un `[]`
 sí quiere decir que no tiene nada por delante.
 
+## Panel del administrador
+
+`GET /panel` (rol `ADMINISTRADOR`; el superadmin ve todos los consorcios) arma
+la pantalla 01 del prototipo de una sola vez. Como `inicio`, el módulo
+(`modules/panel/`) no tiene tablas: compone lo que saben expensas, reclamos,
+reservas, votaciones y asambleas, cada uno con su alcance.
+
+```jsonc
+{
+  "periodo": "2026-08",                // ?periodo=AAAA-MM; sin él, el último emitido
+  "consorcios": 6, "unidades": 214,
+  "cobranza": {
+    "emitido": 38947180, "cobrado": 33612940, "pendiente": 5334240,
+    "vencido": 4120000, "unidadesVencidas": 31,
+    "porcentajeCobrado": 86.3, "morosidad": 10.6,
+    "anterior": { "periodo": "2026-07", "emitido": 37163000, "cobrado": 34200000, "morosidad": 11.8 }
+  },
+  "actividadHoy": { "reclamosAbiertos": 12, "reservas": 5, "reservasPendientes": 2, "votacionesActivas": 2 },
+  "serie": [{ "periodo": "2026-03", "emitido": 0, "cobrado": 0 }],   // 6 meses
+  "atencion": [
+    { "tipo": "DEUDA_ANTIGUA", "consorcio": "…", "unidades": 7, "saldo": 2184900, "dias": 60 },
+    { "tipo": "LIQUIDACION_SIN_EMITIR", "consorcio": "…", "periodo": "2026-08", "fechaVencimiento": null },
+    { "tipo": "QUORUM_BAJO", "asambleaId": "…", "quorumPorcentaje": 54.3, "quorumRequerido": 60 },
+    { "tipo": "RECLAMO_SIN_ASIGNAR", "reclamoId": "…", "codigo": "RC-2026-0184", "unidad": "6º B" }
+  ],
+  "porConsorcio": [{ "id": "…", "nombre": "…", "unidades": 48, "emitido": 8412560,
+                     "cobrado": 6998310, "pendiente": 1414250, "morosidad": 16.8, "estado": "ATENCION" }]
+}
+```
+
+- **Emitido** es la suma de las boletas de liquidaciones emitidas o cerradas
+  del período (una previsualización todavía no es deuda), igual que en
+  `/boletas/resumen`.
+- **Morosidad** es el saldo de las boletas **vencidas** sobre lo emitido: lo que
+  todavía no venció no es mora aunque no esté pagado.
+- **Estado del consorcio**: `SIN_EMITIR` si no emitió el período; si no,
+  `MOROSIDAD_ALTA` desde 20%, `ATENCION` desde 10% y `AL_DIA` por debajo.
+- **Requiere atención**: unidades con una boleta vencida hace más de 60 días,
+  consorcios sin el período emitido, asambleas convocadas de los próximos 15
+  días por debajo del quórum y reclamos `NUEVO` sin proveedor hace más de 2
+  días. Los umbrales son constantes de `panel.service.ts` e `indicadores.ts`.
+
 ## Asambleas
 
 Módulo `src/modules/asambleas/`. Diseño en

@@ -51,6 +51,20 @@ export interface ResumenCobranzas {
   conteos: { todos: number; pagados: number; pendientes: number; vencidos: number };
 }
 
+/** Lo cobrado de una liquidación, para el panel del administrador. */
+export interface CobranzaDeLiquidacion {
+  consorcioId: string;
+  /** AAAA-MM */
+  periodo: string;
+  estado: EstadoLiquidacion;
+  fechaVencimiento: string;
+  emitido: number;
+  cobrado: number;
+  /** El saldo de las boletas vencidas. */
+  vencido: number;
+  unidadesVencidas: number;
+}
+
 export interface PagoDeBoleta {
   pagado: number;
   medio: MedioPago;
@@ -133,6 +147,89 @@ export class ExpensasRepository {
       .andWhere('l.estado IN (:...emitidas)', { emitidas: EMITIDAS })
       .getRawOne<{ periodo: string | null }>();
     return fila?.periodo ?? null;
+  }
+
+  /**
+   * Una fila por liquidación de los consorcios y el rango de períodos, con lo
+   * emitido, lo cobrado y lo vencido. Lo emitido sólo cuenta en liquidaciones
+   * emitidas o cerradas: las boletas de una previsualización todavía no son deuda.
+   * `consorcioIds` undefined es el superadmin: todos.
+   */
+  async cobranzasPorLiquidacion(
+    consorcioIds: string[] | undefined,
+    desde: string,
+    hasta: string,
+  ): Promise<CobranzaDeLiquidacion[]> {
+    const filas: Record<string, string | number>[] = await this.dataSource.query(
+      `SELECT l.consorcio_id AS "consorcioId",
+              to_char(l.periodo, 'YYYY-MM') AS periodo,
+              l.estado,
+              l.fecha_vencimiento::text AS "fechaVencimiento",
+              coalesce(sum(b.total) FILTER (WHERE emitida), 0)::float AS emitido,
+              coalesce(sum(pg.pagado) FILTER (WHERE emitida), 0)::float AS cobrado,
+              coalesce(sum(greatest(b.total - pg.pagado, 0))
+                FILTER (WHERE emitida AND b.estado = 'VENCIDA'), 0)::float AS vencido,
+              count(b.id) FILTER (WHERE emitida AND b.estado = 'VENCIDA')::int AS "unidadesVencidas"
+         FROM liquidacion l
+         CROSS JOIN LATERAL (SELECT l.estado IN ('EMITIDA', 'CERRADA') AS emitida) e
+         LEFT JOIN boleta b ON b.liquidacion_id = l.id
+         LEFT JOIN LATERAL (
+              SELECT coalesce(sum(p.monto), 0) AS pagado
+                FROM pago p WHERE p.boleta_id = b.id AND p.estado = 'APROBADO') pg ON true
+        WHERE l.periodo BETWEEN $1::date AND $2::date
+          AND ($3::uuid[] IS NULL OR l.consorcio_id = ANY($3::uuid[]))
+        GROUP BY l.id
+        ORDER BY l.periodo`,
+      [`${desde}-01`, `${hasta}-01`, consorcioIds ?? null],
+    );
+    return filas as unknown as CobranzaDeLiquidacion[];
+  }
+
+  /**
+   * Las unidades con una boleta vencida hace más de `dias`, por consorcio, y
+   * lo que deben hoy: el saldo de su última boleta, que ya arrastra lo anterior.
+   */
+  async deudaAntigua(
+    consorcioIds: string[] | undefined,
+    dias: number,
+  ): Promise<{ consorcioId: string; unidades: number; saldo: number }[]> {
+    return this.dataSource.query(
+      `WITH ultima AS (
+              SELECT DISTINCT ON (b.unidad_id) b.id, b.unidad_id, b.total, l.consorcio_id
+                FROM boleta b JOIN liquidacion l ON l.id = b.liquidacion_id
+               WHERE l.estado IN ('EMITIDA', 'CERRADA')
+               ORDER BY b.unidad_id, l.periodo DESC),
+            mas_vieja AS (
+              SELECT b.unidad_id, min(l.fecha_vencimiento) AS vencio
+                FROM boleta b JOIN liquidacion l ON l.id = b.liquidacion_id
+               WHERE b.estado = 'VENCIDA'
+               GROUP BY b.unidad_id)
+       SELECT u.consorcio_id AS "consorcioId",
+              count(*)::int AS unidades,
+              sum(u.total - pg.pagado)::float AS saldo
+         FROM ultima u
+         JOIN mas_vieja m ON m.unidad_id = u.unidad_id
+         CROSS JOIN LATERAL (
+              SELECT coalesce(sum(p.monto), 0) AS pagado
+                FROM pago p WHERE p.boleta_id = u.id AND p.estado = 'APROBADO') pg
+        WHERE m.vencio < CURRENT_DATE - $1::int
+          AND u.total > pg.pagado
+          AND ($2::uuid[] IS NULL OR u.consorcio_id = ANY($2::uuid[]))
+        GROUP BY u.consorcio_id`,
+      [dias, consorcioIds ?? null],
+    );
+  }
+
+  /** El período más reciente que alguno de estos consorcios ya emitió (AAAA-MM). */
+  async ultimoPeriodoEmitidoDe(consorcioIds: string[] | undefined): Promise<string | null> {
+    const [fila] = await this.dataSource.query(
+      `SELECT to_char(max(periodo), 'YYYY-MM') AS periodo
+         FROM liquidacion
+        WHERE estado IN ('EMITIDA', 'CERRADA')
+          AND ($1::uuid[] IS NULL OR consorcio_id = ANY($1::uuid[]))`,
+      [consorcioIds ?? null],
+    );
+    return (fila as { periodo: string | null }).periodo;
   }
 
   /** ¿Hay un período anterior que todavía no se emitió? */

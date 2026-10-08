@@ -46,6 +46,7 @@ import { estadoBoleta } from './estado-boleta';
 import {
   ExpensasRepository,
   type AlcanceBoletas,
+  type CobranzaDeLiquidacion,
   type ResumenCobranzas,
 } from './expensas.repository';
 import {
@@ -609,6 +610,29 @@ export class ExpensasService {
       await this.expensas.saldarAnteriores(boleta.unidadId, boleta.liquidacion.periodo);
     }
     return { ...boleta, estado };
+  }
+
+  // ── Para el panel del administrador ────────────────────────────────────────
+
+  /** Lo cobrado de cada liquidación de sus consorcios entre dos períodos (AAAA-MM). */
+  async cobranzasPorLiquidacion(
+    usuario: UsuarioActual,
+    desde: string,
+    hasta: string,
+  ): Promise<CobranzaDeLiquidacion[]> {
+    await this.expensas.marcarVencidas();
+    return this.expensas.cobranzasPorLiquidacion(consorciosGestionados(usuario), desde, hasta);
+  }
+
+  /** Unidades con deuda vencida hace más de `dias`, por consorcio. */
+  async deudaAntigua(usuario: UsuarioActual, dias: number) {
+    await this.expensas.marcarVencidas();
+    return this.expensas.deudaAntigua(consorciosGestionados(usuario), dias);
+  }
+
+  /** El último período que emitió alguno de sus consorcios, o null si ninguno emitió. */
+  ultimoPeriodoEmitido(usuario: UsuarioActual): Promise<string | null> {
+    return this.expensas.ultimoPeriodoEmitidoDe(consorciosGestionados(usuario));
   }
 
   // ── Para reservas ──────────────────────────────────────────────────────────

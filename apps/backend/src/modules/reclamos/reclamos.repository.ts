@@ -161,6 +161,20 @@ export class ReclamosRepository {
   }
 
   /** Números del encabezado de la bandeja. */
+  /** Los NUEVO sin proveedor abiertos hace más de `dias`, el más viejo primero. */
+  sinAsignar(alcance: AlcanceReclamos, dias: number, limite: number): Promise<Reclamo[]> {
+    const qb = this.reclamos
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.unidad', 'unidad')
+      .leftJoinAndSelect('r.categoria', 'categoria')
+      .where('r.estado = :nuevo', { nuevo: EstadoReclamo.NUEVO })
+      .andWhere('r.proveedorId IS NULL')
+      .andWhere(`r.createdAt < now() - make_interval(days => :dias)`, { dias })
+      .orderBy('r.createdAt', 'ASC')
+      .take(limite);
+    return aplicarAlcance(qb, alcance).getMany();
+  }
+
   async resumen(consorcioId: string | undefined, alcance: AlcanceReclamos) {
     // Los mismos filtros para las dos consultas: se arman una vez y se aplican
     // a cada query builder nuevo.

@@ -57,6 +57,11 @@ export class ReclamosService {
     return { ...reclamo, eventos };
   }
 
+  /** Para el panel: los reclamos nuevos que nadie tomó en `dias` días. */
+  async sinAsignar(usuario: UsuarioActual, dias: number, limite = 10): Promise<Reclamo[]> {
+    return this.reclamos.sinAsignar(await this.alcance(usuario), dias, limite);
+  }
+
   async resumen(usuario: UsuarioActual, consorcioId?: string) {
     return this.reclamos.resumen(consorcioId, await this.alcance(usuario));
   }
