@@ -786,6 +786,13 @@ de `consorcio` y sólo cambia quien la llama.
 
 - **La franja entra en la ventana del amenity.** Terminar exactamente a la hora
   de cierre es válido: cierra a esa hora, no antes.
+- **Medianoche.** Un `horaFin` igual o anterior a `horaInicio` es del día
+  siguiente (de 20:00 a 02:00; de 13:00 a 13:00 son 24 h), y `fecha` es el día
+  en que empieza. Lo mismo con el amenity: un SUM de 10:00 a 02:00 cierra en
+  la madrugada siguiente, y apertura igual a cierre es abierto las 24 h. Una
+  franja de 00:30 a 01:30 cae en la ventana que abrió la noche anterior.
+  `GET /amenities/:id/disponibilidad` devuelve `cierraAlDiaSiguiente` y, en
+  ese caso, lo ocupado hasta el cierre de la madrugada.
 - **Duración máxima y anticipación mínima**, si el amenity las define. La
   anticipación le da margen al administrador para aprobar.
 - **El horario tiene que estar en el futuro**, medido con el reloj de la base

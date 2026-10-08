@@ -64,6 +64,9 @@ export class ReservasRepository {
    * convertirla a un instante es trabajo de Postgres, que sabe de horarios de
    * verano. El reloj sale de acá y no del proceso Node por lo mismo que `hoy()`
    * en unidades y expensas.
+   *
+   * Un fin igual o anterior al inicio es del día siguiente (de 20:00 a 02:00),
+   * igual que en `franjaEnMinutos`.
    */
   async instantes(
     fecha: string,
@@ -73,7 +76,8 @@ export class ReservasRepository {
   ): Promise<Instantes> {
     const [fila] = (await this.dataSource.query(
       `SELECT ($1::date + $2::time) AT TIME ZONE $4 AS inicio,
-              ($1::date + $3::time) AT TIME ZONE $4 AS fin,
+              ($1::date + (CASE WHEN $3::time <= $2::time THEN 1 ELSE 0 END) + $3::time)
+                AT TIME ZONE $4 AS fin,
               now() AS ahora`,
       [fecha, horaInicio, horaFin, zona],
     )) as Instantes[];
