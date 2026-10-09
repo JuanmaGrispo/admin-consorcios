@@ -1,8 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID } from 'class-validator';
+import { DestinoPagoDto } from './destino-pago';
 
-export class CrearPreferenciaDto {
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
-  boletaId: string;
-}
+/** `{ boletaId }` o `{ reservaId }`: expensas o la seña de una reserva. */
+export class CrearPreferenciaDto extends DestinoPagoDto {}

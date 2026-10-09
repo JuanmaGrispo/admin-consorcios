@@ -113,6 +113,25 @@ export class ReservasRepository {
     };
   }
 
+  /**
+   * Lo pagado de seña por reserva (pagos SENA_RESERVA aprobados) y el último
+   * de esos pagos. Lee `pago` como expensas: el cobro es de pagos, pero el
+   * estado de la seña es de la reserva.
+   */
+  async senasDe(reservaIds: string[]): Promise<Map<string, { pagado: number; pagoId: string }>> {
+    if (reservaIds.length === 0) return new Map();
+    const filas: { reservaId: string; pagado: number; pagoId: string }[] = await this.dataSource.query(
+      `SELECT reserva_id AS "reservaId",
+              sum(monto)::float AS pagado,
+              (array_agg(id ORDER BY coalesce(fecha_pago, created_at) DESC))[1] AS "pagoId"
+         FROM pago
+        WHERE concepto = 'SENA_RESERVA' AND estado = 'APROBADO' AND reserva_id = ANY($1::uuid[])
+        GROUP BY reserva_id`,
+      [reservaIds],
+    );
+    return new Map(filas.map((f) => [f.reservaId, { pagado: f.pagado, pagoId: f.pagoId }]));
+  }
+
   /** Un instante suelto a partir de fecha y hora de pared (los bloqueos). */
   async instante(fechaHora: string, zona: string): Promise<Date> {
     const [fila] = (await this.dataSource.query(

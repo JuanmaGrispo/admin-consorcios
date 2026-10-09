@@ -63,11 +63,11 @@ export class PagosRepository {
     return (fila as { numero: number }).numero;
   }
 
-  /** El checkout de Mercado Pago que quedó abierto para esta boleta, si hay uno. */
-  pendienteDeMercadoPago(boletaId: string): Promise<Pago | null> {
+  /** El checkout de Mercado Pago que quedó abierto para esta boleta o seña, si hay uno. */
+  pendienteDeMercadoPago(destino: { boletaId: string | null; reservaId: string | null }): Promise<Pago | null> {
     return this.pagos.findOne({
       where: {
-        boletaId,
+        ...(destino.boletaId ? { boletaId: destino.boletaId } : { reservaId: destino.reservaId! }),
         medio: MedioPago.MERCADO_PAGO,
         estado: EstadoPago.PENDIENTE,
         mpPreferenceId: Not(IsNull()),
@@ -76,12 +76,13 @@ export class PagosRepository {
     });
   }
 
-  /** Lo cobrado de una boleta: sólo cuentan los pagos aprobados. */
-  async aprobadoDe(boletaId: string): Promise<number> {
+  /** Lo cobrado de una boleta o de una seña: sólo cuentan los pagos aprobados. */
+  async aprobadoDe(destino: { boletaId?: string; reservaId?: string }): Promise<number> {
+    const columna = destino.boletaId ? 'boleta_id' : 'reserva_id';
     const [fila] = await this.dataSource.query(
       `SELECT coalesce(sum(monto), 0)::float AS total
-         FROM pago WHERE boleta_id = $1 AND estado = 'APROBADO'`,
-      [boletaId],
+         FROM pago WHERE ${columna} = $1 AND estado = 'APROBADO'`,
+      [destino.boletaId ?? destino.reservaId],
     );
     return (fila as { total: number }).total;
   }

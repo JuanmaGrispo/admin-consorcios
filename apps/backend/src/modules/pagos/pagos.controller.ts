@@ -93,10 +93,11 @@ export class PagosController {
   @Post('mercadopago/preferencia')
   @ApiOperation({
     summary: 'Arranca un cobro con Mercado Pago',
-    description: 'Por el saldo de la boleta. Devuelve `initPoint`, la URL del checkout.',
+    description:
+      'Por el saldo de la boleta (`boletaId`) o de la seña de una reserva (`reservaId`). Devuelve `initPoint`, la URL del checkout.',
   })
   crearPreferencia(@UsuarioActual() usuario: Usuario, @Body() dto: CrearPreferenciaDto) {
-    return this.pagos.crearPreferencia(usuario, dto.boletaId);
+    return this.pagos.crearPreferencia(usuario, dto);
   }
 
   /**

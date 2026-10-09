@@ -30,6 +30,8 @@ export interface DatosRecibo {
   etiquetaUnidad: string;
   /** Período de la boleta (AAAA-MM-DD), o null si el pago no es de una boleta. */
   periodo: string | null;
+  /** Qué se pagó si no es una boleta: "Seña SUM · reserva del 13/09/2026". */
+  concepto?: string | null;
   consorcio: DatosConsorcio;
 }
 
@@ -46,6 +48,7 @@ export function generarReciboPdf({
   pago,
   etiquetaUnidad,
   periodo,
+  concepto,
   consorcio,
 }: DatosRecibo): Promise<Buffer> {
   const doc = new PDFDocument({ size: 'A4', margin: MARGEN });
@@ -92,6 +95,7 @@ export function generarReciboPdf({
 
   dato('Unidad', etiquetaUnidad);
   if (periodo) dato('Período', mes(periodo));
+  if (concepto) dato('Concepto', concepto);
   dato('Medio de pago', MEDIOS[pago.medio] ?? pago.medio);
   // El id de Mercado Pago es con lo que el vecino reclama si algo no cierra.
   if (pago.mpPaymentId) dato('Operación', pago.mpPaymentId);
@@ -103,7 +107,9 @@ export function generarReciboPdf({
 
   doc.moveDown(1.5).font('Helvetica').fontSize(9).fillColor('#555');
   doc.text(
-    'Este recibo acredita el pago recibido. Si el pago cubre el total de la boleta, la unidad queda al día; si fue parcial, el saldo sigue vigente.',
+    concepto
+      ? 'Este recibo acredita el pago de la seña. Se devuelve según el reglamento del amenity.'
+      : 'Este recibo acredita el pago recibido. Si el pago cubre el total de la boleta, la unidad queda al día; si fue parcial, el saldo sigue vigente.',
     { width: ANCHO },
   );
 

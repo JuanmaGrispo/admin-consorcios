@@ -666,8 +666,8 @@ antes de cada lectura de boletas, sin cron.
 | GET    | `/pagos`                          | admin: los de sus consorcios · vecino: los de sus unidades (filtros `boletaId`, `unidadId`, `estado`) |
 | GET    | `/pagos/:id`                      | detalle con su unidad y su boleta; al vecino, 404 si no es de una unidad suya |
 | GET    | `/pagos/:id/recibo`               | el recibo en PDF, sólo de un pago aprobado |
-| POST   | `/pagos`                          | administrador: pago manual `{ boletaId, monto, medio, fechaPago? }` |
-| POST   | `/pagos/mercadopago/preferencia`  | dueño de la boleta o administrador: `{ boletaId }` → `{ pagoId, initPoint }` |
+| POST   | `/pagos`                          | administrador: pago manual `{ boletaId \| reservaId, monto, medio, fechaPago? }` |
+| POST   | `/pagos/mercadopago/preferencia`  | dueño de la boleta o la reserva, o administrador: `{ boletaId }` o `{ reservaId }` → `{ pagoId, initPoint }` |
 | POST   | `/pagos/:id/sincronizar`          | mismos permisos que el detalle: le pregunta a Mercado Pago cómo quedó el pago, sin esperar al webhook |
 | POST   | `/pagos/webhook/mercadopago`      | público, protegido por firma: lo llama Mercado Pago |
 
@@ -757,6 +757,7 @@ al que debe expensas).
 | PATCH  | `/reservas/:id/aprobar`                    | administrador |
 | PATCH  | `/reservas/:id/rechazar`                   | administrador (`motivoRechazo` obligatorio) |
 | PATCH  | `/reservas/:id/cancelar`                   | el vecino dueño o el administrador |
+| PATCH  | `/reservas/:id/sena-devuelta`              | administrador: registra que devolvió la seña |
 
 Filtros de `GET /reservas`: `amenityId`, `consorcioId`, `unidadId`, `estado`,
 `situacion` (`proximas`/`pasadas`), `desde`, `hasta`, `pagina`, `limite`.
@@ -830,6 +831,23 @@ de `consorcio` y sólo cambia quien la llama.
   reservar. Reservas no toca las tablas de expensas: le pregunta a
   `ExpensasService.tieneDeudaVencida`.
 
+### Seña
+
+Si el amenity tiene `monto_sena`, cada reserva trae
+`sena: { monto, pagada, pagoId, devueltaAt }` (null si no pide seña). La seña
+se paga por pagos, igual que una boleta: `POST /pagos/mercadopago/preferencia`
+con `{ reservaId }`, o el administrador la registra a mano con `POST /pagos`.
+El pago es `SENA_RESERVA` con `reserva_id` (el CHECK `ck_pago_destino` de la
+base exige uno u otro destino). Sólo se paga mientras la reserva está
+`PENDIENTE` o `APROBADA` y no empezó, y nunca más que lo que falta. Si igual
+entra de más, se avisa al administrador, como en expensas.
+
+La devolución la registra el administrador (`PATCH /reservas/:id/sena-devuelta`)
+una vez que la reserva terminó, se canceló o se rechazó: guarda
+`sena_devuelta_at` y le avisa a quien reservó. La plata se devuelve por fuera
+del sistema. El estado de la seña sale de los pagos aprobados, así que un
+reintegro de Mercado Pago la vuelve a "pendiente" solo.
+
 ### Bloqueos de mantenimiento
 
 El administrador cierra el amenity un rango de fechas (`amenity_bloqueo`) y ahí
@@ -878,9 +896,6 @@ mismo 409.
 
 ### Pendiente
 
-- **Seña** (`monto_sena`, `dias_devolucion_sena`, `pago.reserva_id` con
-  `ConceptoPago.SENA_RESERVA`): las columnas están y se exponen, pero la reserva
-  todavía no genera ningún pago.
 - `cupo_personas` se guarda pero no se valida contra nada: hoy no se pide cuánta
   gente va.
 

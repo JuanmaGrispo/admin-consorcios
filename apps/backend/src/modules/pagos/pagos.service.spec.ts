@@ -3,10 +3,20 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { beforeEach, describe, it } from 'node:test';
 import type { Aviso, Notificador } from '../../core/notificaciones/notificador';
-import { Boleta, EstadoBoleta, EstadoPago, MedioPago, Pago, RolUsuario } from '../../database/entities';
+import {
+  Boleta,
+  ConceptoPago,
+  EstadoBoleta,
+  EstadoPago,
+  MedioPago,
+  Pago,
+  Reserva,
+  RolUsuario,
+} from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { ExpensasService } from '../expensas/expensas.service';
+import type { ReservasService } from '../reservas/reservas.service';
 import { firmaValida, type MercadoPagoClient, type PagoMercadoPago } from './mercado-pago.client';
 import type { PagosRepository } from './pagos.repository';
 import { estadoSegunMercadoPago, PagosService } from './pagos.service';
@@ -32,6 +42,7 @@ function crearEntorno() {
     sincronizadas: [] as string[],
     /** La secuencia de recibos de la base, en memoria. */
     correlativo: 0,
+    saldoSena: 60_000,
     alcances: [] as unknown[],
   };
 
@@ -57,19 +68,23 @@ function crearEntorno() {
       return pago ? { ...pago, unidad: { consorcioId: 'c1', etiqueta: '3º B' } } : null;
     },
     siguienteCorrelativoRecibo: async () => (db.correlativo += 1),
-    pendienteDeMercadoPago: async (boletaId: string) =>
+    pendienteDeMercadoPago: async (destino: { boletaId: string | null; reservaId: string | null }) =>
       [...db.pagos]
         .reverse()
         .find(
           (p) =>
-            p.boletaId === boletaId &&
+            (destino.boletaId ? p.boletaId === destino.boletaId : p.reservaId === destino.reservaId) &&
             p.medio === MedioPago.MERCADO_PAGO &&
             p.estado === EstadoPago.PENDIENTE &&
             p.mpPreferenceId,
         ) ?? null,
-    aprobadoDe: async (boletaId: string) =>
+    aprobadoDe: async (destino: { boletaId?: string; reservaId?: string }) =>
       db.pagos
-        .filter((p) => p.boletaId === boletaId && p.estado === EstadoPago.APROBADO)
+        .filter(
+          (p) =>
+            (destino.boletaId ? p.boletaId === destino.boletaId : p.reservaId === destino.reservaId) &&
+            p.estado === EstadoPago.APROBADO,
+        )
         .reduce((suma, p) => suma + p.monto, 0),
   } as unknown as PagosRepository;
 
@@ -135,7 +150,20 @@ function crearEntorno() {
     firmaValida: (firma?: string) => firma === 'ok',
   } as unknown as MercadoPagoClient;
 
-  return { db, mp, repo, expensas, consorcios, mercadoPago, notificador, avisos };
+  /** Una reserva del SUM con seña de $60.000. */
+  const reserva = {
+    id: 'r1',
+    unidadId: 'u1',
+    solicitadaPorId: 'v1',
+    unidad: { etiqueta: '3º B' },
+    amenity: { nombre: 'SUM', montoSena: 60_000, consorcioId: 'c1' },
+  } as unknown as Reserva;
+  const reservas = {
+    senaPagable: async () => ({ reserva, saldo: db.saldoSena }),
+    findInterna: async () => reserva,
+  } as unknown as ReservasService;
+
+  return { db, mp, repo, expensas, consorcios, mercadoPago, notificador, avisos, reservas };
 }
 
 describe('PagosService', () => {
@@ -150,7 +178,41 @@ describe('PagosService', () => {
       entorno.consorcios,
       entorno.mercadoPago,
       entorno.notificador,
+      entorno.reservas,
     );
+  });
+
+  describe('seña de una reserva', () => {
+    it('la preferencia cobra la seña, imputada a la reserva y no a una boleta', async () => {
+      await service.crearPreferencia(admin, { reservaId: 'r1' });
+      const [pago] = entorno.db.pagos;
+      assert.equal(pago.concepto, ConceptoPago.SENA_RESERVA);
+      assert.equal(pago.reservaId, 'r1');
+      assert.equal(pago.boletaId, null);
+      assert.equal(pago.monto, 60_000);
+    });
+
+    it('va la boleta o la reserva, una sola', async () => {
+      await assert.rejects(service.crearPreferencia(admin, {}), BadRequestException);
+      await assert.rejects(
+        service.crearPreferencia(admin, { boletaId: 'b1', reservaId: 'r1' }),
+        BadRequestException,
+      );
+    });
+
+    it('aprobada: recibo y aviso a quien reservó, sin tocar expensas', async () => {
+      await service.registrar(admin, { reservaId: 'r1', monto: 60_000, medio: MedioPago.EFECTIVO });
+      assert.equal(entorno.db.pagos[0].reciboNumero, '0001-00000001');
+      assert.deepEqual(entorno.db.sincronizadas, []);
+      assert.ok(entorno.avisos.some((a) => a.destinatarioId === 'v1' && a.origen === 'reserva:r1'));
+    });
+
+    it('si la seña entra dos veces, le avisa al administrador', async () => {
+      await service.registrar(admin, { reservaId: 'r1', monto: 60_000, medio: MedioPago.EFECTIVO });
+      await service.registrar(admin, { reservaId: 'r1', monto: 60_000, medio: MedioPago.EFECTIVO });
+      const aviso = entorno.avisos.find((a) => a.destinatarioId === 'a1');
+      assert.match(aviso?.asunto ?? '', /seña de 3º B/);
+    });
   });
 
   describe('pago manual', () => {
@@ -190,7 +252,7 @@ describe('PagosService', () => {
       service.procesarWebhook({ tipo: 'payment', dataId, firma, requestId: 'r1' });
 
     it('la preferencia crea un pago pendiente por el saldo', async () => {
-      const r = await service.crearPreferencia(admin, 'b1');
+      const r = await service.crearPreferencia(admin, { boletaId: 'b1' });
       assert.equal(r.initPoint, 'https://mp/checkout/1');
       const [pago] = entorno.db.pagos;
       assert.equal(pago.estado, EstadoPago.PENDIENTE);
@@ -200,24 +262,24 @@ describe('PagosService', () => {
     });
 
     it('un segundo "Pagar" vuelve al mismo checkout en vez de abrir otro', async () => {
-      const primero = await service.crearPreferencia(admin, 'b1');
-      const segundo = await service.crearPreferencia(admin, 'b1');
+      const primero = await service.crearPreferencia(admin, { boletaId: 'b1' });
+      const segundo = await service.crearPreferencia(admin, { boletaId: 'b1' });
       assert.equal(segundo.pagoId, primero.pagoId);
       assert.equal(segundo.initPoint, primero.initPoint);
       assert.equal(entorno.db.pagos.length, 1);
     });
 
     it('si el saldo cambió, descarta el checkout viejo y abre uno nuevo', async () => {
-      await service.crearPreferencia(admin, 'b1');
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
       entorno.db.saldo = 250;
-      const nuevo = await service.crearPreferencia(admin, 'b1');
+      const nuevo = await service.crearPreferencia(admin, { boletaId: 'b1' });
       assert.equal(entorno.db.pagos[0].estado, EstadoPago.RECHAZADO);
       assert.equal(nuevo.pagoId, entorno.db.pagos[1].id);
       assert.equal(entorno.db.pagos[1].monto, 250);
     });
 
     it('si la boleta queda cobrada de más, le avisa al administrador', async () => {
-      await service.crearPreferencia(admin, 'b1');
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
       await service.registrar(admin, { boletaId: 'b1', monto: 400, medio: MedioPago.TRANSFERENCIA });
       entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
       await webhook('100');
@@ -226,7 +288,7 @@ describe('PagosService', () => {
     });
 
     it('un segundo intento aprobado del mismo checkout también se avisa', async () => {
-      await service.crearPreferencia(admin, 'b1');
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
       entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
       entorno.mp.pagos.set('101', pagoMp(101, 'approved'));
       await webhook('100');
@@ -237,7 +299,7 @@ describe('PagosService', () => {
 
     describe('al volver del checkout', () => {
       it('le pregunta a Mercado Pago sin esperar al webhook', async () => {
-        const { pagoId } = await service.crearPreferencia(admin, 'b1');
+        const { pagoId } = await service.crearPreferencia(admin, { boletaId: 'b1' });
         entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
         const pago = await service.sincronizar(admin, pagoId);
         assert.equal(pago.estado, EstadoPago.APROBADO);
@@ -245,13 +307,13 @@ describe('PagosService', () => {
       });
 
       it('si todavía no hay intento, el pago sigue pendiente', async () => {
-        const { pagoId } = await service.crearPreferencia(admin, 'b1');
+        const { pagoId } = await service.crearPreferencia(admin, { boletaId: 'b1' });
         const pago = await service.sincronizar(admin, pagoId);
         assert.equal(pago.estado, EstadoPago.PENDIENTE);
       });
 
       it('un pago que ya no está pendiente no vuelve a consultar', async () => {
-        const { pagoId } = await service.crearPreferencia(admin, 'b1');
+        const { pagoId } = await service.crearPreferencia(admin, { boletaId: 'b1' });
         entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
         await webhook('100');
         await service.sincronizar(admin, pagoId);
@@ -259,7 +321,7 @@ describe('PagosService', () => {
       });
 
       it('webhook y sincronizar a la vez: un recibo y un aviso', async () => {
-        const { pagoId } = await service.crearPreferencia(admin, 'b1');
+        const { pagoId } = await service.crearPreferencia(admin, { boletaId: 'b1' });
         entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
         await Promise.all([webhook('100'), service.sincronizar(admin, pagoId)]);
         assert.equal(entorno.db.correlativo, 1);
@@ -269,18 +331,18 @@ describe('PagosService', () => {
 
     it('si Mercado Pago falla, el pago no queda pendiente para siempre', async () => {
       entorno.mp.preferenciaFalla = true;
-      await assert.rejects(service.crearPreferencia(admin, 'b1'));
+      await assert.rejects(service.crearPreferencia(admin, { boletaId: 'b1' }));
       assert.equal(entorno.db.pagos[0].estado, EstadoPago.RECHAZADO);
     });
 
     it('con firma inválida, 401 y no toca nada', async () => {
-      await service.crearPreferencia(admin, 'b1');
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
       await assert.rejects(webhook('100', 'trucha'), UnauthorizedException);
       assert.equal(entorno.db.pagos[0].estado, EstadoPago.PENDIENTE);
     });
 
     it('aprueba el pago, mueve la boleta y es idempotente', async () => {
-      await service.crearPreferencia(admin, 'b1');
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
       entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
       await webhook('100');
       await webhook('100');
@@ -293,7 +355,7 @@ describe('PagosService', () => {
     });
 
     it('un intento rechazado tardío no pisa uno aprobado', async () => {
-      await service.crearPreferencia(admin, 'b1');
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
       entorno.mp.pagos.set('100', pagoMp(100, 'rejected'));
       entorno.mp.pagos.set('101', pagoMp(101, 'approved'));
       await webhook('101');
@@ -303,7 +365,7 @@ describe('PagosService', () => {
     });
 
     it('un reintegro vuelve a sincronizar la boleta', async () => {
-      await service.crearPreferencia(admin, 'b1');
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
       entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
       await webhook('100');
       entorno.mp.pagos.set('100', pagoMp(100, 'refunded'));
@@ -346,7 +408,7 @@ describe('PagosService', () => {
     });
 
     it('un reintento del webhook no renumera el recibo', async () => {
-      await service.crearPreferencia(admin, 'b1');
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
       entorno.mp.pagos.set('100', pagoMp('approved'));
       await service.procesarWebhook({ tipo: 'payment', dataId: '100', firma: 'ok', requestId: 'r1' });
       const numero = entorno.db.pagos[0].reciboNumero;
@@ -362,7 +424,7 @@ describe('PagosService', () => {
     });
 
     it('no hay recibo de un pago que no se aprobó', async () => {
-      await service.crearPreferencia(admin, 'b1');
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
       await assert.rejects(service.reciboPdf(admin, 'p1'), BadRequestException);
     });
 

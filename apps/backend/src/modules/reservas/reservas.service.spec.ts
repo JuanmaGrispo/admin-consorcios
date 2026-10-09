@@ -30,6 +30,7 @@ describe('ReservasService — alcance', () => {
     llamadas = { amenities: [], reservas: [] };
     const repo = {
       cerrarVencidas: async () => undefined,
+      senasDe: async () => new Map(),
       listarAmenities: async (filtro: unknown) => {
         llamadas.amenities.push(filtro);
         return [];

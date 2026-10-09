@@ -176,6 +176,16 @@ export class ReservasController {
     return this.reservas.rechazar(usuario, id, dto);
   }
 
+  @Roles(RolUsuario.ADMINISTRADOR)
+  @Patch('reservas/:id/sena-devuelta')
+  @ApiOperation({
+    summary: 'Registra que se devolvió la seña',
+    description: 'Con la reserva finalizada, cancelada o rechazada y la seña pagada. Avisa al vecino.',
+  })
+  marcarSenaDevuelta(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.reservas.marcarSenaDevuelta(usuario, id);
+  }
+
   @Patch('reservas/:id/cancelar')
   @ApiOperation({
     summary: 'Cancela una reserva',
