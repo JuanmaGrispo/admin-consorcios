@@ -24,6 +24,11 @@ type Edicion = { modo: 'cerrado' } | { modo: 'alta' } | { modo: 'edicion'; noved
 
 type Filtro = 'publicadas' | 'todas';
 
+/** "1 publicada", "4 publicadas", "1 dada de baja". */
+function cantidad(n: number, palabra: string, resto = ''): string {
+  return [n, n === 1 ? palabra : `${palabra}s`, resto].filter((x) => x !== '').join(' ');
+}
+
 /** El toast después de una acción rápida de la tabla. */
 function confirmacion(cambios: NovedadCambios): string {
   if (cambios.activa === false) return 'Novedad dada de baja';
@@ -127,7 +132,7 @@ function MuroAdministrado({ consorcio }: { consorcio: Consorcio }) {
         contexto={[consorcio.nombre, consorcio.barrio].filter(Boolean).join(' · ')}
         descripcion={
           conteo
-            ? `${conteo.publicadas} publicadas · ${conteo.todas - conteo.publicadas} dadas de baja`
+            ? `${cantidad(conteo.publicadas, 'publicada')} · ${cantidad(conteo.todas - conteo.publicadas, 'dada', 'de baja')}`
             : 'El muro del edificio: lo que publiques acá lo ven todos los vecinos.'
         }
         acciones={nueva}

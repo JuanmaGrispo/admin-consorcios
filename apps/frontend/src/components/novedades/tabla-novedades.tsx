@@ -18,6 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -76,18 +77,21 @@ export function TablaNovedades({ novedades, onEditar, onCambiar }: TablaNovedade
         <TableBody>
           {novedades.map((n) => (
             <TableRow key={n.id} className={BORDES}>
-              <TableCell className="max-w-56 whitespace-normal sm:max-w-md">
-                <div className="flex items-center gap-1.5 font-medium">
-                  {n.fijada && <Pin className="size-3.5 shrink-0 text-primary" aria-label="Fijada" />}
-                  <span className="truncate">{n.titulo}</span>
+              <TableCell className="whitespace-normal">
+                {/* El límite va en un div: las celdas de tabla ignoran max-width. */}
+                <div className="max-w-44 sm:max-w-md">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    {n.fijada && <Pin className="size-3.5 shrink-0 text-primary" aria-label="Fijada" />}
+                    <span className="truncate">{n.titulo}</span>
+                  </div>
+                  <p className="line-clamp-1 text-xs text-muted-foreground">{n.cuerpo}</p>
+                  {n.novedadAdjuntos.length > 0 && (
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                      <Paperclip className="size-3" />
+                      {n.novedadAdjuntos.length} {n.novedadAdjuntos.length === 1 ? 'adjunto' : 'adjuntos'}
+                    </p>
+                  )}
                 </div>
-                <p className="line-clamp-1 text-xs text-muted-foreground">{n.cuerpo}</p>
-                {n.novedadAdjuntos.length > 0 && (
-                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                    <Paperclip className="size-3" />
-                    {n.novedadAdjuntos.length} {n.novedadAdjuntos.length === 1 ? 'adjunto' : 'adjuntos'}
-                  </p>
-                )}
               </TableCell>
               <TableCell className="hidden text-secondary-foreground tabular-nums md:table-cell">
                 {n.publicadaAt ? fechaDeInstante(n.publicadaAt) : '—'}
@@ -128,6 +132,19 @@ export function TablaNovedades({ novedades, onEditar, onCambiar }: TablaNovedade
                     <TooltipContent>Más acciones</TooltipContent>
                   </Tooltip>
                   <DropdownMenuContent align="end">
+                    {/* En mobile no entran los íconos: editar y fijar viven acá. */}
+                    <DropdownMenuItem className="sm:hidden" onSelect={() => onEditar(n)}>
+                      <Pencil />
+                      Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="sm:hidden"
+                      onSelect={() => onCambiar(n, { fijada: !n.fijada })}
+                    >
+                      {n.fijada ? <PinOff /> : <Pin />}
+                      {n.fijada ? 'Desfijar' : 'Fijar arriba del muro'}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="sm:hidden" />
                     {n.activa ? (
                       <DropdownMenuItem variant="destructive" onSelect={() => setADarDeBaja(n)}>
                         <Archive />
@@ -188,7 +205,7 @@ function Accion({
           size="icon-sm"
           aria-label={etiqueta}
           onClick={onClick}
-          className="text-muted-foreground hover:text-primary"
+          className="hidden text-muted-foreground hover:text-primary sm:inline-flex"
         >
           {children}
         </Button>
