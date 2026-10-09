@@ -1,7 +1,7 @@
 'use client';
 
 import { Landmark, Vote } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import {
   TarjetaAsambleaVecino,
@@ -14,13 +14,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnidadActiva } from '@/components/vecino/unidad-activa';
 import { DialogoVotar } from '@/components/votaciones/dialogo-votar';
 import { TarjetaVotacionVecino } from '@/components/votaciones/tarjeta-votacion-vecino';
+import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { asambleasService } from '@/services/asambleas';
 import { votacionesService } from '@/services/votaciones';
-import type { Asamblea, AsambleaDetalle } from '@/types/asamblea';
-import type { Votacion, VotacionDetalle } from '@/types/votacion';
+import type { Asamblea } from '@/types/asamblea';
+import type { VotacionDetalle } from '@/types/votacion';
 
 const CERRADAS = ['CERRADA', 'CERRADA_SIN_QUORUM'];
+
+/** Los detalles que llegaron, por id; los que fallaron quedan afuera. */
+function porId<T extends { id: string }>(resultados: PromiseSettledResult<T>[]): Record<string, T> {
+  return Object.fromEntries(
+    resultados.flatMap((r) => (r.status === 'fulfilled' ? [[r.value.id, r.value] as const] : [])),
+  );
+}
 
 export default function VecinoAsambleasPage() {
   const { unidad } = useUnidadActiva();
@@ -31,53 +39,45 @@ export default function VecinoAsambleasPage() {
 /** Asambleas y votaciones del edificio de la unidad activa (pantalla 15). */
 function AsambleasYVotaciones() {
   const { unidad, consorcio } = useUnidadActiva();
-  const [asambleas, setAsambleas] = useState<Asamblea[] | null>(null);
-  const [votaciones, setVotaciones] = useState<Votacion[] | null>(null);
-  const [detallesAsamblea, setDetallesAsamblea] = useState<Record<string, AsambleaDetalle>>({});
-  const [detallesVotacion, setDetallesVotacion] = useState<Record<string, VotacionDetalle>>({});
-  const [error, setError] = useState<string | null>(null);
   const [votando, setVotando] = useState<VotacionDetalle | null>(null);
-  // Sube después de responder o votar para volver a pedir lo que cambió.
-  const [version, setVersion] = useState(0);
 
-  useEffect(() => {
-    let vigente = true;
-    Promise.all([
-      asambleasService.listar({ consorcioId: consorcio.id }),
-      votacionesService.listar({ consorcioId: consorcio.id }),
-    ])
-      .then(([listaAsambleas, listaVotaciones]) => {
-        if (!vigente) return;
-        setError(null);
-        setAsambleas(listaAsambleas);
-        setVotaciones(listaVotaciones);
-        // El detalle trae lo personal (mi respuesta, mi voto): se pide por tarjeta y llega después.
-        for (const a of listaAsambleas) {
-          asambleasService
-            .obtener(a.id)
-            .then((d) => vigente && setDetallesAsamblea((prev) => ({ ...prev, [a.id]: d })))
-            .catch(() => undefined); // Sin detalle la tarjeta se ve igual, sin los botones.
-        }
-        for (const v of listaVotaciones) {
-          votacionesService
-            .obtener(v.id)
-            .then((d) => vigente && setDetallesVotacion((prev) => ({ ...prev, [v.id]: d })))
-            .catch(() => undefined);
-        }
-      })
-      .catch((err) => {
-        if (vigente) setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las asambleas.');
-      });
-    return () => {
-      vigente = false;
+  const listas = usePedido(
+    `asambleas-vecino:${consorcio.id}`,
+    () =>
+      Promise.all([
+        asambleasService.listar({ consorcioId: consorcio.id }),
+        votacionesService.listar({ consorcioId: consorcio.id }),
+      ]),
+    'No se pudieron cargar las asambleas.',
+  );
+  const [asambleas, votaciones] = listas.datos ?? [null, null];
+  const error = listas.error ?? null;
+
+  // El detalle trae lo personal (mi respuesta, mi voto): se pide aparte, una
+  // vez que están las listas. Si uno falla, esa tarjeta se ve sin los botones.
+  const ids = asambleas && votaciones ? [...asambleas, ...votaciones].map((x) => x.id).join(',') : null;
+  const detalles = usePedido(ids === null ? null : `detalles:${ids}`, async () => {
+    const [deAsambleas, deVotaciones] = await Promise.all([
+      Promise.allSettled((asambleas ?? []).map((a) => asambleasService.obtener(a.id))),
+      Promise.allSettled((votaciones ?? []).map((v) => votacionesService.obtener(v.id))),
+    ]);
+    return {
+      asambleas: porId(deAsambleas),
+      votaciones: porId(deVotaciones),
     };
-  }, [consorcio.id, version]);
+  });
+  const deDetalles = detalles.datos ?? detalles.ultimo;
+  const detallesAsamblea = deDetalles?.asambleas ?? {};
+  const detallesVotacion = deDetalles?.votaciones ?? {};
+
+  /** Después de responder o votar: lo personal cambió, las listas no. */
+  const recargar = detalles.recargar;
 
   async function responder(asamblea: Asamblea, estado: 'ASISTE' | 'NO_ASISTE') {
     try {
       await asambleasService.confirmarAsistencia(asamblea.id, { estado, unidadId: unidad.id });
       toast.success(estado === 'ASISTE' ? 'Asistencia confirmada' : 'Avisaste que no podés ir');
-      setVersion((v) => v + 1);
+      recargar();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'No se pudo registrar tu respuesta.');
     }
@@ -87,7 +87,7 @@ function AsambleasYVotaciones() {
     await votacionesService.votar(votacion.id, opcionId, unidadId);
     toast.success('Voto registrado');
     setVotando(null);
-    setVersion((v) => v + 1);
+    recargar();
   }
 
   const proximas = (asambleas ?? []).filter((a) => !CERRADAS.includes(a.estado));
