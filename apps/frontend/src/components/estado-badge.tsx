@@ -78,6 +78,16 @@ const ESTADOS = {
     ACTIVA: { etiqueta: 'Publicada', variante: 'success' },
     INACTIVA: { etiqueta: 'Dada de baja', variante: 'secondary' },
   },
+  /** Una unidad funcional: `activa` del backend, como estado. */
+  unidad: {
+    ACTIVA: { etiqueta: 'Activa', variante: 'success' },
+    INACTIVA: { etiqueta: 'Dada de baja', variante: 'secondary' },
+  },
+  /** Una cuenta de usuario: `activo` del backend, como estado. */
+  cuenta: {
+    ACTIVA: { etiqueta: 'Activa', variante: 'success' },
+    INACTIVA: { etiqueta: 'Suspendida', variante: 'destructive' },
+  },
   /** El estado de cobranza de un consorcio en el panel general (GET /panel). */
   cobranza: {
     AL_DIA: { etiqueta: 'Al día', variante: 'success' },
