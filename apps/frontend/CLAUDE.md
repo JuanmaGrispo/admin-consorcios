@@ -139,6 +139,7 @@ src/
 │   ├── page-header.tsx   PageHeader
 │   ├── estado-badge.tsx  EstadoBadge
 │   ├── empty-state.tsx   EmptyState
+│   ├── paginacion.tsx    Paginacion: el pie de tabla "Mostrando X de N" con páginas numeradas
 │   ├── en-construccion.tsx  placeholder de las rutas pendientes
 │   └── <modulo>/         componentes exclusivos de cada módulo
 ├── services/             UNA función por endpoint, usan lib/api.ts
@@ -168,6 +169,41 @@ src/
   enviar. Sin librería de forms por ahora.
 - `'use client'` solo donde hay estado o efectos. Los layouts son server
   components.
+
+### Patrón de un módulo: tabla, formulario y servicio
+
+Novedades es la referencia. Copiá su forma al armar un módulo nuevo:
+
+| Pieza | Archivo de referencia | Qué hace | En el prototipo |
+|---|---|---|---|
+| Contrato | `types/novedad.ts` | Lo que devuelve el backend, más `…Input` (alta) y `…Cambios` (PATCH) | — |
+| Service | `services/novedades.ts` | Un objeto `<modulo>Service`, una función por endpoint | — |
+| Tabla | `components/novedades/tabla-novedades.tsx` | `Table` con encabezado gris en mayúsculas; acciones frecuentes como íconos con `Tooltip` y el resto en "más acciones"; lo destructivo con `AlertDialog`; su `…Esqueleto` | Grilla de cobranzas (02) |
+| Formulario | `components/novedades/novedad-dialog.tsx` | Alta y edición en un `Dialog`: título y edificio arriba, switches en caja gris, pie gris con el aviso de qué pasa al guardar | Nueva votación (08) |
+| Página admin | `app/admin/novedades/page.tsx` | Header con resumen en números; una `Card` con filtro segmentado (`ToggleGroup` con cantidades), la tabla y `Paginacion` al pie | Cobranzas (02) |
+| Página vecino | `app/vecino/novedades/page.tsx` | Lectura en cards, "Ver anteriores" en vez de páginas | Novedades (16) |
+
+Antes de armar una pantalla, buscá la suya en `docs/diseno-front.html`
+(abrilo en el navegador: es un bundle que se arma solo). Si el módulo no tiene
+pantalla propia para algún portal —Novedades del admin figura como "Pronto"—,
+se toma el lenguaje de la pantalla más parecida, como arriba.
+
+Reglas del patrón:
+
+- **La página se remonta al cambiar de consorcio o unidad**:
+  `<Muro key={consorcio.id} … />`. Así el estado (página, filtros, lista)
+  arranca de cero sin `setState` dentro de un efecto, que el lint no deja.
+- **Carga en un efecto con bandera `vigente`**: si cambian los filtros antes
+  de que llegue la respuesta, la vieja se descarta. Para recargar después de
+  un cambio, un contador `version` en las dependencias.
+- **Estados de la lista**: `Alert` si falló, `…Esqueleto` mientras carga,
+  `EmptyState` (con la acción de alta) si el módulo todavía no tiene nada, y
+  un texto dentro de la card si sólo el filtro dejó la lista vacía.
+- **Formulario**: si `onGuardar` tira, el error queda en el diálogo y el
+  usuario no pierde lo escrito. La página cierra el diálogo, avisa con
+  `toast.success` y sube `version`.
+- **Acciones rápidas** (fijar, dar de baja): `toast.success` / `toast.error`,
+  sin `Alert`.
 
 ## 6. Antes de dar por terminado un cambio de UI
 
