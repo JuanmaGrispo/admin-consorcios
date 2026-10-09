@@ -721,7 +721,8 @@ una columna del consorcio y la secuencia se vuelve una por punto de venta.
 
 En `apps/backend/.env`, con credenciales **de prueba**: `MP_ACCESS_TOKEN`,
 `MP_WEBHOOK_SECRET`, `MP_NOTIFICATION_URL`, `FRONTEND_URL` y `MP_RETURN_PATH`
-(ver `.env.example`). El vecino vuelve a `FRONTEND_URL + MP_RETURN_PATH` con
+(ver `.env.example`; por defecto `/vecino/expensas/pago`). El vecino vuelve a
+`FRONTEND_URL + MP_RETURN_PATH` con
 `?pago=aprobado|pendiente|rechazado`, y Mercado Pago agrega
 `external_reference`, que es el id de nuestro pago. Con ese id el front llama a
 `POST /pagos/:id/sincronizar` para mostrar el resultado: así no depende de que
@@ -1335,10 +1336,42 @@ no importa quién procese cada mensaje.
 pnpm back db:seed-demo
 ```
 
-Crea un consorcio (Av. Rivadavia 4820) con 3 unidades, sus vecinos, 3
-proveedores y 3 reclamos en distintos estados. Es idempotente: se puede correr
-las veces que haga falta. **Escribe en la base compartida**, así que conviene
-avisar al grupo.
+Crea o completa el consorcio Av. Rivadavia 4820 con 48 departamentos (12 pisos
+de A a D), sus vecinos, 3 proveedores y 3 reclamos. Incluye una liquidación
+emitida de septiembre de 2026, boletas pagadas, parciales y vencidas, SUM y
+parrilla con reservas, una asamblea convocada con votación anticipada y
+novedades. Los coeficientes suman 100%; conserva los de las unidades existentes.
+
+Por defecto **simula la carga y revierte la transacción**. Para guardar los datos
+en la **base compartida**, avisar al grupo y ejecutar:
+
+```bash
+pnpm back db:seed-demo --aplicar
+```
+
+Es idempotente: conserva las filas existentes y no publica eventos ni envía correos.
+Si encuentra unidades ajenas al demo, otro administrador o una liquidación
+ajena al seed en ese período, aborta y revierte toda la carga.
+
+Para agregar un consorcio independiente por integrante, pasar `--personas`
+con un archivo JSON local (la clave debe ser única, de 1 a 7 letras minúsculas,
+números o guiones; el email de demo debe ser único y terminar en `@domus.test`):
+
+```json
+[{ "clave": "nacho", "nombre": "Ignacio", "apellido": "Alcaraz", "email": "admin.nacho@domus.test" }]
+```
+
+```bash
+pnpm back db:seed-demo --personas ./personas.local.json
+pnpm back db:seed-demo --personas ./personas.local.json --aplicar
+pnpm back db:seed-demo --personas ./personas.local.json --verificar
+```
+
+Cada persona recibe el consorcio `Demo <clave>` y 48 vecinos con email
+`vecino+<clave>-<numero>@domus.test` (numerados por piso de 1º A a 12º D).
+El edificio original y sus cuentas se mantienen para las pruebas comunes.
+`--verificar` repite la carga en la misma transacción y comprueba que no se
+dupliquen filas; sin `--aplicar` también revierte toda la prueba.
 
 | Usuario             | Rol           | Unidad |
 |---------------------|---------------|--------|

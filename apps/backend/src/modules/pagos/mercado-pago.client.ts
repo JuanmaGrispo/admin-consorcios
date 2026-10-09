@@ -67,7 +67,7 @@ export class MercadoPagoClient {
     referencia: string;
   }): Promise<PreferenciaCreada> {
     const frontend = this.config.get<string>('FRONTEND_URL', 'http://localhost:3000');
-    const vuelta = `${frontend}${this.config.get<string>('MP_RETURN_PATH', '/expensas/pago')}`;
+    const vuelta = `${frontend}${this.config.get<string>('MP_RETURN_PATH', '/vecino/expensas/pago')}`;
     const respuesta = await this.llamar<{ id: string; init_point: string }>(
       'POST',
       '/checkout/preferences',

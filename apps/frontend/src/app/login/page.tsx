@@ -14,6 +14,7 @@ import {
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { ApiError } from '@/lib/api';
+import { inicioDe } from '@/lib/roles';
 import { authService } from '@/services/auth';
 
 export default function LoginPage() {
@@ -28,9 +29,9 @@ export default function LoginPage() {
     setError(null);
     setEnviando(true);
     try {
-      await authService.login(email, password);
-      // refresh() para que el proxy vea la cookie nueva y deje pasar.
-      router.replace('/');
+      const { usuario } = await authService.login(email, password);
+      // Cada rol a su portal. refresh() para que el proxy vea la cookie nueva.
+      router.replace(inicioDe(usuario.rol));
       router.refresh();
     } catch (err) {
       setError(
@@ -53,7 +54,7 @@ export default function LoginPage() {
         <Card>
           <CardHeader>
             <CardTitle>Iniciar sesión</CardTitle>
-            <CardDescription>Panel de administración de la plataforma</CardDescription>
+            <CardDescription>Entrá con tu cuenta de Domus</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={onSubmit}>

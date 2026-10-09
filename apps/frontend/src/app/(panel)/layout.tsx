@@ -7,7 +7,7 @@ export default function PanelLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <SesionProvider>
+    <SesionProvider roles={['SUPER_ADMIN']}>
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
