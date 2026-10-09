@@ -84,6 +84,17 @@ export class CreateAmenityDto {
   @Max(720)
   cancelacionMinimaHoras?: number;
 
+  @ApiPropertyOptional({
+    example: 240,
+    description:
+      'Turnos fijos desde la apertura, en minutos ("franjas de 4 horas"). Sin esto (o null), el horario es libre.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(15)
+  @Max(1440)
+  duracionFranjaMinutos?: number | null;
+
   @ApiPropertyOptional({ example: 6, description: 'Sin tope si no se indica' })
   @IsOptional()
   @IsInt()

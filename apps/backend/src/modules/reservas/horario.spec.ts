@@ -3,8 +3,10 @@ import { describe, it } from 'node:test';
 import {
   cancelableHasta,
   cierraAlDiaSiguiente,
+  estadoDeLasFranjas,
   estadoDelDia,
   franjaEnMinutos,
+  franjasDeLaVentana,
   largoDeVentana,
   validarFranja,
 } from './horario';
@@ -123,5 +125,68 @@ describe('cancelableHasta', () => {
 
   it('sin límite, hasta que empieza', () => {
     assert.equal(cancelableHasta(inicio, 0).getTime(), inicio.getTime());
+  });
+});
+
+describe('franjas fijas', () => {
+  const SUM_POR_FRANJAS = { ...SUM, duracionMaximaHoras: 8, duracionFranjaMinutos: 240 };
+
+  it('lista las franjas enteras de la ventana, cruzando la medianoche', () => {
+    assert.deepEqual(
+      franjasDeLaVentana('10:00', '02:00', 240).map((f) => `${f.horaInicio}-${f.horaFin}`),
+      ['10:00-14:00', '14:00-18:00', '18:00-22:00', '22:00-02:00'],
+    );
+  });
+
+  it('un resto que no llega a una franja no se ofrece', () => {
+    assert.deepEqual(
+      franjasDeLaVentana('10:00', '21:00', 240).map((f) => f.horaInicio),
+      ['10:00', '14:00'],
+    );
+  });
+
+  it('acepta una franja o varias seguidas', () => {
+    assert.equal(validarFranja('14:00', '18:00', SUM_POR_FRANJAS), null);
+    assert.equal(validarFranja('18:00', '02:00', SUM_POR_FRANJAS), null);
+  });
+
+  it('rechaza lo que no arranca en el borde o no ocupa franjas enteras', () => {
+    assert.equal(validarFranja('12:00', '16:00', SUM_POR_FRANJAS), 'FUERA_DE_FRANJA');
+    assert.equal(validarFranja('14:00', '16:00', SUM_POR_FRANJAS), 'FUERA_DE_FRANJA');
+  });
+
+  it('sin franjas, el horario es libre', () => {
+    assert.equal(validarFranja('12:30', '13:15', PARRILLA), null);
+  });
+});
+
+describe('estadoDeLasFranjas', () => {
+  const apertura = new Date('2026-09-13T13:00:00Z'); // 10:00 en Buenos Aires
+  const franjas = franjasDeLaVentana('10:00', '22:00', 240);
+  const h = (hora: string) => new Date(`2026-09-13T${hora}:00-03:00`);
+  const ctx = { reservas: [], bloqueos: [], lugares: 1, ahora: h('08:00') };
+
+  it('libre, ocupada y bloqueada', () => {
+    const estados = estadoDeLasFranjas(franjas, apertura, 240, {
+      ...ctx,
+      reservas: [{ inicio: h('10:00'), fin: h('14:00'), lugar: 1 }],
+      bloqueos: [{ desde: h('19:00'), hasta: h('20:00') }],
+    });
+    assert.deepEqual(estados.map((e) => e.estado), ['OCUPADA', 'LIBRE', 'BLOQUEADA']);
+  });
+
+  it('con dos lugares, una reserva deja la franja libre con un lugar', () => {
+    const [primera] = estadoDeLasFranjas(franjas, apertura, 240, {
+      ...ctx,
+      lugares: 2,
+      reservas: [{ inicio: h('10:00'), fin: h('14:00'), lugar: 1 }],
+    });
+    assert.equal(primera.estado, 'LIBRE');
+    assert.equal(primera.lugaresLibres, 1);
+  });
+
+  it('lo que ya empezó es pasado', () => {
+    const estados = estadoDeLasFranjas(franjas, apertura, 240, { ...ctx, ahora: h('15:00') });
+    assert.deepEqual(estados.map((e) => e.estado), ['PASADA', 'PASADA', 'LIBRE']);
   });
 });

@@ -783,6 +783,17 @@ liberan. Una solicitud sin resolver reserva el lugar a propósito: si no, dos
 vecinos podrían pedir el mismo sábado y habría que rechazar a uno después de
 haberle dicho "esperá".
 
+### Franjas fijas
+
+Con `duracionFranjaMinutos` (por ejemplo 240, "franjas de 4 horas") el amenity
+se reserva por turnos que arrancan en la apertura: de 10:00 a 02:00 son
+10–14, 14–18, 18–22 y 22–02. Una reserva tiene que empezar en el borde de una
+franja y ocupar franjas enteras (una o varias seguidas, hasta la duración
+máxima); si no, 400. Un resto de la ventana que no llega a una franja no se
+ofrece. `GET /amenities/:id/disponibilidad` devuelve `franjas` con cada una
+resuelta: `LIBRE`, `OCUPADA`, `BLOQUEADA` o `PASADA`, y `lugaresLibres`. Sin
+franjas, `franjas` es null y el horario es libre.
+
 ### Cómo se recibe la franja
 
 La API toma `fecha` + `horaInicio` + `horaFin`, no instantes:

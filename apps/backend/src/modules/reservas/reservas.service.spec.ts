@@ -170,3 +170,21 @@ describe('ReservasService — cancelación', () => {
     assert.equal((await service.cancelar(vecino, a.id)).estado, EstadoReserva.CANCELADA);
   });
 });
+
+describe('ReservasService — franjas', () => {
+  it('con turnos fijos sólo acepta franjas enteras', async () => {
+    const { service } = crearEntorno({ horaCierre: '02:00:00', duracionFranjaMinutos: 240 });
+    const reservar = (horaInicio: string, horaFin: string) =>
+      service.crear(vecino, { amenityId: 'am1', fecha: '2026-09-13', horaInicio, horaFin });
+    await assert.rejects(reservar('12:00', '16:00'), BadRequestException);
+    assert.ok(await reservar('22:00', '02:00'));
+  });
+
+  it('no deja configurar una franja que no entra en la ventana', async () => {
+    const { service } = crearEntorno();
+    await assert.rejects(
+      service.actualizarAmenity(admin, 'am1', { duracionFranjaMinutos: 13 * 60 }),
+      BadRequestException,
+    );
+  });
+});
