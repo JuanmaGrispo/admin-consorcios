@@ -28,7 +28,12 @@ import { ListarReservasQuery } from './dto/listar-reservas.query';
 import { RechazarReservaDto } from './dto/rechazar-reserva.dto';
 import { UpdateAmenityDto } from './dto/update-amenity.dto';
 import {
+  cancelableHasta,
   cierraAlDiaSiguiente,
+  elegirLugar,
+  tramosLlenos,
+  estadoDeLasFranjas,
+  franjasDeLaVentana,
   estadoDelDia,
   largoDeVentana,
   ProblemaFranja,
@@ -51,7 +56,12 @@ export interface SenaDeReserva {
   devueltaAt: Date | null;
 }
 
-export type ReservaConSena = Reserva & { sena: SenaDeReserva | null };
+/** La reserva como la ve el portal: con su seña y hasta cuándo se puede cancelar. */
+export type ReservaVista = Reserva & {
+  sena: SenaDeReserva | null;
+  /** Hasta cuándo la puede cancelar el vecino; null si ya no se cancela. */
+  cancelableHasta: Date | null;
+};
 
 /** Un mes y algo: el calendario del vecino nunca pide más. */
 const DIAS_MAXIMOS_CALENDARIO = 62;
@@ -98,7 +108,12 @@ export class ReservasService {
     await this.consorcios.findOne(dto.consorcioId);
     const horaApertura = dto.horaApertura ?? '08:00:00';
     const horaCierre = dto.horaCierre ?? '22:00:00';
-    this.exigirVentanaCoherente(horaApertura, horaCierre, dto.duracionMaximaHoras ?? null);
+    this.exigirVentanaCoherente(
+      horaApertura,
+      horaCierre,
+      dto.duracionMaximaHoras ?? null,
+      dto.duracionFranjaMinutos ?? null,
+    );
     await this.exigirNombreLibre(dto.consorcioId, dto.nombre);
 
     return this.reservas.crearAmenity({ ...dto, horaApertura, horaCierre });
@@ -115,6 +130,7 @@ export class ReservasService {
       dto.horaApertura ?? amenity.horaApertura,
       dto.horaCierre ?? amenity.horaCierre,
       dto.duracionMaximaHoras ?? amenity.duracionMaximaHoras,
+      dto.duracionFranjaMinutos !== undefined ? dto.duracionFranjaMinutos : amenity.duracionFranjaMinutos,
     );
     if (dto.nombre && dto.nombre.toLowerCase() !== amenity.nombre.toLowerCase()) {
       await this.exigirNombreLibre(amenity.consorcioId, dto.nombre);
@@ -131,23 +147,14 @@ export class ReservasService {
     await this.reservas.cerrarVencidas();
     const amenity = await this.findAmenity(usuario, id);
     const cruza = cierraAlDiaSiguiente(amenity.horaApertura, amenity.horaCierre);
-    const { inicio, fin: finDelDia } = await this.reservas.instantes(
-      query.fecha,
-      '00:00',
-      '24:00',
-      ZONA_POR_DEFECTO,
-    );
+    const [{ inicio, fin: finDelDia }, ventana] = await Promise.all([
+      this.reservas.instantes(query.fecha, '00:00', '24:00', ZONA_POR_DEFECTO),
+      this.reservas.instantes(query.fecha, amenity.horaApertura, amenity.horaCierre, ZONA_POR_DEFECTO),
+    ]);
     // Si la ventana del día termina en la madrugada siguiente, lo ocupado
     // también se mira hasta ahí: si no, el calendario mostraría libre la
     // noche de una reserva de 20:00 a 02:00.
-    const fin = cruza
-      ? (await this.reservas.instantes(
-          query.fecha,
-          amenity.horaApertura,
-          amenity.horaCierre,
-          ZONA_POR_DEFECTO,
-        )).fin
-      : finDelDia;
+    const fin = cruza ? ventana.fin : finDelDia;
 
     const [reservas, bloqueos] = await Promise.all([
       this.reservas.reservasEnRango(id, inicio, fin),
@@ -160,13 +167,25 @@ export class ReservasService {
       horaCierre: amenity.horaCierre,
       cierraAlDiaSiguiente: cruza,
       duracionMaximaHoras: amenity.duracionMaximaHoras,
+      duracionFranjaMinutos: amenity.duracionFranjaMinutos,
       anticipacionMinimaHoras: amenity.anticipacionMinimaHoras,
       requiereAprobacion: amenity.requiereAprobacion,
+      lugares: amenity.lugares,
+      // Con turnos fijos, cada franja ya resuelta: es lo que pinta la pantalla.
+      franjas: amenity.duracionFranjaMinutos
+        ? estadoDeLasFranjas(
+            franjasDeLaVentana(amenity.horaApertura, amenity.horaCierre, amenity.duracionFranjaMinutos),
+            ventana.inicio,
+            amenity.duracionFranjaMinutos,
+            { reservas, bloqueos, lugares: amenity.lugares, ahora: ventana.ahora },
+          )
+        : null,
       ocupado: reservas.map((r) => ({
         reservaId: r.id,
         inicio: r.inicio,
         fin: r.fin,
         estado: r.estado,
+        lugar: r.lugar,
       })),
       bloqueos: bloqueos.map((b) => ({ desde: b.desde, hasta: b.hasta, motivo: b.motivo })),
     };
@@ -201,17 +220,20 @@ export class ReservasService {
       this.reservas.reservasEnRango(id, inicio, fin),
       this.reservas.bloqueosEnRango(id, inicio, fin),
     ]);
-    const ocupado = [
-      ...reservas.map((r) => ({ inicio: r.inicio, fin: r.fin })),
-      ...bloqueos.map((b) => ({ inicio: b.desde, fin: b.hasta })),
-    ];
+    const bloqueado = bloqueos.map((b) => ({ inicio: b.desde, fin: b.hasta }));
+    const ocupado = [...reservas.map((r) => ({ inicio: r.inicio, fin: r.fin })), ...bloqueado];
+    // Sin lugar es donde se juntan tantas reservas como lugares, o un bloqueo.
+    const lleno = [...tramosLlenos(reservas, amenity.lugares), ...bloqueado];
 
     return {
       amenityId: amenity.id,
       horaApertura: amenity.horaApertura,
       horaCierre: amenity.horaCierre,
       cierraAlDiaSiguiente: cierraAlDiaSiguiente(amenity.horaApertura, amenity.horaCierre),
-      dias: ventanas.map((v) => ({ fecha: v.fecha, estado: estadoDelDia(v, ocupado, ahora) })),
+      dias: ventanas.map((v) => ({
+        fecha: v.fecha,
+        estado: estadoDelDia(this.reservable(v, amenity), ocupado, ahora, lleno),
+      })),
     };
   }
 
@@ -314,17 +336,17 @@ export class ReservasService {
     const { items, total } = await this.reservas.listar(query, await this.alcance(usuario));
     const limite = query.limite ?? 20;
     return {
-      items: await this.conSena(items),
+      items: await this.paraMostrar(items),
       total,
       pagina: query.pagina ?? 1,
       paginas: Math.ceil(total / limite) || 1,
     };
   }
 
-  async findOne(usuario: UsuarioActual, id: string): Promise<ReservaConSena> {
+  async findOne(usuario: UsuarioActual, id: string): Promise<ReservaVista> {
     await this.reservas.cerrarVencidas();
-    const [conSena] = await this.conSena([await this.buscarConPermiso(usuario, id)]);
-    return conSena;
+    const [vista] = await this.paraMostrar([await this.buscarConPermiso(usuario, id)]);
+    return vista;
   }
 
   // ── Seña ───────────────────────────────────────────────────────────────────
@@ -357,7 +379,7 @@ export class ReservasService {
   }
 
   /** El administrador registra que devolvió la seña, una vez que la reserva terminó. */
-  async marcarSenaDevuelta(usuario: UsuarioActual, id: string): Promise<ReservaConSena> {
+  async marcarSenaDevuelta(usuario: UsuarioActual, id: string): Promise<ReservaVista> {
     await this.reservas.cerrarVencidas();
     const reserva = await this.buscarConPermiso(usuario, id);
     if (!SENA_DEVOLVIBLE.includes(reserva.estado)) {
@@ -378,7 +400,7 @@ export class ReservasService {
     return this.findOne(usuario, id);
   }
 
-  private async conSena(reservas: Reserva[]): Promise<ReservaConSena[]> {
+  private async paraMostrar(reservas: Reserva[]): Promise<ReservaVista[]> {
     const senas = await this.reservas.senasDe(reservas.map((r) => r.id));
     return reservas.map((r) => {
       const monto = r.amenity?.montoSena ?? 0;
@@ -394,11 +416,14 @@ export class ReservasService {
                 devueltaAt: r.senaDevueltaAt,
               }
             : null,
+        cancelableHasta: CANCELABLES.includes(r.estado)
+          ? cancelableHasta(r.inicio, r.amenity?.cancelacionMinimaHoras ?? 0)
+          : null,
       };
     });
   }
 
-  async crear(usuario: UsuarioActual, dto: CrearReservaDto): Promise<Reserva> {
+  async crear(usuario: UsuarioActual, dto: CrearReservaDto): Promise<ReservaVista> {
     await this.reservas.cerrarVencidas();
 
     const amenity = await this.exigirAmenity(usuario, dto.amenityId);
@@ -452,12 +477,21 @@ export class ReservasService {
         resueltaAt: amenity.requiereAprobacion ? null : ahora,
       },
       async (m) => {
-        if (await this.reservas.haySolapamiento(amenity.id, inicio, fin, null, m)) {
-          throw new ConflictException('Ese horario ya está reservado');
-        }
         if (await this.reservas.hayBloqueo(amenity.id, inicio, fin, m)) {
           throw new ConflictException('El amenity está bloqueado por mantenimiento en ese horario');
         }
+        // Con el amenity bloqueado, el primer lugar que nadie ocupa en todo
+        // el horario. Con un solo lugar es el chequeo de solapamiento de siempre.
+        const lugar = elegirLugar(
+          await this.reservas.lugaresTomados(amenity.id, inicio, fin, m),
+          amenity.lugares,
+        );
+        if (lugar === null) {
+          throw new ConflictException(
+            amenity.lugares > 1 ? 'No quedan lugares en ese horario' : 'Ese horario ya está reservado',
+          );
+        }
+        return { lugar };
       },
     );
 
@@ -478,7 +512,8 @@ export class ReservasService {
       );
     }
 
-    return reserva;
+    const [vista] = await this.paraMostrar([reserva]);
+    return vista;
   }
 
   async aprobar(usuario: UsuarioActual, id: string): Promise<Reserva> {
@@ -486,13 +521,15 @@ export class ReservasService {
     const reserva = await this.exigirPendiente(usuario, id);
 
     // Entre el pedido y la aprobación pudo entrar un bloqueo o aprobarse otra
-    // reserva, así que el calendario se vuelve a mirar.
+    // reserva, así que el calendario se vuelve a mirar en su lugar.
     if (
       await this.reservas.haySolapamiento(
         reserva.amenityId,
         reserva.inicio,
         reserva.fin,
         reserva.id,
+        undefined,
+        reserva.lugar,
       )
     ) {
       throw new ConflictException('Ese horario ya está reservado');
@@ -550,8 +587,17 @@ export class ReservasService {
       throw new BadRequestException(`La reserva está ${reserva.estado} y no se puede cancelar`);
     }
     // Cancelar algo que ya empezó no es cancelar, es reescribir la historia.
-    if (reserva.inicio <= (await this.reservas.ahora())) {
+    const ahora = await this.reservas.ahora();
+    if (reserva.inicio <= ahora) {
       throw new BadRequestException('La reserva ya empezó: no se puede cancelar');
+    }
+    // El límite es para el vecino: la administración puede cancelar hasta el
+    // final (un caño roto en el SUM no avisa con 24 h).
+    const horas = reserva.amenity.cancelacionMinimaHoras;
+    if (!esGestor(usuario) && ahora > cancelableHasta(reserva.inicio, horas)) {
+      throw new BadRequestException(
+        `${reserva.amenity.nombre} se cancela hasta ${horas} horas antes. Pedíselo a la administración.`,
+      );
     }
 
     const cancelada = await this.reservas.actualizarReserva(reserva, {
@@ -601,15 +647,34 @@ export class ReservasService {
     horaApertura: string,
     horaCierre: string,
     duracionMaximaHoras: number | null,
+    duracionFranjaMinutos: number | null,
   ): void {
-    if (
-      duracionMaximaHoras !== null &&
-      duracionMaximaHoras * 60 > largoDeVentana(horaApertura, horaCierre)
-    ) {
+    const largo = largoDeVentana(horaApertura, horaCierre);
+    if (duracionFranjaMinutos !== null) {
+      if (duracionFranjaMinutos > largo) {
+        throw new BadRequestException('La franja no puede ser más larga que la ventana horaria');
+      }
+      if (duracionMaximaHoras !== null && duracionFranjaMinutos > duracionMaximaHoras * 60) {
+        throw new BadRequestException('Con esa duración máxima no se podría reservar ni una franja');
+      }
+    }
+    if (duracionMaximaHoras !== null && duracionMaximaHoras * 60 > largo) {
       throw new BadRequestException(
         'La duración máxima no puede ser mayor que la ventana horaria del amenity',
       );
     }
+  }
+
+  /**
+   * La parte de la ventana que de verdad se puede reservar: con franjas, hasta
+   * el final de la última franja entera. Si no, un resto que no llega a una
+   * franja haría que el día nunca figure sin lugar.
+   */
+  private reservable(ventana: { inicio: Date; fin: Date }, amenity: Amenity) {
+    const franja = amenity.duracionFranjaMinutos;
+    if (!franja) return ventana;
+    const cantidad = franjasDeLaVentana(amenity.horaApertura, amenity.horaCierre, franja).length;
+    return { inicio: ventana.inicio, fin: new Date(ventana.inicio.getTime() + cantidad * franja * 60_000) };
   }
 
   /** Dos "SUM" en el mismo edificio hacen que el vecino reserve el equivocado. */
@@ -697,6 +762,7 @@ export class ReservasService {
         cierraAlDiaSiguiente(amenity.horaApertura, amenity.horaCierre) ? ' del día siguiente' : ''
       }`,
       DEMASIADO_LARGA: `${amenity.nombre} se reserva por hasta ${amenity.duracionMaximaHoras} horas`,
+      FUERA_DE_FRANJA: `${amenity.nombre} se reserva por franjas de ${amenity.duracionFranjaMinutos} minutos desde las ${amenity.horaApertura.slice(0, 5)}`,
     };
     return mensajes[problema];
   }

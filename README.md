@@ -735,8 +735,9 @@ preferencia responde 503 y el resto de la app anda igual.
 
 El vecino reserva el SUM desde su portal y el administrador gestiona esas
 reservas. Las reglas no están en el código: las declara cada amenity en sus
-columnas (horario, anticipación, duración, si requiere aprobación, si bloquea
-al que debe expensas).
+columnas (horario, anticipación, duración, franjas, cancelación, lugares, si
+requiere aprobación, si bloquea al que debe expensas). `reglamento` es el texto
+libre que el vecino lee antes de confirmar ("Música hasta las 01:00").
 
 ### Endpoints
 
@@ -782,6 +783,17 @@ liberan. Una solicitud sin resolver reserva el lugar a propósito: si no, dos
 vecinos podrían pedir el mismo sábado y habría que rechazar a uno después de
 haberle dicho "esperá".
 
+### Franjas fijas
+
+Con `duracionFranjaMinutos` (por ejemplo 240, "franjas de 4 horas") el amenity
+se reserva por turnos que arrancan en la apertura: de 10:00 a 02:00 son
+10–14, 14–18, 18–22 y 22–02. Una reserva tiene que empezar en el borde de una
+franja y ocupar franjas enteras (una o varias seguidas, hasta la duración
+máxima); si no, 400. Un resto de la ventana que no llega a una franja no se
+ofrece. `GET /amenities/:id/disponibilidad` devuelve `franjas` con cada una
+resuelta: `LIBRE`, `OCUPADA`, `BLOQUEADA` o `PASADA`, y `lugaresLibres`. Sin
+franjas, `franjas` es null y el horario es libre.
+
 ### Cómo se recibe la franja
 
 La API toma `fecha` + `horaInicio` + `horaFin`, no instantes:
@@ -823,10 +835,19 @@ de `consorcio` y sólo cambia quien la llama.
   infiere. Una reserva ajena devuelve 404, no 403: un 403 confirmaría que existe.
 - **No se solapa** con otra reserva que ocupe el amenity. Los intervalos son
   semiabiertos `[inicio, fin)`, así que de 10 a 12 y de 12 a 14 conviven.
+- **Lugares.** Con `lugares` > 1 (la cochera de visitas tiene 2) entran tantas
+  reservas simultáneas como lugares. Cada reserva ocupa un `lugar` concreto: el
+  alta toma el primero que nadie usa en todo el horario, con el amenity
+  bloqueado, y responde 409 "No quedan lugares" si no hay. El calendario marca
+  `SIN_LUGAR` sólo donde se juntan tantas reservas como lugares, y cada franja
+  informa `lugaresLibres`. Bajar `lugares` no toca las reservas que ya están.
 - **Aprobar revalida el calendario**: entre el pedido y la aprobación pudo
   entrar un bloqueo o aprobarse otra reserva.
 - **Cancelar sólo antes de que empiece.** Cancelar algo que ya pasó no es
-  cancelar, es reescribir la historia.
+  cancelar, es reescribir la historia. Además, con `cancelacionMinimaHoras` el
+  vecino cancela hasta esas horas antes ("Cancelable hasta 24 h antes"); la
+  administración puede hasta el inicio. Cada reserva trae `cancelableHasta`
+  (null si ya no se puede cancelar).
 - **Con `bloquea_con_deuda`**, una unidad con boletas `VENCIDA` no puede
   reservar. Reservas no toca las tablas de expensas: le pregunta a
   `ExpensasService.tieneDeudaVencida`.
@@ -870,8 +891,9 @@ Tres reglas no las decide el código, las garantiza Postgres (y el generador de
 entities no las muestra, porque sólo lee PK, FK y UNIQUE):
 
 - `ex_reserva_solapada`: un `EXCLUDE USING gist` sobre
-  `(amenity_id, tstzrange(inicio, fin))` con
-  `WHERE estado IN ('PENDIENTE','APROBADA')`. Es la lista de estados que ocupan
+  `(amenity_id, lugar, tstzrange(inicio, fin))` con
+  `WHERE estado IN ('PENDIENTE','APROBADA')`: dos reservas no se pisan dentro
+  del mismo lugar (migración `ReglasDeAmenities`). Es la lista de estados que ocupan
   el calendario, y `ESTADOS_QUE_OCUPAN` en el repositorio la espeja: si se
   separaran, el código y la base dirían cosas distintas. El rango es `[)`, igual
   que el chequeo del service.

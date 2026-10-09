@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import type { Notificador } from '../../core/notificaciones/notificador';
@@ -86,5 +86,136 @@ describe('ReservasService — alcance', () => {
 
   it('al vecino, una reserva de otra unidad le da 404', async () => {
     await assert.rejects(service.findOne(vecino, 'rs1'), NotFoundException);
+  });
+});
+
+/**
+ * Un calendario en memoria para las reglas del amenity: guarda reservas y
+ * resuelve los chequeos que en la base hacen el lock y el EXCLUDE.
+ */
+function crearEntorno(amenityExtra: Partial<Amenity> = {}, ahora = new Date('2026-09-10T12:00:00Z')) {
+  const amenity = {
+    id: 'am1',
+    consorcioId: 'c1',
+    nombre: 'SUM',
+    activo: true,
+    horaApertura: '10:00:00',
+    horaCierre: '22:00:00',
+    anticipacionMinimaHoras: 0,
+    duracionMaximaHoras: null,
+    duracionFranjaMinutos: null,
+    cancelacionMinimaHoras: 0,
+    lugares: 1,
+    requiereAprobacion: false,
+    bloqueaConDeuda: false,
+    montoSena: 0,
+    ...amenityExtra,
+  } as Amenity;
+  const reservas: Reserva[] = [];
+  const ocupa = (r: Reserva) => [EstadoReserva.PENDIENTE, EstadoReserva.APROBADA].includes(r.estado);
+  const repo = {
+    cerrarVencidas: async () => undefined,
+    senasDe: async () => new Map(),
+    ahora: async () => ahora,
+    findAmenityById: async () => amenity,
+    findUnidad: async () => ({ id: 'u1', consorcioId: 'c1', activa: true }),
+    unidadesDelUsuario: async () => ['u1'],
+    // Argentina es UTC-3 todo el año: alcanza para armar instantes en el test.
+    instantes: async (fecha: string, hi: string, hf: string) => {
+      const inicio = new Date(`${fecha}T${hi.slice(0, 5)}:00-03:00`);
+      let fin = new Date(`${fecha}T${hf === '24:00' ? '23:59' : hf.slice(0, 5)}:00-03:00`);
+      if (hf === '24:00') fin = new Date(fin.getTime() + 60_000);
+      else if (fin <= inicio) fin = new Date(fin.getTime() + 86_400_000);
+      return { inicio, fin, ahora };
+    },
+    reservasEnRango: async (_a: string, inicio: Date, fin: Date) =>
+      reservas.filter((r) => ocupa(r) && r.inicio < fin && r.fin > inicio),
+    bloqueosEnRango: async () => [],
+    haySolapamiento: async (_a: string, inicio: Date, fin: Date, excluir: string | null, _m?: unknown, lugar?: number) =>
+      reservas.some(
+        (r) => ocupa(r) && r.id !== excluir && r.inicio < fin && r.fin > inicio && (lugar === undefined || r.lugar === lugar),
+      ),
+    hayBloqueo: async () => false,
+    lugaresTomados: async (_a: string, inicio: Date, fin: Date) =>
+      reservas.filter((r) => ocupa(r) && r.inicio < fin && r.fin > inicio).map((r) => r.lugar),
+    crearReserva: async (_a: string, datos: Partial<Reserva>, chequear: (m: unknown) => Promise<Partial<Reserva> | void>) => {
+      const extra = (await chequear(null)) ?? {};
+      const r = { id: `rs${reservas.length + 1}`, amenity, ...datos, ...extra } as Reserva;
+      reservas.push(r);
+      return r;
+    },
+    findById: async (id: string) => reservas.find((r) => r.id === id) ?? null,
+    actualizarReserva: async (r: Reserva, d: Partial<Reserva>) => Object.assign(r, d),
+  } as unknown as ReservasRepository;
+  const service = new ReservasService(
+    repo,
+    { findOne: async () => ({ administradorId: 'a1' }) } as unknown as ConsorciosService,
+    { tieneDeudaVencida: async () => false } as unknown as ExpensasService,
+    { enviar: async () => undefined } as unknown as Notificador,
+  );
+  return { service, reservas, amenity };
+}
+
+describe('ReservasService — cancelación', () => {
+  // El 10/09 a las 09:00 de Buenos Aires.
+  const ahora = new Date('2026-09-10T12:00:00Z');
+
+  it('el vecino no cancela fuera del plazo del amenity, la administración sí', async () => {
+    const { service } = crearEntorno({ cancelacionMinimaHoras: 24 }, ahora);
+    // Mañana 11/09 a las 12:00: faltan 27 h, se puede reservar y cancelar.
+    const a = await service.crear(vecino, { amenityId: 'am1', fecha: '2026-09-11', horaInicio: '12:00', horaFin: '14:00' });
+    assert.equal(a.cancelableHasta?.toISOString(), '2026-09-10T15:00:00.000Z');
+    // Hoy a las 20:00: faltan 11 h, ya no.
+    const b = await service.crear(vecino, { amenityId: 'am1', fecha: '2026-09-10', horaInicio: '20:00', horaFin: '21:00' });
+    await assert.rejects(service.cancelar(vecino, b.id), BadRequestException);
+    assert.equal((await service.cancelar(admin, b.id)).estado, EstadoReserva.CANCELADA);
+    assert.equal((await service.cancelar(vecino, a.id)).estado, EstadoReserva.CANCELADA);
+  });
+});
+
+describe('ReservasService — franjas', () => {
+  it('con turnos fijos sólo acepta franjas enteras', async () => {
+    const { service } = crearEntorno({ horaCierre: '02:00:00', duracionFranjaMinutos: 240 });
+    const reservar = (horaInicio: string, horaFin: string) =>
+      service.crear(vecino, { amenityId: 'am1', fecha: '2026-09-13', horaInicio, horaFin });
+    await assert.rejects(reservar('12:00', '16:00'), BadRequestException);
+    assert.ok(await reservar('22:00', '02:00'));
+  });
+
+  it('no deja configurar una franja que no entra en la ventana', async () => {
+    const { service } = crearEntorno();
+    await assert.rejects(
+      service.actualizarAmenity(admin, 'am1', { duracionFranjaMinutos: 13 * 60 }),
+      BadRequestException,
+    );
+  });
+});
+
+describe('ReservasService — lugares', () => {
+  const reservar = (service: ReservasService, horaInicio: string, horaFin: string) =>
+    service.crear(vecino, { amenityId: 'am1', fecha: '2026-09-13', horaInicio, horaFin });
+
+  it('con dos lugares, dos reservas a la vez van a lugares distintos y la tercera no entra', async () => {
+    const { service } = crearEntorno({ lugares: 2 });
+    const a = await reservar(service, '12:00', '16:00');
+    const b = await reservar(service, '14:00', '18:00');
+    assert.deepEqual([a.lugar, b.lugar], [1, 2]);
+    await assert.rejects(reservar(service, '15:00', '17:00'), ConflictException);
+    // Libre el lugar 1 desde las 16: entra ahí.
+    assert.equal((await reservar(service, '16:00', '18:00')).lugar, 1);
+  });
+
+  it('con un lugar, se comporta como siempre', async () => {
+    const { service } = crearEntorno();
+    await reservar(service, '12:00', '14:00');
+    await assert.rejects(reservar(service, '13:00', '15:00'), ConflictException);
+  });
+
+  it('aprobar mira sólo el lugar de la reserva', async () => {
+    const { service } = crearEntorno({ lugares: 2, requiereAprobacion: true });
+    const a = await reservar(service, '12:00', '16:00');
+    const b = await reservar(service, '12:00', '16:00');
+    assert.equal((await service.aprobar(admin, a.id)).estado, EstadoReserva.APROBADA);
+    assert.equal((await service.aprobar(admin, b.id)).estado, EstadoReserva.APROBADA);
   });
 });

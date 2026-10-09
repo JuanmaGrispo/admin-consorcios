@@ -45,6 +45,27 @@ export class CreateAmenityDto {
   @Max(9999)
   cupoPersonas?: number;
 
+  @ApiPropertyOptional({
+    example: 2,
+    default: 1,
+    description: 'Cuántas reservas simultáneas admite (la cochera de visitas tiene 2 lugares)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  lugares?: number;
+
+  @ApiPropertyOptional({
+    example: 'Música hasta las 01:00. Devolver el SUM limpio.',
+    description: 'Las reglas en texto libre: el vecino las ve antes de confirmar',
+  })
+  @IsOptional()
+  @Transform(recortar)
+  @IsString()
+  @MaxLength(4000)
+  reglamento?: string | null;
+
   @ApiPropertyOptional({ example: '08:00', default: '08:00:00' })
   @IsOptional()
   @Matches(HORA, { message: 'horaApertura tiene que tener el formato HH:MM' })
@@ -61,6 +82,29 @@ export class CreateAmenityDto {
   @Min(0)
   @Max(720)
   anticipacionMinimaHoras?: number;
+
+  @ApiPropertyOptional({
+    example: 24,
+    default: 0,
+    maximum: 720,
+    description: 'Hasta cuántas horas antes el vecino puede cancelar. 0: hasta que empieza.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(720)
+  cancelacionMinimaHoras?: number;
+
+  @ApiPropertyOptional({
+    example: 240,
+    description:
+      'Turnos fijos desde la apertura, en minutos ("franjas de 4 horas"). Sin esto (o null), el horario es libre.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(15)
+  @Max(1440)
+  duracionFranjaMinutos?: number | null;
 
   @ApiPropertyOptional({ example: 6, description: 'Sin tope si no se indica' })
   @IsOptional()

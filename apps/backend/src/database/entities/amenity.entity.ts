@@ -61,6 +61,18 @@ export class Amenity {
   @Column({ type: 'timestamptz', name: 'updated_at', default: () => 'now()' })
   updatedAt: Date;
 
+  @Column({ type: 'text', name: 'reglamento', nullable: true })
+  reglamento: string | null;
+
+  @Column({ type: 'int', name: 'duracion_franja_minutos', nullable: true })
+  duracionFranjaMinutos: number | null;
+
+  @Column({ type: 'int', name: 'cancelacion_minima_horas', default: 0 })
+  cancelacionMinimaHoras: number;
+
+  @Column({ type: 'int', name: 'lugares', default: 1 })
+  lugares: number;
+
   @OneToMany(() => AmenityBloqueo, (row) => row.amenity)
   amenityBloqueos?: AmenityBloqueo[];
 
