@@ -11,8 +11,8 @@ import { PageHeader } from '@/components/page-header';
 import { Paginacion } from '@/components/paginacion';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Field, FieldLabel } from '@/components/ui/field';
-import { Switch } from '@/components/ui/switch';
+import { Card } from '@/components/ui/card';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ApiError } from '@/lib/api';
 import { novedadesService } from '@/services/novedades';
 import type { Paginado } from '@/types/comun';
@@ -21,6 +21,8 @@ import type { Novedad, NovedadCambios } from '@/types/novedad';
 
 /** Qué tiene abierto el diálogo: nada, un alta o la edición de una novedad. */
 type Edicion = { modo: 'cerrado' } | { modo: 'alta' } | { modo: 'edicion'; novedad: Novedad };
+
+type Filtro = 'publicadas' | 'todas';
 
 /** El toast después de una acción rápida de la tabla. */
 function confirmacion(cambios: NovedadCambios): string {
@@ -38,8 +40,9 @@ export default function AdminNovedadesPage() {
 /** El muro del consorcio activo: publicar, editar, fijar y dar de baja. */
 function MuroAdministrado({ consorcio }: { consorcio: Consorcio }) {
   const [pagina, setPagina] = useState(1);
-  const [incluirInactivas, setIncluirInactivas] = useState(false);
+  const [filtro, setFiltro] = useState<Filtro>('publicadas');
   const [datos, setDatos] = useState<Paginado<Novedad> | null>(null);
+  const [conteo, setConteo] = useState<Record<Filtro, number> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [edicion, setEdicion] = useState<Edicion>({ modo: 'cerrado' });
   // Sube después de cada cambio para volver a pedir la página actual.
@@ -48,7 +51,7 @@ function MuroAdministrado({ consorcio }: { consorcio: Consorcio }) {
   useEffect(() => {
     let vigente = true;
     novedadesService
-      .listar({ consorcioId: consorcio.id, incluirInactivas, pagina })
+      .listar({ consorcioId: consorcio.id, incluirInactivas: filtro === 'todas', pagina })
       .then((r) => {
         if (!vigente) return;
         setError(null);
@@ -63,7 +66,23 @@ function MuroAdministrado({ consorcio }: { consorcio: Consorcio }) {
     return () => {
       vigente = false;
     };
-  }, [consorcio.id, incluirInactivas, pagina, version]);
+  }, [consorcio.id, filtro, pagina, version]);
+
+  // Los números del filtro y del encabezado: una página de uno alcanza, importa el total.
+  useEffect(() => {
+    let vigente = true;
+    Promise.all([
+      novedadesService.listar({ consorcioId: consorcio.id, limite: 1 }),
+      novedadesService.listar({ consorcioId: consorcio.id, incluirInactivas: true, limite: 1 }),
+    ])
+      .then(([publicadas, todas]) => {
+        if (vigente) setConteo({ publicadas: publicadas.total, todas: todas.total });
+      })
+      .catch(() => undefined); // Sin números el filtro anda igual.
+    return () => {
+      vigente = false;
+    };
+  }, [consorcio.id, version]);
 
   async function guardar({ titulo, cuerpo, fijada, adjuntos }: ValoresNovedad) {
     if (edicion.modo === 'edicion') {
@@ -105,30 +124,20 @@ function MuroAdministrado({ consorcio }: { consorcio: Consorcio }) {
     <div className="flex flex-col gap-6">
       <PageHeader
         titulo="Novedades"
-        contexto={consorcio.nombre}
-        descripcion="El muro del edificio: lo que publiques acá lo ven todos los vecinos."
+        contexto={[consorcio.nombre, consorcio.barrio].filter(Boolean).join(' · ')}
+        descripcion={
+          conteo
+            ? `${conteo.publicadas} publicadas · ${conteo.todas - conteo.publicadas} dadas de baja`
+            : 'El muro del edificio: lo que publiques acá lo ven todos los vecinos.'
+        }
         acciones={nueva}
       />
-
-      <Field orientation="horizontal">
-        <Switch
-          id="inactivas"
-          checked={incluirInactivas}
-          onCheckedChange={(valor) => {
-            setIncluirInactivas(valor);
-            setPagina(1);
-          }}
-        />
-        <FieldLabel htmlFor="inactivas">Mostrar las dadas de baja</FieldLabel>
-      </Field>
 
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      ) : !datos ? (
-        <TablaNovedadesEsqueleto />
-      ) : datos.items.length === 0 ? (
+      ) : datos && datos.total === 0 && filtro === 'publicadas' && conteo?.todas === 0 ? (
         <EmptyState
           icono={Megaphone}
           titulo="Todavía no hay novedades"
@@ -136,27 +145,76 @@ function MuroAdministrado({ consorcio }: { consorcio: Consorcio }) {
           accion={nueva}
         />
       ) : (
-        <div className="flex flex-col gap-3">
-          <TablaNovedades
-            novedades={datos.items}
-            onEditar={(novedad) => setEdicion({ modo: 'edicion', novedad })}
-            onCambiar={cambiar}
-          />
-          <Paginacion
-            pagina={datos.pagina}
-            paginas={datos.paginas}
-            total={datos.total}
-            onCambiar={setPagina}
-          />
-        </div>
+        <Card className="gap-0 py-0">
+          <div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
+            <ToggleGroup
+              type="single"
+              spacing={1}
+              value={filtro}
+              onValueChange={(valor) => {
+                if (!valor) return;
+                setFiltro(valor as Filtro);
+                setPagina(1);
+              }}
+              className="rounded-lg border bg-muted p-0.5"
+            >
+              <Opcion valor="publicadas" etiqueta="Publicadas" cantidad={conteo?.publicadas} />
+              <Opcion valor="todas" etiqueta="Todas" cantidad={conteo?.todas} />
+            </ToggleGroup>
+          </div>
+
+          {!datos ? (
+            <TablaNovedadesEsqueleto />
+          ) : datos.items.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+              No hay novedades publicadas: las que diste de baja están en “Todas”.
+            </p>
+          ) : (
+            <TablaNovedades
+              novedades={datos.items}
+              onEditar={(novedad) => setEdicion({ modo: 'edicion', novedad })}
+              onCambiar={cambiar}
+            />
+          )}
+
+          {datos && datos.total > 0 && (
+            <Paginacion
+              pagina={datos.pagina}
+              paginas={datos.paginas}
+              total={datos.total}
+              mostrando={datos.items.length}
+              sustantivo="novedades"
+              onCambiar={setPagina}
+            />
+          )}
+        </Card>
       )}
 
       <NovedadDialog
         abierto={edicion.modo !== 'cerrado'}
         onOpenChange={(abierto) => !abierto && setEdicion({ modo: 'cerrado' })}
         novedad={edicion.modo === 'edicion' ? edicion.novedad : undefined}
+        subtitulo={
+          consorcio.cantidadUnidades
+            ? `${consorcio.nombre} · ${consorcio.cantidadUnidades} unidades`
+            : consorcio.nombre
+        }
         onGuardar={guardar}
       />
     </div>
+  );
+}
+
+/** Una opción del filtro segmentado, con su cantidad atenuada como en la grilla de cobranzas. */
+function Opcion({ valor, etiqueta, cantidad }: { valor: Filtro; etiqueta: string; cantidad?: number }) {
+  return (
+    <ToggleGroupItem
+      value={valor}
+      size="sm"
+      className="px-3 data-[state=on]:bg-card data-[state=on]:font-semibold data-[state=on]:shadow-xs"
+    >
+      {etiqueta}
+      {cantidad !== undefined && <span className="tabular-nums opacity-60">{cantidad}</span>}
+    </ToggleGroupItem>
   );
 }

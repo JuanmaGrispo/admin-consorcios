@@ -34,6 +34,8 @@ interface NovedadDialogProps {
   onOpenChange: (abierto: boolean) => void;
   /** Si viene, edita esa novedad; si no, es un alta. */
   novedad?: Novedad;
+  /** Debajo del título: el edificio, como en los modales del prototipo. */
+  subtitulo: string;
   /** Guarda (crear o actualizar). Si tira, el error se muestra en el diálogo. */
   onGuardar: (valores: ValoresNovedad) => Promise<void>;
 }
@@ -41,20 +43,18 @@ interface NovedadDialogProps {
 const MAX_ADJUNTOS = 5;
 
 /**
- * Alta y edición de una novedad en un diálogo. El contenido se monta al abrir,
- * así cada apertura arranca con los campos de esa novedad (o vacíos).
+ * Alta y edición de una novedad, con la forma de los modales del prototipo
+ * (pantalla 08): título y edificio arriba, campos, y el pie gris con el aviso
+ * de qué pasa al guardar. El contenido se monta al abrir, así cada apertura
+ * arranca con los campos de esa novedad (o vacíos).
  */
-export function NovedadDialog({ abierto, onOpenChange, novedad, onGuardar }: NovedadDialogProps) {
+export function NovedadDialog({ abierto, onOpenChange, novedad, subtitulo, onGuardar }: NovedadDialogProps) {
   return (
     <Dialog open={abierto} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader className="-mx-4 border-b px-4 pb-4">
           <DialogTitle>{novedad ? 'Editar novedad' : 'Nueva novedad'}</DialogTitle>
-          <DialogDescription>
-            {novedad
-              ? 'Los cambios se ven en el muro al instante.'
-              : 'Se publica en el muro y les llega por mail a los vecinos.'}
-          </DialogDescription>
+          <DialogDescription>{subtitulo}</DialogDescription>
         </DialogHeader>
         <Formulario novedad={novedad} onGuardar={onGuardar} onCancelar={() => onOpenChange(false)} />
       </DialogContent>
@@ -132,6 +132,7 @@ function Formulario({ novedad, onGuardar, onCancelar }: FormularioProps) {
             onChange={(e) => setCuerpo(e.target.value)}
             placeholder="AySA trabaja en la conexión de la vereda. Les pedimos cargar reserva de agua."
           />
+          <FieldDescription>Los vecinos lo leen tal cual, en el muro y en el mail.</FieldDescription>
         </Field>
 
         {!novedad && (
@@ -175,9 +176,11 @@ function Formulario({ novedad, onGuardar, onCancelar }: FormularioProps) {
           </Field>
         )}
 
-        <Field orientation="horizontal">
+        <Field orientation="horizontal" className="rounded-lg bg-muted px-3 py-2.5">
           <Switch id="fijada" checked={fijada} onCheckedChange={setFijada} />
-          <FieldLabel htmlFor="fijada">Fijarla arriba del muro</FieldLabel>
+          <FieldLabel htmlFor="fijada" className="font-normal text-secondary-foreground">
+            Fijarla arriba del muro
+          </FieldLabel>
         </Field>
       </FieldGroup>
 
@@ -187,7 +190,12 @@ function Formulario({ novedad, onGuardar, onCancelar }: FormularioProps) {
         </Alert>
       )}
 
-      <DialogFooter>
+      <DialogFooter className="sm:items-center">
+        <p className="text-xs text-muted-foreground sm:mr-auto">
+          {novedad
+            ? 'Los cambios se ven en el muro al instante.'
+            : 'Se publica en el muro y les llega por mail a los vecinos.'}
+        </p>
         <Button type="button" variant="outline" onClick={onCancelar} disabled={enviando}>
           Cancelar
         </Button>

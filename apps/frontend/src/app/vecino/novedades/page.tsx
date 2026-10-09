@@ -20,12 +20,12 @@ export default function VecinoNovedadesPage() {
 }
 
 /**
- * El muro del edificio de la unidad activa. Lo que estaba sin leer se marca
- * leído al mostrarlo, pero conserva la marca "Nueva" mientras siga en pantalla.
+ * El muro del edificio de la unidad activa (pantalla 16). Lo que estaba sin
+ * leer se marca leído al mostrarlo: es lo que cuenta el "leída por" del
+ * administrador.
  */
 function Muro({ consorcio }: { consorcio: Consorcio }) {
   const [novedades, setNovedades] = useState<Novedad[] | null>(null);
-  const [nuevas, setNuevas] = useState<Set<string>>(new Set());
   const [pagina, setPagina] = useState(1);
   const [paginas, setPaginas] = useState(1);
   const [cargandoMas, setCargandoMas] = useState(false);
@@ -35,12 +35,10 @@ function Muro({ consorcio }: { consorcio: Consorcio }) {
     setNovedades((prev) => [...(prev ?? []), ...items]);
     setPagina(datos.pagina);
     setPaginas(datos.paginas);
-
-    // Avisa que se vieron. Si falla no pasa nada: la próxima vez salen como nuevas.
-    const sinLeer = items.filter((n) => !n.leida).map((n) => n.id);
-    if (sinLeer.length === 0) return;
-    setNuevas((prev) => new Set([...prev, ...sinLeer]));
-    for (const id of sinLeer) void novedadesService.marcarLeida(id).catch(() => undefined);
+    // Si el aviso falla no pasa nada: se vuelve a avisar la próxima vez que la vea.
+    for (const n of items) {
+      if (!n.leida) void novedadesService.marcarLeida(n.id).catch(() => undefined);
+    }
   }
 
   useEffect(() => {
@@ -70,8 +68,8 @@ function Muro({ consorcio }: { consorcio: Consorcio }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader titulo="Novedades" contexto={consorcio.nombre} volverA="/vecino" />
+    <div className="flex flex-col gap-3">
+      <PageHeader titulo="Novedades" volverA="/vecino" />
 
       {error && (
         <Alert variant="destructive">
@@ -95,7 +93,7 @@ function Muro({ consorcio }: { consorcio: Consorcio }) {
       ) : (
         <>
           {novedades.map((n) => (
-            <NovedadCard key={n.id} novedad={n} nueva={nuevas.has(n.id)} />
+            <NovedadCard key={n.id} novedad={n} />
           ))}
           {pagina < paginas && (
             <Button variant="outline" onClick={verAnteriores} disabled={cargandoMas} className="self-center">
