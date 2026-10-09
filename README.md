@@ -1178,6 +1178,7 @@ de una votación sólo se carga si está `APROBADA` (ya lo valida expensas).
 | PATCH · DELETE | `/votaciones/:id` | admin |
 | PUT | `/votaciones/:id/opciones` | admin |
 | POST | `/votaciones/:id/publicar` · `/cerrar` | admin |
+| GET | `/votaciones/padron?consorcioId=&padron=&formaConteo=` | admin: vista previa del padrón antes de crear (habilitadas, peso total y unidades sin votante) |
 | GET | `/votaciones/:id/votos` | admin |
 | POST | `/votaciones/:id/votos/:unidadId` | admin |
 | POST | `/votaciones/:id/votos` | vecino |

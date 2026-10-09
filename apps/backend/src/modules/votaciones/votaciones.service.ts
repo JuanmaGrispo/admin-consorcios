@@ -11,6 +11,8 @@ import { Notificador } from '../../core/notificaciones/notificador';
 import {
   EstadoAsamblea,
   EstadoVotacion,
+  FormaConteo,
+  PadronVotacion,
   ResultadoVotacion,
   RolUsuario,
   TipoPuntoOrden,
@@ -28,10 +30,11 @@ import { CreateVotacionDto } from './dto/create-votacion.dto';
 import { ListarVotacionesQuery } from './dto/listar-votaciones.query';
 import { ReemplazarOpcionesDto } from './dto/reemplazar-opciones.dto';
 import { UpdateVotacionDto } from './dto/update-votacion.dto';
+import { VistaPadronQuery } from './dto/vista-padron.query';
 import { VotarDto } from './dto/votar.dto';
 import { VotoPresencialDto } from './dto/voto-presencial.dto';
 import { escrutar, type Escrutinio } from './escrutinio';
-import { armarPadron, pesoTotal, type UnidadHabilitada } from './padron';
+import { armarPadron, pesoTotal, type UnidadHabilitada, vistaDelPadron } from './padron';
 import { ETIQUETA_A_FAVOR, ETIQUETA_EN_CONTRA, VotacionesRepository } from './votaciones.repository';
 
 
@@ -121,6 +124,18 @@ export class VotacionesService {
       const voto = votos.find((v) => v.unidadId === u.unidadId);
       return { unidadId: u.unidadId, etiqueta: u.etiqueta, peso: u.peso, voto: voto ? vistaVoto(voto) : null };
     });
+  }
+
+  /** El padrón que tendría una votación con estas reglas, antes de crearla. */
+  async vistaPadron(usuario: UsuarioActual, query: VistaPadronQuery) {
+    if (!gestiona(usuario, query.consorcioId)) {
+      throw new NotFoundException(`Consorcio ${query.consorcioId} no existe`);
+    }
+    return vistaDelPadron(
+      await this.votaciones.unidadesParaPadron(query.consorcioId),
+      query.padron ?? PadronVotacion.SOLO_PROPIETARIOS,
+      query.formaConteo ?? FormaConteo.POR_COEFICIENTE,
+    );
   }
 
   /** Para el inicio del vecino. */

@@ -49,6 +49,26 @@ export function armarPadron(
   return habilitadas;
 }
 
+/**
+ * Lo que el formulario de una votación muestra antes de crearla: cuántas
+ * unidades votan y cuáles quedan afuera ("6 unidades sin voto porque no tienen
+ * propietario registrado").
+ */
+export function vistaDelPadron(
+  unidades: UnidadParaPadron[],
+  padron: PadronVotacion,
+  forma: FormaConteo,
+) {
+  const habilitadas = armarPadron(unidades, padron, forma);
+  return {
+    habilitadas: habilitadas.size,
+    pesoTotal: pesoTotal(habilitadas),
+    sinVotante: unidades
+      .filter((u) => !habilitadas.has(u.unidadId))
+      .map((u) => ({ unidadId: u.unidadId, etiqueta: u.etiqueta })),
+  };
+}
+
 export function pesoTotal(padron: Map<string, UnidadHabilitada>): number {
   let total = 0;
   for (const unidad of padron.values()) total += unidad.peso;

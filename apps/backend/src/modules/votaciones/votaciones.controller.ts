@@ -21,6 +21,7 @@ import { CreateVotacionDto } from './dto/create-votacion.dto';
 import { ListarVotacionesQuery } from './dto/listar-votaciones.query';
 import { ReemplazarOpcionesDto } from './dto/reemplazar-opciones.dto';
 import { UpdateVotacionDto } from './dto/update-votacion.dto';
+import { VistaPadronQuery } from './dto/vista-padron.query';
 import { VotarDto } from './dto/votar.dto';
 import { VotoPresencialDto } from './dto/voto-presencial.dto';
 import { VotacionesService } from './votaciones.service';
@@ -42,6 +43,17 @@ export class VotacionesController {
   })
   listar(@UsuarioActual() usuario: Usuario, @Query() query: ListarVotacionesQuery) {
     return this.votaciones.listar(usuario, query);
+  }
+
+  @Roles(RolUsuario.ADMINISTRADOR)
+  @Get('padron')
+  @ApiOperation({
+    summary: 'Vista previa del padrón',
+    description:
+      'Antes de crear una votación: cuántas unidades votarían con ese padrón y forma de conteo, y cuáles quedan sin votante.',
+  })
+  vistaPadron(@UsuarioActual() usuario: Usuario, @Query() query: VistaPadronQuery) {
+    return this.votaciones.vistaPadron(usuario, query);
   }
 
   @Get(':id')
