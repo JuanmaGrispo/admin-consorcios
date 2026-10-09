@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Sans } from 'next/font/google';
+import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import './globals.css';
 
@@ -22,6 +23,8 @@ export default function RootLayout({
     <html lang="es" className={plex.className}>
       <body className="min-h-screen font-sans antialiased">
         <TooltipProvider>{children}</TooltipProvider>
+        {/* Los avisos de "se guardó" / "no se pudo": toast.success(...) desde cualquier pantalla. */}
+        <Toaster position="top-center" />
       </body>
     </html>
   );
