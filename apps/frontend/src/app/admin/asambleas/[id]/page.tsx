@@ -2,7 +2,7 @@
 
 import { CalendarClock, Link2, MapPin, Pencil, Play, Plus, Send, Square, Trash2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { useConsorcioActivo } from '@/components/admin/consorcio-activo';
 import { AsambleaDialog, type ValoresAsamblea } from '@/components/asambleas/asamblea-dialog';
@@ -20,11 +20,12 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/componen
 import { Skeleton } from '@/components/ui/skeleton';
 import { DetalleVotacionAdmin } from '@/components/votaciones/detalle-votacion-admin';
 import { VotacionDialog, type ValoresVotacion } from '@/components/votaciones/votacion-dialog';
+import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { fechaHora } from '@/lib/formato';
 import { asambleasService } from '@/services/asambleas';
 import { votacionesService } from '@/services/votaciones';
-import type { AsambleaDetalle, Asistencia, EstadoAsistencia, PuntoOrdenDia } from '@/types/asamblea';
+import type { EstadoAsistencia, PuntoOrdenDia } from '@/types/asamblea';
 import type { Votacion } from '@/types/votacion';
 
 type Accion = 'convocar' | 'iniciar' | 'cerrar' | 'eliminar';
@@ -73,42 +74,31 @@ export default function AdminAsambleaDetallePage() {
 function DetalleAsamblea({ id }: { id: string }) {
   const { consorcio } = useConsorcioActivo();
   const router = useRouter();
-  const [asamblea, setAsamblea] = useState<AsambleaDetalle | null>(null);
-  const [asistencias, setAsistencias] = useState<Asistencia[] | null>(null);
-  const [votaciones, setVotaciones] = useState<Votacion[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [version, setVersion] = useState(0);
   const [editando, setEditando] = useState(false);
   const [accion, setAccion] = useState<Accion | null>(null);
   const [votacion, setVotacion] = useState<EdicionVotacion>({ modo: 'cerrado' });
-  const [seleccionada, setSeleccionada] = useState<Votacion | null>(null);
+  // Se guarda el id: la votación del panel sale siempre de la lista recién pedida.
+  const [seleccionadaId, setSeleccionadaId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let vigente = true;
-    asambleasService
-      .obtener(id)
-      .then(async (a) => {
-        // El padrón existe desde que se convoca; las votaciones, desde el borrador.
-        const [padron, lista] = await Promise.all([
-          a.estado === 'BORRADOR' ? Promise.resolve(null) : asambleasService.listarAsistencias(id),
-          votacionesService.listar({ asambleaId: id }),
-        ]);
-        if (!vigente) return;
-        setError(null);
-        setAsamblea(a);
-        setAsistencias(padron);
-        setVotaciones(lista);
-        setSeleccionada((actual) => (actual ? (lista.find((v) => v.id === actual.id) ?? null) : null));
-      })
-      .catch((err) => {
-        if (vigente) setError(err instanceof ApiError ? err.message : 'No se pudo cargar la asamblea.');
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [id, version]);
-
-  const recargar = () => setVersion((v) => v + 1);
+  const pedido = usePedido(
+    `asamblea:${id}`,
+    async () => {
+      const asamblea = await asambleasService.obtener(id);
+      // El padrón existe desde que se convoca; las votaciones, desde el borrador.
+      const [asistencias, votaciones] = await Promise.all([
+        asamblea.estado === 'BORRADOR' ? Promise.resolve(null) : asambleasService.listarAsistencias(id),
+        votacionesService.listar({ asambleaId: id }),
+      ]);
+      return { asamblea, asistencias, votaciones };
+    },
+    'No se pudo cargar la asamblea.',
+  );
+  const asamblea = pedido.datos?.asamblea ?? null;
+  const asistencias = pedido.datos?.asistencias ?? null;
+  const votaciones = pedido.datos?.votaciones ?? [];
+  const error = pedido.error ?? null;
+  const seleccionada = votaciones.find((v) => v.id === seleccionadaId) ?? null;
+  const recargar = pedido.recargar;
 
   async function editar(valores: ValoresAsamblea) {
     if (!asamblea) return;
@@ -278,7 +268,7 @@ function DetalleAsamblea({ id }: { id: string }) {
           recargar();
         }}
         onCrearVotacion={(punto) => setVotacion({ modo: 'alta', nueva: { punto } })}
-        onVerVotacion={setSeleccionada}
+        onVerVotacion={(v) => setSeleccionadaId(v.id)}
       />
 
       <Card>
@@ -303,7 +293,7 @@ function DetalleAsamblea({ id }: { id: string }) {
                   <Button
                     variant="link"
                     className="h-auto min-w-0 flex-1 justify-start truncate px-0 font-medium text-foreground"
-                    onClick={() => setSeleccionada(v)}
+                    onClick={() => setSeleccionadaId(v.id)}
                   >
                     {v.titulo}
                   </Button>
@@ -328,9 +318,9 @@ function DetalleAsamblea({ id }: { id: string }) {
 
       <DetalleVotacionAdmin
         votacion={seleccionada}
-        onCerrar={() => setSeleccionada(null)}
+        onCerrar={() => setSeleccionadaId(null)}
         onEditar={(v) => {
-          setSeleccionada(null);
+          setSeleccionadaId(null);
           setVotacion({ modo: 'edicion', votacion: v });
         }}
         onCambio={recargar}

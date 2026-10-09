@@ -2,7 +2,7 @@
 
 import { Landmark, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { useConsorcioActivo } from '@/components/admin/consorcio-activo';
 import { AsambleaDialog, type ValoresAsamblea } from '@/components/asambleas/asamblea-dialog';
@@ -13,9 +13,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { ApiError } from '@/lib/api';
+import { usePedido } from '@/hooks/use-pedido';
 import { asambleasService } from '@/services/asambleas';
-import type { Asamblea } from '@/types/asamblea';
 import type { Consorcio } from '@/types/consorcio';
 
 type Filtro = 'TODAS' | 'PROXIMAS' | 'CERRADAS';
@@ -37,28 +36,16 @@ export default function AdminAsambleasPage() {
 /** Las asambleas del consorcio activo: crear una y entrar al detalle para llevarla adelante. */
 function AsambleasAdministradas({ consorcio }: { consorcio: Consorcio }) {
   const router = useRouter();
-  const [asambleas, setAsambleas] = useState<Asamblea[] | null>(null);
   const [filtro, setFiltro] = useState<Filtro>('TODAS');
-  const [error, setError] = useState<string | null>(null);
   const [creando, setCreando] = useState(false);
 
-  useEffect(() => {
-    let vigente = true;
-    asambleasService
-      .listar({ consorcioId: consorcio.id })
-      .then((lista) => {
-        if (!vigente) return;
-        setError(null);
-        setAsambleas(lista);
-      })
-      .catch((err) => {
-        if (!vigente) return;
-        setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las asambleas.');
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [consorcio.id]);
+  const pedido = usePedido(
+    `asambleas:${consorcio.id}`,
+    () => asambleasService.listar({ consorcioId: consorcio.id }),
+    'No se pudieron cargar las asambleas.',
+  );
+  const asambleas = pedido.datos ?? null;
+  const error = pedido.error ?? null;
 
   async function crear(valores: ValoresAsamblea) {
     const { id } = await asambleasService.crear({ consorcioId: consorcio.id, ...valores });
