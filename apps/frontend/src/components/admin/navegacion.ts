@@ -6,6 +6,7 @@ import {
   Megaphone,
   Receipt,
   Settings,
+  Tags,
   Users,
   Vote,
   Wallet,
@@ -39,6 +40,8 @@ export const NAVEGACION_ADMIN: GrupoNavegacion[] = [
     items: [
       { href: '/admin/unidades', etiqueta: 'Consorcio y unidades', icono: Building2 },
       { href: '/admin/vecinos', etiqueta: 'Usuarios y vecinos', icono: Users },
+      // No está en el prototipo: categorías de reclamo, proveedores y rubros de gasto.
+      { href: '/admin/catalogos', etiqueta: 'Catálogos', icono: Tags },
     ],
   },
   {
