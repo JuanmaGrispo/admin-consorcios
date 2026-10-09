@@ -26,6 +26,8 @@ describe('EmailService', () => {
   let envios: EnvioNotificacion[];
   let enviados: Correo[];
   let caidos: Set<string>;
+  /** Quiénes apagaron el mail, por categoría. */
+  let apagados: Map<string, string[]>;
   let smtp: boolean;
   let service: EmailService;
 
@@ -33,6 +35,7 @@ describe('EmailService', () => {
     envios = [];
     enviados = [];
     caidos = new Set();
+    apagados = new Map();
     smtp = true;
     const repo = {
       vecinosDeUnidades: async () => [
@@ -41,6 +44,8 @@ describe('EmailService', () => {
         vecino('beto@x', 'u2', 'Cochera 4'),
       ],
       vecinosDelConsorcio: async () => [vecino('ana@x', 'u1', '3º B')],
+      sinMail: async (ids: string[], categoria: string) =>
+        new Set(ids.filter((id) => (apagados.get(categoria) ?? []).includes(id))),
       totalesDeLiquidacion: async () => new Map([['u1', 1000], ['u2', 200]]),
       usuario: async (id: string) => (id === 'v1' ? { usuarioId: 'v1', email: 'v1@x', nombre: 'Vale' } : null),
       buscarEnvio: async (eventoId: string, email: string) =>
@@ -63,6 +68,18 @@ describe('EmailService', () => {
       },
     } as unknown as MailerClient;
     service = new EmailService(repo, mailer);
+  });
+
+  it('no le escribe a quien apagó el mail de esa categoría', async () => {
+    apagados.set('BOLETAS', ['beto@x']);
+    await service.procesar(expensas());
+    assert.deepEqual(enviados.map((c) => c.para), ['ana@x']);
+  });
+
+  it('apagar otra categoría no cambia nada', async () => {
+    apagados.set('COMUNICADOS', ['beto@x']);
+    await service.procesar(expensas());
+    assert.deepEqual(enviados.map((c) => c.para), ['ana@x', 'beto@x']);
   });
 
   it('las expensas llegan una vez por persona, con todas sus unidades', async () => {

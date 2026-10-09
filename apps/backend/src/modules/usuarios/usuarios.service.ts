@@ -12,11 +12,13 @@ import { consorciosGestionados, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { coincidePassword, hashearPassword } from '../auth/password';
 import { ActualizarPerfilDto } from './dto/actualizar-perfil.dto';
+import { ActualizarPreferenciasDto } from './dto/actualizar-preferencias.dto';
 import { CambiarPasswordDto } from './dto/cambiar-password.dto';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { NuevoVecinoDto } from './dto/nuevo-vecino.dto';
 import { ListarUsuariosQuery } from './dto/listar-usuarios.query';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
+import { armarPreferencias, type PreferenciasDeCanal } from './preferencias';
 import { UsuariosRepository } from './usuarios.repository';
 
 /** Un usuario como sale por la API: todo menos el hash. */
@@ -129,6 +131,21 @@ export class UsuariosService {
     const propio = await this.exigirPropio(usuarioId);
     if (dto.avatarUrl) this.archivos.exigirPropia(dto.avatarUrl, DestinoArchivo.AVATARES);
     return this.sinHash(await this.usuarios.update(propio, dto));
+  }
+
+  /** Cómo quiere recibir los avisos: la grilla canal × categoría completa. */
+  async preferencias(usuarioId: string): Promise<PreferenciasDeCanal[]> {
+    return armarPreferencias(await this.usuarios.preferenciasDe(usuarioId));
+  }
+
+  async actualizarPreferencias(
+    usuarioId: string,
+    dto: ActualizarPreferenciasDto,
+  ): Promise<PreferenciasDeCanal[]> {
+    // La misma combinación dos veces haría fallar el upsert: gana la última.
+    const unicas = new Map(dto.preferencias.map((p) => [`${p.canal}:${p.categoria}`, p]));
+    await this.usuarios.guardarPreferencias(usuarioId, [...unicas.values()]);
+    return this.preferencias(usuarioId);
   }
 
   async cambiarPassword(usuarioId: string, dto: CambiarPasswordDto): Promise<void> {

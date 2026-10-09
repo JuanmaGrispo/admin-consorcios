@@ -198,6 +198,7 @@ contraseña inicial que el vecino cambia desde su perfil.
 | PUT    | `/usuarios/:id/password` | superadmin · admin sobre sus vecinos: le pone una contraseña nueva |
 | GET · PATCH | `/perfil` | con sesión: los datos propios (nombre, teléfono, avatar) |
 | PUT    | `/perfil/password` | con sesión: cambia la propia, pidiendo la actual |
+| GET · PUT | `/perfil/preferencias` | con sesión: cómo recibir los avisos, canal × categoría (ver [Mensajería](#mensajería)) |
 
 Dar de baja una cuenta es del superadmin: un vecino puede vivir en consorcios
 de administradores distintos, así que el administrador termina el vínculo en
@@ -1265,8 +1266,14 @@ no importa quién procese cada mensaje.
 
 - Si el broker está caído y el proceso se reinicia antes de reconectar, los
   eventos que retenía en memoria se pierden. Lo robusto es una tabla outbox.
-- No se respeta `preferencia_notificacion` ni se llena la bandeja in-app
-  (`notificacion`): todavía no hay pantallas para eso.
+- **Preferencias.** El mail respeta `preferencia_notificacion`: quien apagó
+  `EMAIL` para una categoría no recibe esos avisos. La categoría sale del tipo
+  de evento o, en un `aviso.directo`, del prefijo de su `origen`
+  (`core/notificaciones/categorias.ts`): `boleta:` es VENCIMIENTOS, `pago:`
+  BOLETAS, `reclamo:` y `reserva:` RECLAMOS_RESERVAS. Un origen sin categoría
+  (el aviso de cobro duplicado al administrador) sale siempre. Sin fila
+  guardada, todo está habilitado. WhatsApp y push se guardan pero todavía no
+  envían nada (`disponible: false`).
 
 ## Datos de demo
 

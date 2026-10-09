@@ -294,7 +294,7 @@ export class PagosService {
         destinatarioId: consorcio.administradorId,
         asunto: `Cobro duplicado en la unidad ${boleta.unidad.etiqueta}`,
         cuerpo: `La boleta de ${boleta.liquidacion.periodo.slice(0, 7)} se cobró $${monto.toFixed(2)} de más (${referencia}). Devolvé la diferencia desde Mercado Pago.`,
-        origen: `boleta:${boletaId}`,
+        origen: `cobro-duplicado:${boletaId}`,
       });
     } catch (error) {
       this.logger.error(`No se pudo avisar el cobro de más de ${boletaId}: ${String(error)}`);
