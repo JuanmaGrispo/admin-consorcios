@@ -129,21 +129,39 @@ shadcn resuelve la mitad; la otra mitad es disciplina con los grids.
 src/
 ├── app/
 │   ├── login/            pública
-│   └── (panel)/          protegida: layout con sidebar + SesionProvider
+│   ├── admin/            protegida por rol: sidebar y consorcio activo
+│   └── vecino/           protegida por rol: barra superior, unidad activa y navegación inferior
 ├── components/
 │   ├── ui/               shadcn — instalados por CLI
-│   ├── app-sidebar.tsx   navegación
+│   ├── admin/            AdminSidebar, navegación y ConsorcioActivoProvider / useConsorcioActivo
+│   ├── vecino/           BarraVecino, NavegacionVecino y UnidadActivaProvider / useUnidadActiva
 │   ├── session.tsx       SesionProvider / useSesion
-│   └── <feature>-form.tsx, etc.
+│   ├── page-header.tsx   PageHeader
+│   ├── estado-badge.tsx  EstadoBadge
+│   ├── empty-state.tsx   EmptyState
+│   ├── en-construccion.tsx  placeholder de las rutas pendientes
+│   └── <modulo>/         componentes exclusivos de cada módulo
 ├── services/             UNA función por endpoint, usan lib/api.ts
-├── lib/api.ts            el único fetch del proyecto (credentials: include)
+├── lib/                  api.ts (api, query, descargar, subirArchivo), formato.ts, roles.ts, utils.ts
 ├── types/                espejan lo que devuelve el backend
 ├── hooks/                use-mobile y los que vengan
 └── proxy.ts              guard de rutas por cookie
 ```
 
-- Los componentes llaman a `services/`, nunca a `fetch`. Los services llaman a
-  `api()`. Nadie más.
+- Los componentes llaman a `services/`, nunca a `fetch`. Los services usan
+  `api()`, `descargar()` o `subirArchivo()` de `lib/api.ts`; `query()` arma los filtros.
+- Cada layout instala `SesionProvider` con sus roles. El administrador usa
+  `useConsorcioActivo()` y filtra por `consorcio.id`; el vecino usa
+  `useUnidadActiva()` y filtra por `unidad.id`. Incluir esos IDs en las
+  dependencias de los efectos para recargar al cambiar la selección.
+- Compartidos: `components/ui/`, sesión, las piezas de presentación de arriba,
+  `lib/` y `types/comun.ts`. Mantenerlos genéricos: no importar componentes de
+  módulos ni guardar reglas particulares de expensas, reclamos, etc.
+- De cada módulo: sus rutas bajo `app/admin/<modulo>/` y `app/vecino/<modulo>/`,
+  sus componentes en `components/<modulo>/`, su service en `services/<modulo>.ts`
+  y sus contratos en `types/`. Los services y tipos de dominio pueden usarse
+  desde ambos portales; no duplicarlos según el rol. `components/admin/` y
+  `components/vecino/` contienen únicamente los shells y contextos del portal.
 - Errores de API: `ApiError` con `.status` y `.message` ya legible. Se
   muestran con `<Alert variant="destructive">`.
 - Formularios: estado local con `useState`, campos como string, conversión al
