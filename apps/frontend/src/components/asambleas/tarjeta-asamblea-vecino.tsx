@@ -79,7 +79,7 @@ export function TarjetaAsambleaVecino({ asamblea, detalle, unidadId, onResponder
                 <div className="flex items-baseline justify-between text-sm">
                   <span className="text-muted-foreground">Quórum</span>
                   <span className="font-medium tabular-nums">
-                    {porcentaje(quorum.porcentaje)} de {porcentaje(quorum.requerido, 0)}
+                    {porcentaje(quorum.porcentaje)} de {porcentaje(quorum.requerido, 2)}
                   </span>
                 </div>
                 <Progress value={quorum.porcentaje} className="mt-1.5 h-1.5" />
@@ -124,15 +124,15 @@ export function TarjetaAsambleaVecino({ asamblea, detalle, unidadId, onResponder
 
         {detalle && detalle.puntoOrdenDias.length > 0 && (
           <div className="border-t pt-3">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between text-sm font-medium"
+            <Button
+              variant="ghost"
+              className="-mx-2 w-[calc(100%+1rem)] justify-between px-2"
               aria-expanded={verPuntos}
               onClick={() => setVerPuntos((v) => !v)}
             >
               Orden del día · {detalle.puntoOrdenDias.length}
-              <ChevronDown className={cn('size-4 transition-transform', verPuntos && 'rotate-180')} />
-            </button>
+              <ChevronDown className={cn('transition-transform', verPuntos && 'rotate-180')} />
+            </Button>
             {verPuntos && (
               <ol className="mt-3 flex flex-col gap-3">
                 {detalle.puntoOrdenDias.map((p) => (

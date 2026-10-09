@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { ApiError } from '@/lib/api';
 import { asambleasService } from '@/services/asambleas';
 import type { AsambleaDetalle } from '@/types/asamblea';
@@ -76,7 +77,7 @@ export function TarjetaActa({ asamblea, onCargada }: TarjetaActaProps) {
         </Button>
         {cerrada && (
           <>
-            <input
+            <Input
               ref={entrada}
               type="file"
               accept="application/pdf"

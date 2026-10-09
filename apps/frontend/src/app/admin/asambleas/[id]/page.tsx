@@ -300,13 +300,13 @@ function DetalleAsamblea({ id }: { id: string }) {
             <ul className="flex flex-col divide-y">
               {votaciones.map((v) => (
                 <li key={v.id} className="flex flex-wrap items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 truncate text-left font-medium hover:text-primary"
+                  <Button
+                    variant="link"
+                    className="h-auto min-w-0 flex-1 justify-start truncate px-0 font-medium text-foreground"
                     onClick={() => setSeleccionada(v)}
                   >
                     {v.titulo}
-                  </button>
+                  </Button>
                   <EstadoBadge dominio="votacion" estado={v.estado} />
                   {v.resultado && <EstadoBadge dominio="resultado" estado={v.resultado} />}
                 </li>
