@@ -26,9 +26,12 @@ export class AuthRepository {
    * dos filas distintas. Guardar y buscar siempre en minúscula lo evita.
    */
   findByEmail(email: string): Promise<Usuario | null> {
-    return this.usuarios.findOne({
-      where: { email: email.trim().toLowerCase() },
-    });
+    // `password_hash` es `select: false`: sin el addSelect llegaría undefined.
+    return this.usuarios
+      .createQueryBuilder('u')
+      .addSelect('u.passwordHash')
+      .where('u.email = :email', { email: email.trim().toLowerCase() })
+      .getOne();
   }
 
   findById(id: string): Promise<Usuario | null> {

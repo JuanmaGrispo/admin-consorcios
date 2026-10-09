@@ -11,6 +11,7 @@ import {
 } from '../../database/entities';
 import { ListarAmenitiesQuery } from './dto/listar-amenities.query';
 import { ListarReservasQuery } from './dto/listar-reservas.query';
+import { ZONA_POR_DEFECTO } from './horario';
 
 /**
  * Lo que ocupa el calendario. Es exactamente el `WHERE` del EXCLUDE
@@ -64,6 +65,9 @@ export class ReservasRepository {
    * convertirla a un instante es trabajo de Postgres, que sabe de horarios de
    * verano. El reloj sale de acá y no del proceso Node por lo mismo que `hoy()`
    * en unidades y expensas.
+   *
+   * Un fin igual o anterior al inicio es del día siguiente (de 20:00 a 02:00),
+   * igual que en `franjaEnMinutos`.
    */
   async instantes(
     fecha: string,
@@ -73,7 +77,8 @@ export class ReservasRepository {
   ): Promise<Instantes> {
     const [fila] = (await this.dataSource.query(
       `SELECT ($1::date + $2::time) AT TIME ZONE $4 AS inicio,
-              ($1::date + $3::time) AT TIME ZONE $4 AS fin,
+              ($1::date + (CASE WHEN $3::time <= $2::time THEN 1 ELSE 0 END) + $3::time)
+                AT TIME ZONE $4 AS fin,
               now() AS ahora`,
       [fecha, horaInicio, horaFin, zona],
     )) as Instantes[];
@@ -297,11 +302,19 @@ export class ReservasRepository {
     if (query.situacion === 'proximas') qb.andWhere('r.inicio > now()');
     if (query.situacion === 'pasadas') qb.andWhere('r.inicio <= now()');
     // `CAST(... AS date)` y no `::date`: TypeORM lee `::` como un parámetro más.
+    // Los días se cortan en la zona del edificio y no en la de la sesión (UTC):
+    // si no, una reserva del sábado a las 22:00 caería en el domingo.
     if (query.desde) {
-      qb.andWhere('r.inicio >= CAST(:desde AS date)', { desde: query.desde });
+      qb.andWhere('r.inicio >= CAST(CAST(:desde AS date) AS timestamp) AT TIME ZONE :zona', {
+        desde: query.desde,
+        zona: ZONA_POR_DEFECTO,
+      });
     }
     if (query.hasta) {
-      qb.andWhere('r.inicio < CAST(:hasta AS date) + 1', { hasta: query.hasta });
+      qb.andWhere('r.inicio < CAST(CAST(:hasta AS date) + 1 AS timestamp) AT TIME ZONE :zona', {
+        hasta: query.hasta,
+        zona: ZONA_POR_DEFECTO,
+      });
     }
 
     const [items, total] = await qb.getManyAndCount();

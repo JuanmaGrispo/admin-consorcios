@@ -34,7 +34,7 @@ export class Usuario {
   @Column({ type: 'varchar', name: 'email', length: 150 })
   email: string;
 
-  @Column({ type: 'varchar', name: 'password_hash', length: 255 })
+  @Column({ type: 'varchar', name: 'password_hash', length: 255, select: false })
   passwordHash: string;
 
   @Column({ type: 'varchar', name: 'dni', length: 20, nullable: true })

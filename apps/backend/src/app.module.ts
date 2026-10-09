@@ -16,6 +16,7 @@ import { ConsorciosModule } from './modules/consorcios/consorcios.module';
 import { EmailModule } from './modules/email/email.module';
 import { ExpensasModule } from './modules/expensas/expensas.module';
 import { InicioModule } from './modules/inicio/inicio.module';
+import { PanelModule } from './modules/panel/panel.module';
 import { NovedadesModule } from './modules/novedades/novedades.module';
 import { PagosModule } from './modules/pagos/pagos.module';
 import { ProveedoresModule } from './modules/proveedores/proveedores.module';
@@ -74,6 +75,8 @@ import { VotacionesModule } from './modules/votaciones/votaciones.module';
     // Compone la pantalla de inicio del vecino: va último porque depende de
     // todos los anteriores.
     InicioModule,
+    // Lo mismo para el panel general del administrador.
+    PanelModule,
   ],
   providers: [
     // Guards globales: todo pide token salvo lo marcado con @Public(), y el de

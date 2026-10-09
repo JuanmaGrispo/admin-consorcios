@@ -27,7 +27,8 @@ import { ListarReservasQuery } from './dto/listar-reservas.query';
 import { RechazarReservaDto } from './dto/rechazar-reserva.dto';
 import { UpdateAmenityDto } from './dto/update-amenity.dto';
 import {
-  minutosDeHora,
+  cierraAlDiaSiguiente,
+  largoDeVentana,
   ProblemaFranja,
   validarFranja,
   ZONA_POR_DEFECTO,
@@ -110,12 +111,24 @@ export class ReservasService {
   async disponibilidad(usuario: UsuarioActual, id: string, query: DisponibilidadQuery) {
     await this.reservas.cerrarVencidas();
     const amenity = await this.findAmenity(usuario, id);
-    const { inicio, fin } = await this.reservas.instantes(
+    const cruza = cierraAlDiaSiguiente(amenity.horaApertura, amenity.horaCierre);
+    const { inicio, fin: finDelDia } = await this.reservas.instantes(
       query.fecha,
       '00:00',
       '24:00',
       ZONA_POR_DEFECTO,
     );
+    // Si la ventana del día termina en la madrugada siguiente, lo ocupado
+    // también se mira hasta ahí: si no, el calendario mostraría libre la
+    // noche de una reserva de 20:00 a 02:00.
+    const fin = cruza
+      ? (await this.reservas.instantes(
+          query.fecha,
+          amenity.horaApertura,
+          amenity.horaCierre,
+          ZONA_POR_DEFECTO,
+        )).fin
+      : finDelDia;
 
     const [reservas, bloqueos] = await Promise.all([
       this.reservas.reservasEnRango(id, inicio, fin),
@@ -126,6 +139,7 @@ export class ReservasService {
       fecha: query.fecha,
       horaApertura: amenity.horaApertura,
       horaCierre: amenity.horaCierre,
+      cierraAlDiaSiguiente: cruza,
       duracionMaximaHoras: amenity.duracionMaximaHoras,
       anticipacionMinimaHoras: amenity.anticipacionMinimaHoras,
       requiereAprobacion: amenity.requiereAprobacion,
@@ -414,21 +428,19 @@ export class ReservasService {
   }
 
   /**
-   * Si la ventana diera la vuelta, una franja no podría caer "dentro" de ella;
-   * y un tope de duración mayor que la ventana es configuración que nadie puede
-   * alcanzar.
+   * La ventana puede cruzar la medianoche (cierre anterior a la apertura) o
+   * ser de 24 h (apertura igual al cierre). Un tope de duración mayor que la
+   * ventana es configuración que nadie puede alcanzar.
    */
   private exigirVentanaCoherente(
     horaApertura: string,
     horaCierre: string,
     duracionMaximaHoras: number | null,
   ): void {
-    const apertura = minutosDeHora(horaApertura);
-    const cierre = minutosDeHora(horaCierre);
-    if (cierre <= apertura) {
-      throw new BadRequestException('El amenity tiene que cerrar después de abrir');
-    }
-    if (duracionMaximaHoras !== null && duracionMaximaHoras * 60 > cierre - apertura) {
+    if (
+      duracionMaximaHoras !== null &&
+      duracionMaximaHoras * 60 > largoDeVentana(horaApertura, horaCierre)
+    ) {
       throw new BadRequestException(
         'La duración máxima no puede ser mayor que la ventana horaria del amenity',
       );
@@ -516,8 +528,9 @@ export class ReservasService {
 
   private mensajeDe(problema: ProblemaFranja, amenity: Amenity): string {
     const mensajes: Record<ProblemaFranja, string> = {
-      FIN_ANTES_DE_INICIO: 'La reserva tiene que terminar después de empezar',
-      FUERA_DE_HORARIO: `${amenity.nombre} abre de ${amenity.horaApertura} a ${amenity.horaCierre}`,
+      FUERA_DE_HORARIO: `${amenity.nombre} abre de ${amenity.horaApertura} a ${amenity.horaCierre}${
+        cierraAlDiaSiguiente(amenity.horaApertura, amenity.horaCierre) ? ' del día siguiente' : ''
+      }`,
       DEMASIADO_LARGA: `${amenity.nombre} se reserva por hasta ${amenity.duracionMaximaHoras} horas`,
     };
     return mensajes[problema];

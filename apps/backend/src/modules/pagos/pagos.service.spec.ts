@@ -53,29 +53,43 @@ function crearEntorno() {
       return pago ? { ...pago, unidad: { consorcioId: 'c1', etiqueta: '3º B' } } : null;
     },
     siguienteCorrelativoRecibo: async () => (db.correlativo += 1),
+    pendienteDeMercadoPago: async (boletaId: string) =>
+      [...db.pagos]
+        .reverse()
+        .find(
+          (p) =>
+            p.boletaId === boletaId &&
+            p.medio === MedioPago.MERCADO_PAGO &&
+            p.estado === EstadoPago.PENDIENTE &&
+            p.mpPreferenceId,
+        ) ?? null,
+    aprobadoDe: async (boletaId: string) =>
+      db.pagos
+        .filter((p) => p.boletaId === boletaId && p.estado === EstadoPago.APROBADO)
+        .reduce((suma, p) => suma + p.monto, 0),
   } as unknown as PagosRepository;
 
+  const boleta = {
+    id: 'b1',
+    unidadId: 'u1',
+    total: 400,
+    liquidacion: { periodo: '2026-10-01', consorcioId: 'c1' },
+    unidad: { etiqueta: '3º B' },
+  } as Boleta;
   const expensas = {
-    boletaPagable: async () => ({
-      boleta: {
-        id: 'b1',
-        unidadId: 'u1',
-        total: 400,
-        liquidacion: { periodo: '2026-10-01' },
-        unidad: { etiqueta: '3º B' },
-      } as Boleta,
-      saldo: db.saldo,
-    }),
+    boletaPagable: async () => ({ boleta, saldo: db.saldo }),
     sincronizarEstado: async (id: string) => {
       db.sincronizadas.push(id);
-      return { id, estado: EstadoBoleta.PARCIAL } as Boleta;
+      return { ...boleta, estado: EstadoBoleta.PARCIAL } as Boleta;
     },
+    findBoletaInterna: async () => boleta,
     vecinosDe: async () => ['v1', 'falla'],
     unidadesVisibles: async () => undefined,
   } as unknown as ExpensasService;
 
   const consorcios = {
     findOne: async () => ({
+      administradorId: 'a1',
       nombre: 'Consorcio Rivadavia 4820',
       calle: 'Av. Rivadavia',
       numero: '4820',
@@ -96,12 +110,18 @@ function crearEntorno() {
   const mp = {
     pagos: new Map<string, PagoMercadoPago>(),
     preferenciaFalla: false,
+    preferencias: 0,
   };
   const mercadoPago = {
     crearPreferencia: async () => {
       if (mp.preferenciaFalla) throw new Error('MP caído');
-      return { id: 'pref1', initPoint: 'https://mp/checkout' };
+      mp.preferencias += 1;
+      return { id: `pref${mp.preferencias}`, initPoint: `https://mp/checkout/${mp.preferencias}` };
     },
+    obtenerPreferencia: async (id: string) => ({
+      id,
+      initPoint: `https://mp/checkout/${id.replace('pref', '')}`,
+    }),
     obtenerPago: async (id: string) => mp.pagos.get(id)!,
     firmaValida: (firma?: string) => firma === 'ok',
   } as unknown as MercadoPagoClient;
@@ -162,12 +182,48 @@ describe('PagosService', () => {
 
     it('la preferencia crea un pago pendiente por el saldo', async () => {
       const r = await service.crearPreferencia(admin, 'b1');
-      assert.equal(r.initPoint, 'https://mp/checkout');
+      assert.equal(r.initPoint, 'https://mp/checkout/1');
       const [pago] = entorno.db.pagos;
       assert.equal(pago.estado, EstadoPago.PENDIENTE);
       assert.equal(pago.medio, MedioPago.MERCADO_PAGO);
       assert.equal(pago.monto, 400);
       assert.equal(pago.mpPreferenceId, 'pref1');
+    });
+
+    it('un segundo "Pagar" vuelve al mismo checkout en vez de abrir otro', async () => {
+      const primero = await service.crearPreferencia(admin, 'b1');
+      const segundo = await service.crearPreferencia(admin, 'b1');
+      assert.equal(segundo.pagoId, primero.pagoId);
+      assert.equal(segundo.initPoint, primero.initPoint);
+      assert.equal(entorno.db.pagos.length, 1);
+    });
+
+    it('si el saldo cambió, descarta el checkout viejo y abre uno nuevo', async () => {
+      await service.crearPreferencia(admin, 'b1');
+      entorno.db.saldo = 250;
+      const nuevo = await service.crearPreferencia(admin, 'b1');
+      assert.equal(entorno.db.pagos[0].estado, EstadoPago.RECHAZADO);
+      assert.equal(nuevo.pagoId, entorno.db.pagos[1].id);
+      assert.equal(entorno.db.pagos[1].monto, 250);
+    });
+
+    it('si la boleta queda cobrada de más, le avisa al administrador', async () => {
+      await service.crearPreferencia(admin, 'b1');
+      await service.registrar(admin, { boletaId: 'b1', monto: 400, medio: MedioPago.TRANSFERENCIA });
+      entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
+      await webhook('100');
+      const aviso = entorno.avisos.find((a) => a.destinatarioId === 'a1');
+      assert.match(aviso?.cuerpo ?? '', /\$400\.00 de más/);
+    });
+
+    it('un segundo intento aprobado del mismo checkout también se avisa', async () => {
+      await service.crearPreferencia(admin, 'b1');
+      entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
+      entorno.mp.pagos.set('101', pagoMp(101, 'approved'));
+      await webhook('100');
+      await webhook('101');
+      assert.equal(entorno.db.pagos[0].mpPaymentId, '100');
+      assert.ok(entorno.avisos.some((a) => a.destinatarioId === 'a1' && a.asunto.startsWith('Cobro duplicado')));
     });
 
     it('si Mercado Pago falla, el pago no queda pendiente para siempre', async () => {

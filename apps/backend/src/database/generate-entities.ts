@@ -15,6 +15,13 @@ import dataSource from './data-source';
 
 const OUT_DIR = path.join(__dirname, 'entities');
 
+/**
+ * Columnas que TypeORM no trae salvo que se pidan con `addSelect`. Un join a
+ * `usuario` desde cualquier módulo devolvería el hash en la respuesta; así
+ * sólo lo ve quien lo pide a propósito (el login y el cambio de contraseña).
+ */
+const COLUMNAS_OCULTAS = new Set(['usuario.password_hash']);
+
 // ── Tipos de lo que devuelve la introspección ────────────────────────────────
 
 interface Col {
@@ -241,6 +248,7 @@ function generarEntidad(
     if (nullable) opciones.push('nullable: true');
     const def = defaultDeColumna(col);
     if (def) opciones.push(`default: ${def}`);
+    if (COLUMNAS_OCULTAS.has(`${tabla}.${col.column_name}`)) opciones.push('select: false');
 
     cuerpo.push(
       `  @Column({ ${opciones.join(', ')} })\n  ${prop}: ${ts}${nullable ? ' | null' : ''};`,
@@ -407,7 +415,9 @@ async function main() {
     const desactualizados: string[] = [];
     for (const [nombre, contenido] of archivos) {
       const ruta = path.join(OUT_DIR, nombre);
-      const actual = fs.existsSync(ruta) ? fs.readFileSync(ruta, 'utf8') : null;
+      // Sin los \r: en Windows git puede dejar el archivo con CRLF y el
+      // contenido es el mismo.
+      const actual = fs.existsSync(ruta) ? fs.readFileSync(ruta, 'utf8').replace(/\r\n/g, '\n') : null;
       if (actual !== contenido) desactualizados.push(nombre);
     }
     const sobran = fs.existsSync(OUT_DIR)

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
-import { Pago } from '../../database/entities';
+import { DataSource, IsNull, Not, Repository } from 'typeorm';
+import { EstadoPago, MedioPago, Pago } from '../../database/entities';
 import { ListarPagosQuery } from './dto/listar-pagos.query';
 
 @Injectable()
@@ -61,6 +61,29 @@ export class PagosRepository {
       `SELECT nextval('recibo_pago_numero')::int AS numero`,
     );
     return (fila as { numero: number }).numero;
+  }
+
+  /** El checkout de Mercado Pago que quedó abierto para esta boleta, si hay uno. */
+  pendienteDeMercadoPago(boletaId: string): Promise<Pago | null> {
+    return this.pagos.findOne({
+      where: {
+        boletaId,
+        medio: MedioPago.MERCADO_PAGO,
+        estado: EstadoPago.PENDIENTE,
+        mpPreferenceId: Not(IsNull()),
+      },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /** Lo cobrado de una boleta: sólo cuentan los pagos aprobados. */
+  async aprobadoDe(boletaId: string): Promise<number> {
+    const [fila] = await this.dataSource.query(
+      `SELECT coalesce(sum(monto), 0)::float AS total
+         FROM pago WHERE boleta_id = $1 AND estado = 'APROBADO'`,
+      [boletaId],
+    );
+    return (fila as { total: number }).total;
   }
 
   crear(data: Partial<Pago>): Promise<Pago> {

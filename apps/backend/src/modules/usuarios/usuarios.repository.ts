@@ -46,6 +46,15 @@ export class UsuariosRepository {
     return this.repo.findOneBy({ id });
   }
 
+  /** Con el hash, que no viene por defecto: sólo para validar la contraseña actual. */
+  findConPassword(id: string): Promise<Usuario | null> {
+    return this.repo
+      .createQueryBuilder('us')
+      .addSelect('us.passwordHash')
+      .where('us.id = :id', { id })
+      .getOne();
+  }
+
   findByEmail(email: string): Promise<Usuario | null> {
     return this.repo.findOneBy({ email: email.trim().toLowerCase() });
   }

@@ -52,7 +52,7 @@ export function firmaValida(
 
 /**
  * Única puerta a la API de Mercado Pago. Con `fetch` de Node: son dos
- * llamadas y no justifican el SDK.
+ * llamadas sueltas y no justifican el SDK.
  */
 @Injectable()
 export class MercadoPagoClient {
@@ -81,6 +81,15 @@ export class MercadoPagoClient {
         },
         auto_return: 'approved',
       },
+    );
+    return { id: respuesta.id, initPoint: respuesta.init_point };
+  }
+
+  /** Una preferencia ya creada: para volver a mandar al vecino al mismo checkout. */
+  async obtenerPreferencia(id: string): Promise<PreferenciaCreada> {
+    const respuesta = await this.llamar<{ id: string; init_point: string }>(
+      'GET',
+      `/checkout/preferences/${encodeURIComponent(id)}`,
     );
     return { id: respuesta.id, initPoint: respuesta.init_point };
   }
