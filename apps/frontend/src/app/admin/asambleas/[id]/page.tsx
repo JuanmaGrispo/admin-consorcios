@@ -164,8 +164,10 @@ function DetalleAsamblea({ id }: { id: string }) {
       await votacionesService.reemplazarOpciones(votacionId, opciones);
       toast.success('Votación actualizada');
     } else if (votacion.modo === 'alta') {
+      if (!asamblea) return;
+      // El de la asamblea, no el activo: se puede llegar por link desde otro edificio.
       await votacionesService.crear({
-        consorcioId: consorcio.id,
+        consorcioId: asamblea.consorcioId,
         ...(votacion.nueva.punto ? { puntoOrdenDiaId: votacion.nueva.punto.id } : { asambleaId: id }),
         ...resto,
         opciones,
@@ -348,7 +350,7 @@ function DetalleAsamblea({ id }: { id: string }) {
         <VotacionDialog
           abierto
           onOpenChange={(abierto) => !abierto && setVotacion({ modo: 'cerrado' })}
-          consorcioId={consorcio.id}
+          consorcioId={asamblea.consorcioId}
           subtitulo={consorcio.nombre}
           asamblea={{ id, titulo: asamblea.titulo }}
           votacion={votacion.modo === 'edicion' ? votacion.votacion : undefined}
