@@ -66,6 +66,8 @@ interface VotacionDialogProps {
   votacion?: Votacion;
   /** Si viene, la votación es un punto nuevo de esa asamblea y no pide fechas. */
   asamblea?: { id: string; titulo: string };
+  /** Para precargar el título cuando nace de un punto del orden del día. */
+  tituloInicial?: string;
   onGuardar: (valores: ValoresVotacion) => Promise<void>;
 }
 
@@ -81,6 +83,7 @@ export function VotacionDialog({
   subtitulo,
   votacion,
   asamblea,
+  tituloInicial,
   onGuardar,
 }: VotacionDialogProps) {
   return (
@@ -95,6 +98,7 @@ export function VotacionDialog({
         <Formulario
           consorcioId={consorcioId}
           votacion={votacion}
+          tituloInicial={tituloInicial}
           deAsamblea={asamblea !== undefined || votacion?.asambleaId != null}
           onGuardar={onGuardar}
           onCancelar={() => onOpenChange(false)}
@@ -107,13 +111,14 @@ export function VotacionDialog({
 interface FormularioProps {
   consorcioId: string;
   votacion?: Votacion;
+  tituloInicial?: string;
   deAsamblea: boolean;
   onGuardar: (valores: ValoresVotacion) => Promise<void>;
   onCancelar: () => void;
 }
 
-function Formulario({ consorcioId, votacion, deAsamblea, onGuardar, onCancelar }: FormularioProps) {
-  const [titulo, setTitulo] = useState(votacion?.titulo ?? '');
+function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuardar, onCancelar }: FormularioProps) {
+  const [titulo, setTitulo] = useState(votacion?.titulo ?? tituloInicial ?? '');
   const [descripcion, setDescripcion] = useState(votacion?.descripcion ?? '');
   const [padron, setPadron] = useState<PadronVotacion>(votacion?.padron ?? 'SOLO_PROPIETARIOS');
   const [formaConteo, setFormaConteo] = useState<FormaConteo>(votacion?.formaConteo ?? 'POR_COEFICIENTE');
