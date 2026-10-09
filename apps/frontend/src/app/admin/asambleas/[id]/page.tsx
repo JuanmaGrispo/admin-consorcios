@@ -150,9 +150,9 @@ function DetalleAsamblea({ id }: { id: string }) {
       toast.success('Asistencia registrada');
       recargar();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'No se pudo registrar la asistencia.');
-      // El diálogo de poder deja el error a la vista: se relanza para que lo muestre.
+      // El diálogo de poder muestra el error adentro: se relanza sin toast para no avisarlo dos veces.
       if (datos.estado === 'CON_PODER') throw err;
+      toast.error(err instanceof ApiError ? err.message : 'No se pudo registrar la asistencia.');
     }
   }
 
