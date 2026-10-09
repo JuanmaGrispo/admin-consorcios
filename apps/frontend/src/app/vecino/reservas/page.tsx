@@ -1,7 +1,7 @@
 'use client';
 
 import { CalendarDays } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmarAccion } from '@/components/confirmar-accion';
 import { EmptyState } from '@/components/empty-state';
@@ -12,12 +12,13 @@ import { cuando } from '@/components/reservas/tiempo';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnidadActiva } from '@/components/vecino/unidad-activa';
+import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { pagosService } from '@/services/pagos';
 import { reservasService } from '@/services/reservas';
 import type { Consorcio } from '@/types/consorcio';
 import type { Unidad } from '@/types/unidad';
-import type { Amenity, Reserva } from '@/types/reserva';
+import type { Reserva } from '@/types/reserva';
 
 const EN_PIE = ['PENDIENTE', 'APROBADA'];
 
@@ -30,50 +31,35 @@ export default function VecinoReservasPage() {
 /** Pantalla 14: reservar un amenity y ver las reservas de la unidad. */
 function PantallaReservas({ unidad, consorcio }: { unidad: Unidad; consorcio: Consorcio }) {
   const [solapa, setSolapa] = useState('reservar');
-  const [amenities, setAmenities] = useState<Amenity[] | null>(null);
-  const [reservas, setReservas] = useState<{ proximas: Reserva[]; anteriores: Reserva[] } | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [aCancelar, setACancelar] = useState<Reserva | null>(null);
   const [pagando, setPagando] = useState<string | null>(null);
-  const [version, setVersion] = useState(0);
 
-  useEffect(() => {
-    let vigente = true;
-    reservasService
-      .listarAmenities({ consorcioId: consorcio.id })
-      .then((lista) => vigente && setAmenities(lista.filter((a) => a.activo)))
-      .catch((err) => {
-        if (vigente) setError(err instanceof ApiError ? err.message : 'No se pudieron cargar los amenities.');
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [consorcio.id]);
-
-  useEffect(() => {
-    let vigente = true;
-    Promise.all([
-      reservasService.listar({ unidadId: unidad.id, situacion: 'proximas', limite: 50 }),
-      reservasService.listar({ unidadId: unidad.id, situacion: 'pasadas', limite: 20 }),
-    ])
-      .then(([prox, pas]) => {
-        if (!vigente) return;
-        // Por delante sólo lo que sigue en pie; lo cancelado o rechazado va con las anteriores.
-        const porInicio = (a: Reserva, b: Reserva) => a.inicio.localeCompare(b.inicio);
-        setReservas({
-          proximas: prox.items.filter((r) => EN_PIE.includes(r.estado)).sort(porInicio),
-          anteriores: [...prox.items.filter((r) => !EN_PIE.includes(r.estado)), ...pas.items].sort(
-            (a, b) => -porInicio(a, b),
-          ),
-        });
-      })
-      .catch((err) => {
-        if (vigente) setError(err instanceof ApiError ? err.message : 'No se pudieron cargar tus reservas.');
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [unidad.id, version]);
+  const amenitiesPedido = usePedido(
+    'amenities',
+    async () => (await reservasService.listarAmenities({ consorcioId: consorcio.id })).filter((a) => a.activo),
+    'No se pudieron cargar los amenities.',
+  );
+  const reservasPedido = usePedido(
+    'mis-reservas',
+    async () => {
+      const [prox, pas] = await Promise.all([
+        reservasService.listar({ unidadId: unidad.id, situacion: 'proximas', limite: 50 }),
+        reservasService.listar({ unidadId: unidad.id, situacion: 'pasadas', limite: 20 }),
+      ]);
+      // Por delante sólo lo que sigue en pie; lo cancelado o rechazado va con las anteriores.
+      const porInicio = (a: Reserva, b: Reserva) => a.inicio.localeCompare(b.inicio);
+      return {
+        proximas: prox.items.filter((r) => EN_PIE.includes(r.estado)).sort(porInicio),
+        anteriores: [...prox.items.filter((r) => !EN_PIE.includes(r.estado)), ...pas.items].sort(
+          (a, b) => -porInicio(a, b),
+        ),
+      };
+    },
+    'No se pudieron cargar tus reservas.',
+  );
+  const amenities = amenitiesPedido.datos ?? null;
+  const reservas = reservasPedido.datos ?? null;
+  const error = amenitiesPedido.error ?? reservasPedido.error;
 
   async function pagarSena(r: Reserva) {
     setPagando(r.id);
@@ -117,7 +103,7 @@ function PantallaReservas({ unidad, consorcio }: { unidad: Unidad; consorcio: Co
               unidadId={unidad.id}
               onReservada={(mensaje) => {
                 toast.success(mensaje);
-                setVersion((v) => v + 1);
+                reservasPedido.recargar();
                 setSolapa('mis-reservas');
               }}
             />
@@ -144,7 +130,7 @@ function PantallaReservas({ unidad, consorcio }: { unidad: Unidad; consorcio: Co
           if (!aCancelar) return;
           await reservasService.cancelar(aCancelar.id);
           toast.success('Reserva cancelada');
-          setVersion((v) => v + 1);
+          reservasPedido.recargar();
         }}
         onCerrar={() => setACancelar(null)}
       />

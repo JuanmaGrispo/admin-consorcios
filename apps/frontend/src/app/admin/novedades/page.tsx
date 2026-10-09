@@ -1,7 +1,7 @@
 'use client';
 
 import { Megaphone, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { useConsorcioActivo } from '@/components/admin/consorcio-activo';
 import { EmptyState } from '@/components/empty-state';
@@ -13,9 +13,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { novedadesService } from '@/services/novedades';
-import type { Paginado } from '@/types/comun';
 import type { Consorcio } from '@/types/consorcio';
 import type { Novedad, NovedadCambios } from '@/types/novedad';
 
@@ -46,48 +46,32 @@ export default function AdminNovedadesPage() {
 function MuroAdministrado({ consorcio }: { consorcio: Consorcio }) {
   const [pagina, setPagina] = useState(1);
   const [filtro, setFiltro] = useState<Filtro>('publicadas');
-  const [datos, setDatos] = useState<Paginado<Novedad> | null>(null);
-  const [conteo, setConteo] = useState<Record<Filtro, number> | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [edicion, setEdicion] = useState<Edicion>({ modo: 'cerrado' });
-  // Sube después de cada cambio para volver a pedir la página actual.
-  const [version, setVersion] = useState(0);
 
-  useEffect(() => {
-    let vigente = true;
-    novedadesService
-      .listar({ consorcioId: consorcio.id, incluirInactivas: filtro === 'todas', pagina })
-      .then((r) => {
-        if (!vigente) return;
-        setError(null);
-        setDatos(r);
-      })
-      .catch((err) => {
-        if (!vigente) return;
-        setDatos(null);
-        setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las novedades.');
-      });
-    // Si cambian los filtros antes de que llegue la respuesta, se descarta.
-    return () => {
-      vigente = false;
-    };
-  }, [consorcio.id, filtro, pagina, version]);
+  const lista = usePedido(
+    `novedades:${filtro}:${pagina}`,
+    () => novedadesService.listar({ consorcioId: consorcio.id, incluirInactivas: filtro === 'todas', pagina }),
+    'No se pudieron cargar las novedades.',
+  );
+  // Al cambiar de página se sigue viendo la anterior hasta que llega la nueva.
+  const datos = lista.datos ?? lista.ultimo ?? null;
 
   // Los números del filtro y del encabezado: una página de uno alcanza, importa el total.
-  useEffect(() => {
-    let vigente = true;
-    Promise.all([
+  // Si fallan, el filtro anda igual sin ellos.
+  const conteoPedido = usePedido('conteo', async () => {
+    const [publicadas, todas] = await Promise.all([
       novedadesService.listar({ consorcioId: consorcio.id, limite: 1 }),
       novedadesService.listar({ consorcioId: consorcio.id, incluirInactivas: true, limite: 1 }),
-    ])
-      .then(([publicadas, todas]) => {
-        if (vigente) setConteo({ publicadas: publicadas.total, todas: todas.total });
-      })
-      .catch(() => undefined); // Sin números el filtro anda igual.
-    return () => {
-      vigente = false;
-    };
-  }, [consorcio.id, version]);
+    ]);
+    return { publicadas: publicadas.total, todas: todas.total } as Record<Filtro, number>;
+  });
+  const conteo = conteoPedido.datos ?? conteoPedido.ultimo ?? null;
+
+  /** Después de un cambio: la página actual y los números, sin vaciar la pantalla. */
+  function recargar() {
+    lista.recargar();
+    conteoPedido.recargar();
+  }
 
   async function guardar({ titulo, cuerpo, fijada, adjuntos }: ValoresNovedad) {
     if (edicion.modo === 'edicion') {
@@ -105,14 +89,14 @@ function MuroAdministrado({ consorcio }: { consorcio: Consorcio }) {
       setPagina(1);
     }
     setEdicion({ modo: 'cerrado' });
-    setVersion((v) => v + 1);
+    recargar();
   }
 
   async function cambiar(novedad: Novedad, cambios: NovedadCambios) {
     try {
       await novedadesService.actualizar(novedad.id, cambios);
       toast.success(confirmacion(cambios));
-      setVersion((v) => v + 1);
+      recargar();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'No se pudo actualizar la novedad.');
     }
@@ -138,9 +122,9 @@ function MuroAdministrado({ consorcio }: { consorcio: Consorcio }) {
         acciones={nueva}
       />
 
-      {error ? (
+      {lista.error ? (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{lista.error}</AlertDescription>
         </Alert>
       ) : datos && datos.total === 0 && filtro === 'publicadas' && conteo?.todas === 0 ? (
         <EmptyState

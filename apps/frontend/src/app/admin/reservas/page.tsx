@@ -1,7 +1,7 @@
 'use client';
 
 import { Ban, CalendarDays, Plus, Settings } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { useConsorcioActivo } from '@/components/admin/consorcio-activo';
 import { ConfirmarAccion } from '@/components/confirmar-accion';
@@ -16,10 +16,11 @@ import { fechaCorta, fechaDe, hoy, lunesDe, sumarDias } from '@/components/reser
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { reservasService } from '@/services/reservas';
 import type { Consorcio } from '@/types/consorcio';
-import type { Amenity, Bloqueo, Reserva } from '@/types/reserva';
+import type { Bloqueo, Reserva } from '@/types/reserva';
 
 const VIGENTES = ['PENDIENTE', 'APROBADA', 'FINALIZADA'];
 
@@ -34,78 +35,59 @@ export default function AdminReservasPage() {
 
 /** Pantalla 05: los amenities del consorcio, su semana y lo que espera aprobación. */
 function Reservas({ consorcio }: { consorcio: Consorcio }) {
-  const [amenities, setAmenities] = useState<Amenity[] | null>(null);
   const [elegidoId, setElegidoId] = useState<string | null>(null);
   const [lunes, setLunes] = useState(() => lunesDe(hoy()));
-  const [semana, setSemana] = useState<{ reservas: Reserva[]; bloqueos: Bloqueo[]; clave: string } | null>(null);
-  const [pendientes, setPendientes] = useState<Reserva[] | null>(null);
-  const [estaSemana, setEstaSemana] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [dialogo, setDialogo] = useState<'amenity' | 'nuevo' | 'bloqueo' | null>(null);
   const [aRechazar, setARechazar] = useState<Reserva | null>(null);
   const [aQuitar, setAQuitar] = useState<Bloqueo | null>(null);
-  // Sube después de cada cambio para volver a pedir lo que se ve.
-  const [version, setVersion] = useState(0);
-  const recargar = () => setVersion((v) => v + 1);
-
-  const elegido = amenities?.find((a) => a.id === elegidoId) ?? amenities?.[0] ?? null;
 
   // Los amenities, incluidos los dados de baja: quien administra los puede reactivar.
-  useEffect(() => {
-    let vigente = true;
-    reservasService
-      .listarAmenities({ consorcioId: consorcio.id, incluirInactivos: true })
-      .then((lista) => vigente && setAmenities(lista))
-      .catch((err) => {
-        if (vigente) setError(err instanceof ApiError ? err.message : 'No se pudieron cargar los amenities.');
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [consorcio.id, version]);
+  const amenitiesPedido = usePedido(
+    'amenities',
+    () => reservasService.listarAmenities({ consorcioId: consorcio.id, incluirInactivos: true }),
+    'No se pudieron cargar los amenities.',
+  );
+  const amenities = amenitiesPedido.datos ?? null;
+  const elegido = amenities?.find((a) => a.id === elegidoId) ?? amenities?.[0] ?? null;
 
   // Lo que espera aprobación y el número del encabezado: de todo el consorcio.
-  useEffect(() => {
-    let vigente = true;
+  // Si falla, el panel queda vacío y el resto de la pantalla anda igual.
+  const resumenPedido = usePedido('resumen', async () => {
     const lunesHoy = lunesDe(hoy());
-    Promise.all([
+    const [pend, semanaActual] = await Promise.all([
       reservasService.listar({ consorcioId: consorcio.id, estado: 'PENDIENTE', situacion: 'proximas', limite: 50 }),
       reservasService.listar({ consorcioId: consorcio.id, desde: lunesHoy, hasta: sumarDias(lunesHoy, 6), limite: 100 }),
-    ])
-      .then(([pend, semanaActual]) => {
-        if (!vigente) return;
-        setPendientes([...pend.items].sort((a, b) => a.inicio.localeCompare(b.inicio)));
-        setEstaSemana(semanaActual.items.filter((r) => VIGENTES.includes(r.estado)).length);
-      })
-      .catch(() => vigente && setPendientes([]));
-    return () => {
-      vigente = false;
+    ]);
+    return {
+      pendientes: [...pend.items].sort((a, b) => a.inicio.localeCompare(b.inicio)),
+      estaSemana: semanaActual.items.filter((r) => VIGENTES.includes(r.estado)).length,
     };
-  }, [consorcio.id, version]);
+  });
+  const pendientes = resumenPedido.datos?.pendientes ?? (resumenPedido.error ? [] : null);
+  const estaSemana = resumenPedido.datos?.estaSemana ?? null;
 
-  // La semana del amenity elegido: sus reservas y sus bloqueos.
-  const amenityId = elegido?.id;
-  useEffect(() => {
-    if (!amenityId) return;
-    let vigente = true;
-    const domingo = sumarDias(lunes, 6);
-    Promise.all([
-      reservasService.listar({ amenityId, desde: lunes, hasta: domingo, limite: 100 }),
-      reservasService.listarBloqueos(amenityId, { desde: lunes, hasta: sumarDias(lunes, 7) }),
-    ])
-      .then(([r, bloqueos]) => {
-        if (vigente) setSemana({ reservas: r.items, bloqueos, clave: `${amenityId}:${lunes}` });
-      })
-      .catch((err) => {
-        if (vigente) setError(err instanceof ApiError ? err.message : 'No se pudo cargar la semana.');
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [amenityId, lunes, version]);
+  // La semana del amenity elegido: sus reservas y sus bloqueos. Con otra semana
+  // u otro amenity, la clave cambia y no se muestra la anterior como si fuera esta.
+  const semanaPedido = usePedido(
+    elegido ? `semana:${elegido.id}:${lunes}` : null,
+    async () => {
+      const [r, bloqueos] = await Promise.all([
+        reservasService.listar({ amenityId: elegido!.id, desde: lunes, hasta: sumarDias(lunes, 6), limite: 100 }),
+        reservasService.listarBloqueos(elegido!.id, { desde: lunes, hasta: sumarDias(lunes, 7) }),
+      ]);
+      return { reservas: r.items, bloqueos };
+    },
+    'No se pudo cargar la semana.',
+  );
+  const semanaVista = semanaPedido.datos ?? null;
+  const error = amenitiesPedido.error ?? semanaPedido.error;
 
-  // Mientras llega la semana nueva, la vieja no se muestra como si fuera esta.
-  const semanaVista = semana && semana.clave === `${amenityId}:${lunes}` ? semana : null;
+  /** Después de un cambio: todo lo que se ve, sin vaciar la pantalla. */
+  function recargar() {
+    amenitiesPedido.recargar();
+    resumenPedido.recargar();
+    semanaPedido.recargar();
+  }
 
   async function guardarAmenity(valores: ValoresAmenity) {
     if (dialogo === 'amenity' && elegido) {

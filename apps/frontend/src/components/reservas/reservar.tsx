@@ -1,18 +1,19 @@
 'use client';
 
 import { CalendarCheck, CheckCircle2, ListChecks } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { pesos } from '@/lib/formato';
 import { cn } from '@/lib/utils';
 import { reservasService } from '@/services/reservas';
-import type { Amenity, Disponibilidad, EstadoDeFranja, EstadoDelDia } from '@/types/reserva';
+import type { Amenity, Disponibilidad, EstadoDeFranja } from '@/types/reserva';
 import { resumenAmenity } from './amenity';
 import { celdasDelMes, CalendarioMensual } from './calendario-mensual';
 import { IconoAmenity } from './icono-amenity';
@@ -68,44 +69,29 @@ export function Reservar({ amenities, unidadId, onReservada }: ReservarProps) {
   const [fecha, setFecha] = useState<string | null>(null);
   const [franja, setFranja] = useState<{ desde: string; hasta: string } | null>(null);
   const [motivo, setMotivo] = useState('');
-  // Lo que llega del backend se guarda con la clave que lo pidió: si el vecino
-  // cambió de mes o de día antes de que llegue, no se muestra lo de otro.
-  const [calendario, setCalendario] = useState<{ clave: string; dias: Map<string, EstadoDelDia> } | null>(null);
-  const [disponibilidad, setDisponibilidad] = useState<{ clave: string; d: Disponibilidad } | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const amenity = amenities.find((a) => a.id === amenityId);
 
-  useEffect(() => {
-    if (!amenityId) return;
-    let vigente = true;
-    const celdas = celdasDelMes(mes);
-    reservasService
-      .calendario(amenityId, celdas[0], celdas[celdas.length - 1])
-      .then((c) => {
-        if (vigente) setCalendario({ clave: `${amenityId}:${mes}`, dias: new Map(c.dias.map((d) => [d.fecha, d.estado])) });
-      })
-      .catch((err) => vigente && setError(err instanceof ApiError ? err.message : 'No se pudo cargar el calendario.'));
-    return () => {
-      vigente = false;
-    };
-  }, [amenityId, mes]);
-
-  useEffect(() => {
-    if (!amenityId || !fecha) return;
-    let vigente = true;
-    reservasService
-      .disponibilidad(amenityId, fecha)
-      .then((d) => vigente && setDisponibilidad({ clave: `${amenityId}:${fecha}`, d }))
-      .catch((err) => vigente && setError(err instanceof ApiError ? err.message : 'No se pudo cargar el día.'));
-    return () => {
-      vigente = false;
-    };
-  }, [amenityId, fecha]);
-
-  const dias = calendario?.clave === `${amenityId}:${mes}` ? calendario.dias : null;
-  const dia = disponibilidad?.clave === `${amenityId}:${fecha}` ? disponibilidad.d : null;
+  // Cambiar de amenity, mes o día cambia la clave: lo que llegue tarde de otro no se muestra.
+  const calendario = usePedido(
+    `calendario:${amenityId}:${mes}`,
+    async () => {
+      const celdas = celdasDelMes(mes);
+      const c = await reservasService.calendario(amenityId, celdas[0], celdas[celdas.length - 1]);
+      return new Map(c.dias.map((d) => [d.fecha, d.estado]));
+    },
+    'No se pudo cargar el calendario.',
+  );
+  const disponibilidad = usePedido(
+    fecha ? `dia:${amenityId}:${fecha}` : null,
+    () => reservasService.disponibilidad(amenityId, fecha!),
+    'No se pudo cargar el día.',
+  );
+  const dias = calendario.datos ?? null;
+  const dia = disponibilidad.datos ?? null;
+  const errorDeCarga = calendario.error ?? disponibilidad.error;
 
   function elegirAmenity(id: string) {
     setAmenityId(id);
@@ -244,9 +230,9 @@ export function Reservar({ amenities, unidadId, onReservada }: ReservarProps) {
         </section>
       )}
 
-      {error && (
+      {(error ?? errorDeCarga) && (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{error ?? errorDeCarga}</AlertDescription>
         </Alert>
       )}
 

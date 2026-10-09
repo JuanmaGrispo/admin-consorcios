@@ -2,7 +2,7 @@
 
 import { BellOff, CheckCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
 import {
@@ -13,9 +13,14 @@ import {
 import { PageHeader } from '@/components/page-header';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { notificacionesService } from '@/services/notificaciones';
 import type { Notificacion } from '@/types/notificacion';
+
+const POR_PAGINA = 20;
+/** El backend no devuelve más de 100 por pedido. */
+const LIMITE_MAXIMO = 100;
 
 /**
  * El centro de notificaciones del vecino (la lista de la pantalla 16, a la
@@ -23,74 +28,44 @@ import type { Notificacion } from '@/types/notificacion';
  */
 export default function VecinoNotificacionesPage() {
   const router = useRouter();
-  const [avisos, setAvisos] = useState<Notificacion[] | null>(null);
-  const [noLeidas, setNoLeidas] = useState(0);
-  const [pagina, setPagina] = useState(1);
-  const [paginas, setPaginas] = useState(1);
-  const [cargandoMas, setCargandoMas] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [limite, setLimite] = useState(POR_PAGINA);
+  const pedido = usePedido(
+    `avisos:${limite}`,
+    () => notificacionesService.listar({ limite }),
+    'No se pudieron cargar tus avisos.',
+  );
+  // "Ver anteriores" pide una página más larga: mientras llega, sigue la lista de antes.
+  const datos = pedido.datos ?? (limite > POR_PAGINA ? pedido.ultimo : undefined);
 
-  useEffect(() => {
-    let vigente = true;
-    notificacionesService
-      .listar({ pagina: 1 })
-      .then((r) => {
-        if (!vigente) return;
-        setAvisos(r.items);
-        setNoLeidas(r.noLeidas);
-        setPaginas(r.paginas);
-      })
-      .catch((err) => {
-        if (vigente) setError(err instanceof ApiError ? err.message : 'No se pudieron cargar tus avisos.');
-      });
-    return () => {
-      vigente = false;
-    };
-  }, []);
-
-  async function verAnteriores() {
-    setCargandoMas(true);
-    try {
-      const r = await notificacionesService.listar({ pagina: pagina + 1 });
-      setAvisos((prev) => [...(prev ?? []), ...r.items]);
-      setPagina(r.pagina);
-      setPaginas(r.paginas);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'No se pudieron cargar más avisos.');
-    } finally {
-      setCargandoMas(false);
-    }
-  }
-
-  /** Lo marca leído en pantalla y en el backend; si lleva a algún lado, va. */
-  function abrir(n: Notificacion) {
-    if (n.leidaAt === null) {
-      setAvisos((prev) => prev?.map((a) => (a.id === n.id ? { ...a, leidaAt: new Date().toISOString() } : a)) ?? null);
-      setNoLeidas((c) => Math.max(0, c - 1));
-      void notificacionesService.marcarLeida(n.id).catch(() => undefined);
-    }
+  /** Lo marca leído y, si lleva a algún lado, va; si no, recarga para que se vea leído. */
+  async function abrir(n: Notificacion) {
     const destino = destinoDe(n);
+    if (n.leidaAt === null) {
+      // Si falla no pasa nada: el aviso sigue sin leer y se puede volver a tocar.
+      await notificacionesService.marcarLeida(n.id).catch(() => undefined);
+      if (!destino) pedido.recargar();
+    }
     if (destino) router.push(destino);
   }
 
   async function marcarTodas() {
     try {
       await notificacionesService.marcarTodas();
-      const ahora = new Date().toISOString();
-      setAvisos((prev) => prev?.map((a) => (a.leidaAt ? a : { ...a, leidaAt: ahora })) ?? null);
-      setNoLeidas(0);
+      pedido.recargar();
       toast.success('Listo, no te queda nada sin leer');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'No se pudieron marcar.');
     }
   }
 
+  const noLeidas = datos?.noLeidas ?? 0;
+
   return (
     <div className="flex flex-col gap-3">
       <PageHeader
         titulo="Notificaciones"
         volverA="/vecino"
-        descripcion={avisos && avisos.length > 0 ? (noLeidas ? `${noLeidas} sin leer` : 'Todo leído') : undefined}
+        descripcion={datos && datos.items.length > 0 ? (noLeidas ? `${noLeidas} sin leer` : 'Todo leído') : undefined}
         acciones={
           noLeidas > 0 && (
             <Button variant="outline" size="sm" onClick={marcarTodas}>
@@ -101,21 +76,21 @@ export default function VecinoNotificacionesPage() {
         }
       />
 
-      {error && (
+      {pedido.error && (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{pedido.error}</AlertDescription>
         </Alert>
       )}
 
-      {!avisos ? (
-        !error && (
+      {!datos ? (
+        !pedido.error && (
           <>
             <ItemNotificacionEsqueleto />
             <ItemNotificacionEsqueleto />
             <ItemNotificacionEsqueleto />
           </>
         )
-      ) : avisos.length === 0 ? (
+      ) : datos.items.length === 0 ? (
         <EmptyState
           icono={BellOff}
           titulo="No tenés avisos"
@@ -123,12 +98,17 @@ export default function VecinoNotificacionesPage() {
         />
       ) : (
         <>
-          {avisos.map((n) => (
-            <ItemNotificacion key={n.id} notificacion={n} onAbrir={() => abrir(n)} />
+          {datos.items.map((n) => (
+            <ItemNotificacion key={n.id} notificacion={n} onAbrir={() => void abrir(n)} />
           ))}
-          {pagina < paginas && (
-            <Button variant="outline" onClick={verAnteriores} disabled={cargandoMas} className="self-center">
-              {cargandoMas ? 'Cargando…' : 'Ver anteriores'}
+          {datos.total > datos.items.length && limite < LIMITE_MAXIMO && (
+            <Button
+              variant="outline"
+              onClick={() => setLimite((l) => Math.min(l + POR_PAGINA, LIMITE_MAXIMO))}
+              disabled={pedido.cargando}
+              className="self-center"
+            >
+              {pedido.cargando ? 'Cargando…' : 'Ver anteriores'}
             </Button>
           )}
         </>
