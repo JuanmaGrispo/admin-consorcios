@@ -73,6 +73,11 @@ const ESTADOS = {
     NO_ASISTE: { etiqueta: 'No asiste', variante: 'destructive' },
     SIN_RESPONDER: { etiqueta: 'Sin responder', variante: 'secondary' },
   },
+  /** Una novedad del muro: `activa` del backend, como estado. */
+  novedad: {
+    ACTIVA: { etiqueta: 'Publicada', variante: 'success' },
+    INACTIVA: { etiqueta: 'Dada de baja', variante: 'secondary' },
+  },
   /** El estado de cobranza de un consorcio en el panel general (GET /panel). */
   cobranza: {
     AL_DIA: { etiqueta: 'Al día', variante: 'success' },
