@@ -9,6 +9,14 @@ import { SITUACIONES, type SituacionBoleta } from './listar-boletas.query';
  * rápida de que el vecino deje de leer los mails del consorcio.
  */
 export class EnviarRecordatoriosDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Una sola boleta: el botón de enviar de cada fila de la grilla',
+  })
+  @IsOptional()
+  @IsUUID()
+  boletaId?: string;
+
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID()

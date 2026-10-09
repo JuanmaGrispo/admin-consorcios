@@ -19,6 +19,7 @@ import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import { CrearBloqueoDto } from './dto/crear-bloqueo.dto';
 import { CrearReservaDto } from './dto/crear-reserva.dto';
 import { CreateAmenityDto } from './dto/create-amenity.dto';
+import { CalendarioQuery } from './dto/calendario.query';
 import { DisponibilidadQuery } from './dto/disponibilidad.query';
 import { ListarAmenitiesQuery } from './dto/listar-amenities.query';
 import { ListarBloqueosQuery } from './dto/listar-bloqueos.query';
@@ -83,6 +84,20 @@ export class ReservasController {
     @Query() query: DisponibilidadQuery,
   ) {
     return this.reservas.disponibilidad(usuario, id, query);
+  }
+
+  @Get('amenities/:id/calendario')
+  @ApiOperation({
+    summary: 'Estado de cada día de un rango',
+    description:
+      'Para el calendario mensual: DISPONIBLE, PARCIAL, SIN_LUGAR o PASADO por día, según cuánto de la ventana tapan las reservas y los bloqueos. Hasta 62 días.',
+  })
+  calendario(
+    @UsuarioActual() usuario: Usuario,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: CalendarioQuery,
+  ) {
+    return this.reservas.calendario(usuario, id, query);
   }
 
   // ── Bloqueos de mantenimiento ──
@@ -159,6 +174,16 @@ export class ReservasController {
     @Body() dto: RechazarReservaDto,
   ) {
     return this.reservas.rechazar(usuario, id, dto);
+  }
+
+  @Roles(RolUsuario.ADMINISTRADOR)
+  @Patch('reservas/:id/sena-devuelta')
+  @ApiOperation({
+    summary: 'Registra que se devolvió la seña',
+    description: 'Con la reserva finalizada, cancelada o rechazada y la seña pagada. Avisa al vecino.',
+  })
+  marcarSenaDevuelta(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    return this.reservas.marcarSenaDevuelta(usuario, id);
   }
 
   @Patch('reservas/:id/cancelar')

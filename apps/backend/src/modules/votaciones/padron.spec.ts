@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { FormaConteo, PadronVotacion, VinculoUnidad } from '../../database/entities';
-import { armarPadron, pesoTotal, type UnidadParaPadron } from './padron';
+import { armarPadron, pesoTotal, type UnidadParaPadron, vistaDelPadron } from './padron';
 
 const { PROPIETARIO, INQUILINO } = VinculoUnidad;
 
@@ -57,5 +57,20 @@ describe('armarPadron', () => {
       FormaConteo.POR_UNIDAD,
     );
     assert.deepEqual(padron.get('u1')!.votantes, ['p1']);
+  });
+});
+
+describe('vistaDelPadron', () => {
+  it('cuenta las habilitadas y nombra las que quedan sin votante', () => {
+    const vista = vistaDelPadron(UNIDADES, PadronVotacion.SOLO_PROPIETARIOS, FormaConteo.POR_COEFICIENTE);
+    assert.equal(vista.habilitadas, 2);
+    assert.equal(vista.pesoTotal, 4);
+    assert.deepEqual(vista.sinVotante.map((u) => u.etiqueta), ['2A', '2B']);
+  });
+
+  it('con todas las unidades, sólo queda afuera la que no tiene a nadie', () => {
+    const vista = vistaDelPadron(UNIDADES, PadronVotacion.TODAS_LAS_UNIDADES, FormaConteo.POR_UNIDAD);
+    assert.deepEqual(vista.sinVotante.map((u) => u.etiqueta), ['2B']);
+    assert.equal(vista.pesoTotal, 3);
   });
 });

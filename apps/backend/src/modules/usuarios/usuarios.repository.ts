@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, SelectQueryBuilder } from 'typeorm';
-import { RolUsuario, Usuario } from '../../database/entities';
+import { PreferenciaNotificacion, RolUsuario, Usuario } from '../../database/entities';
 
 /** Tiene un vínculo vigente con alguna unidad de esos consorcios. */
 const VIVE_EN = `EXISTS (
@@ -16,7 +16,25 @@ export class UsuariosRepository {
   constructor(
     @InjectRepository(Usuario)
     private readonly repo: Repository<Usuario>,
+    @InjectRepository(PreferenciaNotificacion)
+    private readonly preferencias: Repository<PreferenciaNotificacion>,
   ) {}
+
+  preferenciasDe(usuarioId: string): Promise<PreferenciaNotificacion[]> {
+    return this.preferencias.findBy({ usuarioId });
+  }
+
+  /** Inserta o actualiza contra uq_preferencia (usuario, canal, categoría). */
+  async guardarPreferencias(
+    usuarioId: string,
+    cambios: Pick<PreferenciaNotificacion, 'canal' | 'categoria' | 'habilitado'>[],
+  ): Promise<void> {
+    if (cambios.length === 0) return;
+    await this.preferencias.upsert(
+      cambios.map((c) => ({ ...c, usuarioId })),
+      ['usuarioId', 'canal', 'categoria'],
+    );
+  }
 
   findAll(rol?: RolUsuario, buscar?: string): Promise<Usuario[]> {
     const qb = this.ordenado();

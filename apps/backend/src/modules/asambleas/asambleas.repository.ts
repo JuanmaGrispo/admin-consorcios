@@ -210,6 +210,14 @@ export class AsambleasRepository {
   }
 
   /** Una asamblea no se cierra con votaciones sin resultado. */
+  /** Las votaciones de la asamblea con su resultado: para el borrador del acta. */
+  votacionesDe(asambleaId: string): Promise<Votacion[]> {
+    return this.votaciones.find({
+      where: { asambleaId },
+      select: { id: true, titulo: true, puntoOrdenDiaId: true, resultado: true },
+    });
+  }
+
   votacionesAbiertas(asambleaId: string): Promise<number> {
     return this.votaciones.count({ where: { asambleaId, estado: EstadoVotacion.ABIERTA } });
   }
@@ -223,6 +231,22 @@ export class AsambleasRepository {
       .andWhere('v.usuario_id = :usuarioId', { usuarioId })
       .getRawMany<{ consorcioId: string }>();
     return filas.map((f) => f.consorcioId);
+  }
+
+  /** Las respuestas de estas unidades en estas asambleas: para el inicio del vecino. */
+  asistenciasDeUnidades(asambleaIds: string[], unidadIds: string[]): Promise<Asistencia[]> {
+    if (asambleaIds.length === 0 || unidadIds.length === 0) return Promise.resolve([]);
+    return this.asistenciasRepo.find({
+      where: { asambleaId: In(asambleaIds), unidadId: In(unidadIds) },
+    });
+  }
+
+  async unidadesDelUsuario(usuarioId: string): Promise<string[]> {
+    const filas = await this.vinculosVigentes()
+      .select('v.unidad_id', 'unidadId')
+      .andWhere('v.usuario_id = :usuarioId', { usuarioId })
+      .getRawMany<{ unidadId: string }>();
+    return filas.map((f) => f.unidadId);
   }
 
   async unidadesDelUsuarioEnConsorcio(usuarioId: string, consorcioId: string): Promise<string[]> {

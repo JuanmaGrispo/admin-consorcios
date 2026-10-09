@@ -33,6 +33,8 @@ export interface FilaCobranza {
   saldo: number;
   /** Medio del último pago aprobado. Sin pagos, `null`. */
   medio: MedioPago | null;
+  /** El último pago aprobado: para "Pagado el 08/08" y su recibo. Sin pagos, `null`. */
+  ultimoPago: { id: string; fecha: Date } | null;
   estado: EstadoBoleta;
   interesesMora: number;
 }

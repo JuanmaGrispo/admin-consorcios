@@ -20,6 +20,7 @@ import { ExpensasService } from '../expensas/expensas.service';
 import { CrearBloqueoDto } from './dto/crear-bloqueo.dto';
 import { CrearReservaDto } from './dto/crear-reserva.dto';
 import { CreateAmenityDto } from './dto/create-amenity.dto';
+import { CalendarioQuery } from './dto/calendario.query';
 import { DisponibilidadQuery } from './dto/disponibilidad.query';
 import { ListarAmenitiesQuery } from './dto/listar-amenities.query';
 import { ListarBloqueosQuery } from './dto/listar-bloqueos.query';
@@ -28,6 +29,7 @@ import { RechazarReservaDto } from './dto/rechazar-reserva.dto';
 import { UpdateAmenityDto } from './dto/update-amenity.dto';
 import {
   cierraAlDiaSiguiente,
+  estadoDelDia,
   largoDeVentana,
   ProblemaFranja,
   validarFranja,
@@ -36,6 +38,23 @@ import {
 import { ReservasRepository } from './reservas.repository';
 
 const CANCELABLES = [EstadoReserva.PENDIENTE, EstadoReserva.APROBADA];
+
+/** Después de estos estados la seña ya no reserva nada: se devuelve. */
+const SENA_DEVOLVIBLE = [EstadoReserva.FINALIZADA, EstadoReserva.CANCELADA, EstadoReserva.RECHAZADA];
+
+/** La seña de una reserva, como la ve el portal ("Seña de $60.000 pendiente de pago"). */
+export interface SenaDeReserva {
+  monto: number;
+  pagada: boolean;
+  /** El último pago aprobado de la seña, para su recibo. */
+  pagoId: string | null;
+  devueltaAt: Date | null;
+}
+
+export type ReservaConSena = Reserva & { sena: SenaDeReserva | null };
+
+/** Un mes y algo: el calendario del vecino nunca pide más. */
+const DIAS_MAXIMOS_CALENDARIO = 62;
 
 @Injectable()
 export class ReservasService {
@@ -153,6 +172,75 @@ export class ReservasService {
     };
   }
 
+  /**
+   * El estado de cada día de un rango (el calendario mensual del vecino):
+   * disponible, parcial, sin lugar o pasado. Una sola consulta de reservas y
+   * otra de bloqueos para todo el rango, en vez de una disponibilidad por día.
+   */
+  async calendario(usuario: UsuarioActual, id: string, query: CalendarioQuery) {
+    if (query.hasta < query.desde) {
+      throw new BadRequestException('hasta no puede ser anterior a desde');
+    }
+    const dias = (Date.parse(query.hasta) - Date.parse(query.desde)) / 86_400_000 + 1;
+    if (dias > DIAS_MAXIMOS_CALENDARIO) {
+      throw new BadRequestException(`El calendario abarca hasta ${DIAS_MAXIMOS_CALENDARIO} días`);
+    }
+
+    await this.reservas.cerrarVencidas();
+    const amenity = await this.findAmenity(usuario, id);
+    const { ventanas, ahora } = await this.reservas.ventanasDelRango(
+      query.desde,
+      query.hasta,
+      amenity.horaApertura,
+      amenity.horaCierre,
+      ZONA_POR_DEFECTO,
+    );
+    const inicio = ventanas[0].inicio;
+    const fin = ventanas[ventanas.length - 1].fin;
+    const [reservas, bloqueos] = await Promise.all([
+      this.reservas.reservasEnRango(id, inicio, fin),
+      this.reservas.bloqueosEnRango(id, inicio, fin),
+    ]);
+    const ocupado = [
+      ...reservas.map((r) => ({ inicio: r.inicio, fin: r.fin })),
+      ...bloqueos.map((b) => ({ inicio: b.desde, fin: b.hasta })),
+    ];
+
+    return {
+      amenityId: amenity.id,
+      horaApertura: amenity.horaApertura,
+      horaCierre: amenity.horaCierre,
+      cierraAlDiaSiguiente: cierraAlDiaSiguiente(amenity.horaApertura, amenity.horaCierre),
+      dias: ventanas.map((v) => ({ fecha: v.fecha, estado: estadoDelDia(v, ocupado, ahora) })),
+    };
+  }
+
+  /**
+   * Para los accesos rápidos del inicio ("Reservar SUM · Libre hoy"): los
+   * amenities activos que ve el usuario y si hoy tienen algo tomado.
+   */
+  async ocupacionDeHoy(usuario: UsuarioActual, fecha: string) {
+    const amenities = (await this.listarAmenities(usuario, {})).filter((a) => a.activo);
+    const { inicio, fin } = await this.reservas.instantes(fecha, '00:00', '24:00', ZONA_POR_DEFECTO);
+    return Promise.all(
+      amenities.map(async (a) => {
+        const [reservas, bloqueos] = await Promise.all([
+          this.reservas.reservasEnRango(a.id, inicio, fin),
+          this.reservas.bloqueosEnRango(a.id, inicio, fin),
+        ]);
+        return {
+          id: a.id,
+          nombre: a.nombre,
+          icono: a.icono,
+          consorcioId: a.consorcioId,
+          reservasHoy: reservas.length,
+          bloqueadoHoy: bloqueos.length > 0,
+          libreHoy: reservas.length === 0 && bloqueos.length === 0,
+        };
+      }),
+    );
+  }
+
   // ── Bloqueos ───────────────────────────────────────────────────────────────
 
   async listarBloqueos(
@@ -225,12 +313,89 @@ export class ReservasService {
     await this.reservas.cerrarVencidas();
     const { items, total } = await this.reservas.listar(query, await this.alcance(usuario));
     const limite = query.limite ?? 20;
-    return { items, total, pagina: query.pagina ?? 1, paginas: Math.ceil(total / limite) || 1 };
+    return {
+      items: await this.conSena(items),
+      total,
+      pagina: query.pagina ?? 1,
+      paginas: Math.ceil(total / limite) || 1,
+    };
   }
 
-  async findOne(usuario: UsuarioActual, id: string): Promise<Reserva> {
+  async findOne(usuario: UsuarioActual, id: string): Promise<ReservaConSena> {
     await this.reservas.cerrarVencidas();
-    return this.buscarConPermiso(usuario, id);
+    const [conSena] = await this.conSena([await this.buscarConPermiso(usuario, id)]);
+    return conSena;
+  }
+
+  // ── Seña ───────────────────────────────────────────────────────────────────
+
+  /**
+   * Para pagos: la reserva sobre la que se puede cobrar la seña y cuánto
+   * falta. Mismos permisos que verla, y sólo mientras la reserva sigue en pie
+   * y por delante: pagar la seña de algo cancelado o que ya pasó no tiene sentido.
+   */
+  async senaPagable(usuario: UsuarioActual, id: string): Promise<{ reserva: Reserva; saldo: number }> {
+    await this.reservas.cerrarVencidas();
+    const reserva = await this.buscarConPermiso(usuario, id);
+    if (reserva.amenity.montoSena <= 0) {
+      throw new BadRequestException(`${reserva.amenity.nombre} no pide seña`);
+    }
+    if (!CANCELABLES.includes(reserva.estado) || reserva.inicio <= (await this.reservas.ahora())) {
+      throw new BadRequestException(`La reserva está ${reserva.estado}: ya no se paga la seña`);
+    }
+    const pagado = (await this.reservas.senasDe([id])).get(id)?.pagado ?? 0;
+    const saldo = Math.round((reserva.amenity.montoSena - pagado) * 100) / 100;
+    if (saldo <= 0) throw new BadRequestException('La seña ya está pagada');
+    return { reserva, saldo };
+  }
+
+  /** Para pagos: lo que hace falta para avisar o imprimir, sin chequear permisos. */
+  async findInterna(id: string): Promise<Reserva> {
+    const reserva = await this.reservas.findById(id);
+    if (!reserva) throw new NotFoundException(`La reserva ${id} no existe`);
+    return reserva;
+  }
+
+  /** El administrador registra que devolvió la seña, una vez que la reserva terminó. */
+  async marcarSenaDevuelta(usuario: UsuarioActual, id: string): Promise<ReservaConSena> {
+    await this.reservas.cerrarVencidas();
+    const reserva = await this.buscarConPermiso(usuario, id);
+    if (!SENA_DEVOLVIBLE.includes(reserva.estado)) {
+      throw new BadRequestException(`La reserva está ${reserva.estado}: la seña se devuelve cuando termina`);
+    }
+    if (!(await this.reservas.senasDe([id])).has(id)) {
+      throw new BadRequestException('Esta reserva no tiene una seña pagada');
+    }
+    if (reserva.senaDevueltaAt) throw new BadRequestException('La seña ya se devolvió');
+
+    await this.reservas.actualizarReserva(reserva, { senaDevueltaAt: await this.reservas.ahora() });
+    await this.avisar(
+      reserva.solicitadaPorId,
+      `Te devolvimos la seña de ${reserva.amenity.nombre}`,
+      `Se registró la devolución de $${reserva.amenity.montoSena.toFixed(2)}.`,
+      `reserva:${reserva.id}`,
+    );
+    return this.findOne(usuario, id);
+  }
+
+  private async conSena(reservas: Reserva[]): Promise<ReservaConSena[]> {
+    const senas = await this.reservas.senasDe(reservas.map((r) => r.id));
+    return reservas.map((r) => {
+      const monto = r.amenity?.montoSena ?? 0;
+      const pago = senas.get(r.id);
+      return {
+        ...r,
+        sena:
+          monto > 0
+            ? {
+                monto,
+                pagada: !!pago && Math.round(pago.pagado * 100) >= Math.round(monto * 100),
+                pagoId: pago?.pagoId ?? null,
+                devueltaAt: r.senaDevueltaAt,
+              }
+            : null,
+      };
+    });
   }
 
   async crear(usuario: UsuarioActual, dto: CrearReservaDto): Promise<Reserva> {

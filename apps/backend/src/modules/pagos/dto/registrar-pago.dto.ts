@@ -1,16 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn, IsNumber, IsOptional, IsPositive, IsUUID, Max } from 'class-validator';
+import { IsDateString, IsIn, IsNumber, IsOptional, IsPositive, Max } from 'class-validator';
 import { MedioPago } from '../../../database/entities';
+import { DestinoPagoDto } from './destino-pago';
 
 /** Los pagos por Mercado Pago entran sólo por su flujo, nunca a mano. */
 export const MEDIOS_MANUALES = [MedioPago.TRANSFERENCIA, MedioPago.EFECTIVO, MedioPago.OTRO];
 
 /** Un pago que el administrador registra a mano: transferencia, efectivo, etc. */
-export class RegistrarPagoDto {
-  @ApiProperty({ format: 'uuid' })
-  @IsUUID()
-  boletaId: string;
-
+export class RegistrarPagoDto extends DestinoPagoDto {
   // numeric(14,2)
   @ApiProperty({ example: 45000 })
   @IsNumber({ maxDecimalPlaces: 2 })

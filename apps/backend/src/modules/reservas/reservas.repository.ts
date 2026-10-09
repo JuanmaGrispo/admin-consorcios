@@ -85,6 +85,53 @@ export class ReservasRepository {
     return fila;
   }
 
+  /**
+   * La ventana del amenity en cada día del rango, como instantes, y el reloj
+   * de la base. Misma regla que `instantes`: un cierre igual o anterior a la
+   * apertura es del día siguiente.
+   */
+  async ventanasDelRango(
+    desde: string,
+    hasta: string,
+    horaApertura: string,
+    horaCierre: string,
+    zona: string,
+  ): Promise<{ ventanas: { fecha: string; inicio: Date; fin: Date }[]; ahora: Date }> {
+    const filas: { fecha: string; inicio: Date; fin: Date; ahora: Date }[] = await this.dataSource.query(
+      `SELECT d::date::text AS fecha,
+              (d::date + $3::time) AT TIME ZONE $5 AS inicio,
+              (d::date + (CASE WHEN $4::time <= $3::time THEN 1 ELSE 0 END) + $4::time)
+                AT TIME ZONE $5 AS fin,
+              now() AS ahora
+         FROM generate_series($1::date, $2::date, interval '1 day') AS d
+        ORDER BY d`,
+      [desde, hasta, horaApertura, horaCierre, zona],
+    );
+    return {
+      ventanas: filas.map(({ fecha, inicio, fin }) => ({ fecha, inicio, fin })),
+      ahora: filas[0]?.ahora ?? new Date(),
+    };
+  }
+
+  /**
+   * Lo pagado de seña por reserva (pagos SENA_RESERVA aprobados) y el último
+   * de esos pagos. Lee `pago` como expensas: el cobro es de pagos, pero el
+   * estado de la seña es de la reserva.
+   */
+  async senasDe(reservaIds: string[]): Promise<Map<string, { pagado: number; pagoId: string }>> {
+    if (reservaIds.length === 0) return new Map();
+    const filas: { reservaId: string; pagado: number; pagoId: string }[] = await this.dataSource.query(
+      `SELECT reserva_id AS "reservaId",
+              sum(monto)::float AS pagado,
+              (array_agg(id ORDER BY coalesce(fecha_pago, created_at) DESC))[1] AS "pagoId"
+         FROM pago
+        WHERE concepto = 'SENA_RESERVA' AND estado = 'APROBADO' AND reserva_id = ANY($1::uuid[])
+        GROUP BY reserva_id`,
+      [reservaIds],
+    );
+    return new Map(filas.map((f) => [f.reservaId, { pagado: f.pagado, pagoId: f.pagoId }]));
+  }
+
   /** Un instante suelto a partir de fecha y hora de pared (los bloqueos). */
   async instante(fechaHora: string, zona: string): Promise<Date> {
     const [fila] = (await this.dataSource.query(

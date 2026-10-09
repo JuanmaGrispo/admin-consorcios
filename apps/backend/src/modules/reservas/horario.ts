@@ -66,3 +66,36 @@ export function validarFranja(
 
   return null;
 }
+
+export type EstadoDelDia = 'DISPONIBLE' | 'PARCIAL' | 'SIN_LUGAR' | 'PASADO';
+
+/**
+ * Cómo está un día del calendario: cuánto de la ventana del amenity tapan las
+ * reservas que ocupan y los bloqueos. Los intervalos se recortan a la ventana
+ * y se unen antes de medir, porque una reserva y un bloqueo pueden solaparse.
+ */
+export function estadoDelDia(
+  ventana: { inicio: Date; fin: Date },
+  ocupado: { inicio: Date; fin: Date }[],
+  ahora: Date,
+): EstadoDelDia {
+  if (ventana.fin <= ahora) return 'PASADO';
+
+  const desde = Math.max(ventana.inicio.getTime(), ahora.getTime());
+  const hasta = ventana.fin.getTime();
+  const tramos = ocupado
+    .map((o) => [Math.max(o.inicio.getTime(), desde), Math.min(o.fin.getTime(), hasta)])
+    .filter(([i, f]) => f > i)
+    .sort((a, b) => a[0] - b[0]);
+
+  let cubierto = 0;
+  let cursor = desde;
+  for (const [i, f] of tramos) {
+    if (f <= cursor) continue;
+    cubierto += f - Math.max(i, cursor);
+    cursor = f;
+  }
+
+  if (cubierto === 0) return 'DISPONIBLE';
+  return cubierto >= hasta - desde ? 'SIN_LUGAR' : 'PARCIAL';
+}

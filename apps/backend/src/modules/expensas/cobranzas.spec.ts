@@ -75,6 +75,7 @@ const fila = (extra: Partial<FilaCobranza> = {}): FilaCobranza => ({
   pagado: 60_000,
   saldo: 95_520,
   medio: MedioPago.TRANSFERENCIA,
+  ultimoPago: { id: 'p1', fecha: new Date('2026-09-05T12:00:00Z') },
   estado: EstadoBoleta.VENCIDA,
   interesesMora: 1_240.5,
   ...extra,

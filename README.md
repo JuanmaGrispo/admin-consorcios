@@ -198,6 +198,7 @@ contraseña inicial que el vecino cambia desde su perfil.
 | PUT    | `/usuarios/:id/password` | superadmin · admin sobre sus vecinos: le pone una contraseña nueva |
 | GET · PATCH | `/perfil` | con sesión: los datos propios (nombre, teléfono, avatar) |
 | PUT    | `/perfil/password` | con sesión: cambia la propia, pidiendo la actual |
+| GET · PUT | `/perfil/preferencias` | con sesión: cómo recibir los avisos, canal × categoría (ver [Mensajería](#mensajería)) |
 
 Dar de baja una cuenta es del superadmin: un vecino puede vivir en consorcios
 de administradores distintos, así que el administrador termina el vínculo en
@@ -495,7 +496,7 @@ El estado `PRORRATEO` del enum no se usa.
 | GET    | `/boletas/resumen`                          | emitido, cobrado, saldo, intereses y el conteo de cada solapa |
 | GET    | `/boletas/exportar`                         | la grilla en CSV, sin paginar |
 | POST   | `/boletas/recordatorios`                    | administrador: avisa a quienes tienen saldo |
-| GET    | `/boletas/:id`                              | con el detalle línea por línea; al vecino, 404 si no es suya o no se emitió |
+| GET    | `/boletas/:id`                              | con el detalle línea por línea (cada una con su gasto y rubro, para agrupar por rubro); al vecino, 404 si no es suya o no se emitió |
 | GET    | `/boletas/:id/pdf`                          | la boleta en PDF, mismos permisos que el detalle |
 | PATCH  | `/boletas/:id/ajuste`                       | administrador, sólo en previsualización |
 | GET    | `/rubros-gasto`                             | cualquier logueado (`?consorcioId=`: los suyos más los compartidos) |
@@ -517,6 +518,7 @@ reclamarle:
     "coeficienteAplicado": 1.86,
     "emitido": 155520, "pagado": 60000, "saldo": 95520,
     "medio": "TRANSFERENCIA",       // el del último pago aprobado; null si no hubo
+    "ultimoPago": { "id": "…", "fecha": "2026-09-04T17:38:00Z" },  // "Pagado el…" y su recibo
     "estado": "VENCIDA", "interesesMora": 1240.5
   }],
   "total": 48, "pagina": 1, "paginas": 3
@@ -549,7 +551,8 @@ una dependencia nueva y Excel abre este archivo igual.
 
 **`POST /boletas/recordatorios`** manda un aviso por `Notificador` a cada
 vecino de cada boleta **con saldo** del alcance
-(`{ liquidacionId?, consorcioId?, periodo?, situacion?, mensaje? }`). Nunca a
+(`{ boletaId?, liquidacionId?, consorcioId?, periodo?, situacion?, mensaje? }`;
+`boletaId` es el botón de enviar de una sola fila). Nunca a
 quien ya pagó, y nunca por una liquidación sin emitir: reclamar una deuda que
 todavía no existe es peor que no avisar. Devuelve
 `{ boletas, avisos, sinDestinatario, fallidos }`; un aviso que falla no corta
@@ -663,8 +666,9 @@ antes de cada lectura de boletas, sin cron.
 | GET    | `/pagos`                          | admin: los de sus consorcios · vecino: los de sus unidades (filtros `boletaId`, `unidadId`, `estado`) |
 | GET    | `/pagos/:id`                      | detalle con su unidad y su boleta; al vecino, 404 si no es de una unidad suya |
 | GET    | `/pagos/:id/recibo`               | el recibo en PDF, sólo de un pago aprobado |
-| POST   | `/pagos`                          | administrador: pago manual `{ boletaId, monto, medio, fechaPago? }` |
-| POST   | `/pagos/mercadopago/preferencia`  | dueño de la boleta o administrador: `{ boletaId }` → `{ pagoId, initPoint }` |
+| POST   | `/pagos`                          | administrador: pago manual `{ boletaId \| reservaId, monto, medio, fechaPago? }` |
+| POST   | `/pagos/mercadopago/preferencia`  | dueño de la boleta o la reserva, o administrador: `{ boletaId }` o `{ reservaId }` → `{ pagoId, initPoint }` |
+| POST   | `/pagos/:id/sincronizar`          | mismos permisos que el detalle: le pregunta a Mercado Pago cómo quedó el pago, sin esperar al webhook |
 | POST   | `/pagos/webhook/mercadopago`      | público, protegido por firma: lo llama Mercado Pago |
 
 ### Reglas
@@ -716,8 +720,14 @@ una columna del consorcio y la secuencia se vuelve una por punto de venta.
 ### Configurar Mercado Pago
 
 En `apps/backend/.env`, con credenciales **de prueba**: `MP_ACCESS_TOKEN`,
-`MP_WEBHOOK_SECRET`, `MP_NOTIFICATION_URL` y `FRONTEND_URL` (ver
-`.env.example`). En local, el webhook necesita una URL pública: un túnel a
+`MP_WEBHOOK_SECRET`, `MP_NOTIFICATION_URL`, `FRONTEND_URL` y `MP_RETURN_PATH`
+(ver `.env.example`). El vecino vuelve a `FRONTEND_URL + MP_RETURN_PATH` con
+`?pago=aprobado|pendiente|rechazado`, y Mercado Pago agrega
+`external_reference`, que es el id de nuestro pago. Con ese id el front llama a
+`POST /pagos/:id/sincronizar` para mostrar el resultado: así no depende de que
+el webhook ya haya llegado. Los dos aplican la misma transición, y es
+condicional (sólo si el pago sigue en el estado que se leyó), así que el recibo
+se numera y el aviso sale una sola vez aunque lleguen juntos. En local, el webhook necesita una URL pública: un túnel a
 `http://localhost:4000/api/pagos/webhook/mercadopago`. Sin token, la
 preferencia responde 503 y el resto de la app anda igual.
 
@@ -737,6 +747,7 @@ al que debe expensas).
 | POST   | `/amenities`                               | administrador |
 | PATCH  | `/amenities/:id`                           | administrador (`activo: false` lo da de baja) |
 | GET    | `/amenities/:id/disponibilidad?fecha=`     | cualquier logueado: la ventana del día y lo ocupado |
+| GET    | `/amenities/:id/calendario?desde=&hasta=`  | cualquier logueado: `DISPONIBLE`, `PARCIAL`, `SIN_LUGAR` o `PASADO` por día (hasta 62 días), para el calendario mensual |
 | GET    | `/amenities/:id/bloqueos`                  | administrador (filtros `desde`, `hasta`) |
 | POST   | `/amenities/:id/bloqueos`                  | administrador |
 | DELETE | `/amenities/:id/bloqueos/:bloqueoId`       | administrador |
@@ -746,6 +757,7 @@ al que debe expensas).
 | PATCH  | `/reservas/:id/aprobar`                    | administrador |
 | PATCH  | `/reservas/:id/rechazar`                   | administrador (`motivoRechazo` obligatorio) |
 | PATCH  | `/reservas/:id/cancelar`                   | el vecino dueño o el administrador |
+| PATCH  | `/reservas/:id/sena-devuelta`              | administrador: registra que devolvió la seña |
 
 Filtros de `GET /reservas`: `amenityId`, `consorcioId`, `unidadId`, `estado`,
 `situacion` (`proximas`/`pasadas`), `desde`, `hasta`, `pagina`, `limite`.
@@ -819,6 +831,23 @@ de `consorcio` y sólo cambia quien la llama.
   reservar. Reservas no toca las tablas de expensas: le pregunta a
   `ExpensasService.tieneDeudaVencida`.
 
+### Seña
+
+Si el amenity tiene `monto_sena`, cada reserva trae
+`sena: { monto, pagada, pagoId, devueltaAt }` (null si no pide seña). La seña
+se paga por pagos, igual que una boleta: `POST /pagos/mercadopago/preferencia`
+con `{ reservaId }`, o el administrador la registra a mano con `POST /pagos`.
+El pago es `SENA_RESERVA` con `reserva_id` (el CHECK `ck_pago_destino` de la
+base exige uno u otro destino). Sólo se paga mientras la reserva está
+`PENDIENTE` o `APROBADA` y no empezó, y nunca más que lo que falta. Si igual
+entra de más, se avisa al administrador, como en expensas.
+
+La devolución la registra el administrador (`PATCH /reservas/:id/sena-devuelta`)
+una vez que la reserva terminó, se canceló o se rechazó: guarda
+`sena_devuelta_at` y le avisa a quien reservó. La plata se devuelve por fuera
+del sistema. El estado de la seña sale de los pagos aprobados, así que un
+reintegro de Mercado Pago la vuelve a "pendiente" solo.
+
 ### Bloqueos de mantenimiento
 
 El administrador cierra el amenity un rango de fechas (`amenity_bloqueo`) y ahí
@@ -867,9 +896,6 @@ mismo 409.
 
 ### Pendiente
 
-- **Seña** (`monto_sena`, `dias_devolucion_sena`, `pago.reserva_id` con
-  `ConceptoPago.SENA_RESERVA`): las columnas están y se exponen, pero la reserva
-  todavía no genera ningún pago.
 - `cupo_personas` se guarda pero no se valida contra nada: hoy no se pide cuánta
   gente va.
 
@@ -962,7 +988,8 @@ asambleas, reservas, votaciones y novedades.
     "expensas": {                       // null si el consorcio nunca emitió
       "boletaId": "…", "periodo": "2026-08", "fechaVencimiento": "2026-09-10",
       "total": 145320.5, "pagado": 0, "saldo": 145320.5,
-      "estado": "PENDIENTE", "diasParaVencer": 6
+      "estado": "PENDIENTE", "diasParaVencer": 6,
+      "ultimoPago": null               // { id, fecha }: "Pagaste … el 04/09" y "Ver recibo"
     },
     "reclamosAbiertos": 1
   }],
@@ -970,7 +997,12 @@ asambleas, reservas, votaciones y novedades.
     { "tipo": "RESERVA", "id": "…", "titulo": "SUM", "fecha": "2026-10-05T21:00:00Z",
       "fin": "2026-10-06T01:00:00Z", "unidadId": "…", "amenityId": "…" },
     { "tipo": "ASAMBLEA", "id": "…", "titulo": "Asamblea ordinaria", "fecha": "2026-10-12T22:00:00Z",
-      "lugar": "SUM del edificio", "estado": "CONVOCADA", "consorcioId": "…" }
+      "lugar": "SUM del edificio", "estado": "CONVOCADA", "consorcioId": "…",
+      "quorumPorcentaje": 54.3, "quorumRequerido": 60, "miAsistencia": "SIN_RESPONDER" }
+  ],
+  "amenities": [                     // los accesos rápidos: "Reservar SUM · Libre hoy"
+    { "id": "…", "nombre": "SUM", "icono": "deck", "consorcioId": "…",
+      "reservasHoy": 0, "bloqueadoHoy": false, "libreHoy": true }
   ],
   "novedades": [                     // las últimas 5 del muro, fijadas primero
     { "id": "…", "titulo": "Corte de agua el martes", "cuerpo": "…", "fijada": true,
@@ -1056,6 +1088,7 @@ Módulo `src/modules/asambleas/`. Diseño en
 | PUT | `/asambleas/:id/orden-dia` | admin |
 | POST | `/asambleas/:id/convocar` · `/iniciar` · `/cerrar` | admin |
 | PATCH | `/asambleas/:id/acta` | admin |
+| GET | `/asambleas/:id/acta-borrador` | admin: el borrador del acta en PDF |
 | GET | `/asambleas/:id/asistencias` | admin |
 | PATCH | `/asambleas/:id/asistencias/:unidadId` | admin |
 | PUT | `/asambleas/:id/asistencia` | vecino |
@@ -1069,7 +1102,11 @@ quórum y su propia respuesta, nunca los nombres de los demás.
 
 ### Acta
 
-El PDF se sube primero con `POST /archivos?destino=actas` y después se guarda
+`GET /asambleas/:id/acta-borrador` arma un borrador en PDF con lo que el
+sistema sabe (quórum, asistencia con poderes, orden del día y resultado de cada
+votación) para completar y firmar. Es el "Descargar acta" del detalle.
+
+El acta firmada se sube primero con `POST /archivos?destino=actas` y después se guarda
 su URL con `PATCH /asambleas/:id/acta`. Una URL que no venga de ahí —externa
 o de otro destino— responde 400.
 
@@ -1096,7 +1133,9 @@ Módulo `src/modules/votaciones/`. Diseño en
   Si pasa el cierre y sigue abierta, se cierra sola en la próxima consulta
   (sin cron, como las reservas vencidas).
 - **De asamblea**: se crea sobre un punto `CON_VOTACION` del orden del día
-  (uno por punto). Se vota con la asamblea `EN_CURSO`; con
+  (uno por punto), o con `asambleaId`, que suma un punto nuevo al final del
+  orden del día aunque la asamblea ya esté convocada (el "Agregar votación"
+  del detalle). El punto y la votación se crean en la misma transacción. Se vota con la asamblea `EN_CURSO`; con
   `permiteVotoAnticipado`, el vecino también puede votar desde la app con la
   asamblea convocada, y el voto queda `anticipado`. La cierra el admin.
 
@@ -1139,6 +1178,7 @@ de una votación sólo se carga si está `APROBADA` (ya lo valida expensas).
 | PATCH · DELETE | `/votaciones/:id` | admin |
 | PUT | `/votaciones/:id/opciones` | admin |
 | POST | `/votaciones/:id/publicar` · `/cerrar` | admin |
+| GET | `/votaciones/padron?consorcioId=&padron=&formaConteo=` | admin: vista previa del padrón antes de crear (habilitadas, peso total y unidades sin votante) |
 | GET | `/votaciones/:id/votos` | admin |
 | POST | `/votaciones/:id/votos/:unidadId` | admin |
 | POST | `/votaciones/:id/votos` | vecino |
@@ -1191,6 +1231,7 @@ consumidores deciden qué hacer con cada uno.
 ```
 services ──publicar()──▶ exchange domus.eventos (topic)
                             ├─ q.email-notificador        (#)  → mail a quien corresponda
+                            ├─ q.bandeja-notificaciones   (#)  → aviso en el centro de notificaciones
                             └─ q.muro-novedades-publicador (asamblea.creada, votacion.nueva,
                                                             votacion.cerrada, expensas.emitidas) → novedad
 ```
@@ -1217,6 +1258,16 @@ services ──publicar()──▶ exchange domus.eventos (topic)
 - `modules/email/`: `EmailNotificador` manda con NodeMailer. Cada mail queda en
   `envio_notificacion` (PENDIENTE, ENVIADO o FALLIDO), y un reintento no repite
   los que ya salieron.
+- `modules/bandeja/`: `BandejaNotificaciones` guarda cada evento en la tabla
+  `notificacion` de cada destinatario (los mismos que el mail, se lea o no el
+  mail), con la marca en `evento_procesado`. Es lo que leen la campana y el
+  centro de notificaciones:
+
+  | Método | Ruta | Quién |
+  |---|---|---|
+  | GET | `/notificaciones` | con sesión: las propias, con `noLeidas` (`?soloNoLeidas=`, `pagina`, `limite`) |
+  | PATCH | `/notificaciones/:id/leida` | la propia; ajena, 404 |
+  | POST | `/notificaciones/leer-todas` | con sesión |
 - `modules/novedades/`: `MuroNovedadesPublicador`. La novedad se guarda junto con
   la marca en `evento_procesado`, así un evento repetido no la duplica.
 
@@ -1247,8 +1298,14 @@ no importa quién procese cada mensaje.
 
 - Si el broker está caído y el proceso se reinicia antes de reconectar, los
   eventos que retenía en memoria se pierden. Lo robusto es una tabla outbox.
-- No se respeta `preferencia_notificacion` ni se llena la bandeja in-app
-  (`notificacion`): todavía no hay pantallas para eso.
+- **Preferencias.** El mail respeta `preferencia_notificacion`: quien apagó
+  `EMAIL` para una categoría no recibe esos avisos. La categoría sale del tipo
+  de evento o, en un `aviso.directo`, del prefijo de su `origen`
+  (`core/notificaciones/categorias.ts`): `boleta:` es VENCIMIENTOS, `pago:`
+  BOLETAS, `reclamo:` y `reserva:` RECLAMOS_RESERVAS. Un origen sin categoría
+  (el aviso de cobro duplicado al administrador) sale siempre. Sin fila
+  guardada, todo está habilitado. WhatsApp y push se guardan pero todavía no
+  envían nada (`disponible: false`).
 
 ## Datos de demo
 

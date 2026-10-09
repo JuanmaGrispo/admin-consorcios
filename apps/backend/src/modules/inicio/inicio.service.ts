@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { EstadoAsamblea, EstadoReserva, VinculoUnidad } from '../../database/entities';
+import { EstadoAsamblea, EstadoAsistencia, EstadoReserva, VinculoUnidad } from '../../database/entities';
 import { AsambleasService } from '../asambleas/asambleas.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ExpensasService, type SaldoDeUnidad } from '../expensas/expensas.service';
 import { NovedadesService, type NovedadVista } from '../novedades/novedades.service';
 import { ReclamosService } from '../reclamos/reclamos.service';
+import { ZONA_POR_DEFECTO } from '../reservas/horario';
 import { ReservasService } from '../reservas/reservas.service';
 import { UnidadesService } from '../unidades/unidades.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
@@ -39,6 +40,11 @@ export type EventoProximo =
       lugar: string | null;
       estado: EstadoAsamblea;
       consorcioId: string;
+      /** El quórum confirmado hasta ahora (% de coeficientes). */
+      quorumPorcentaje: number | null;
+      quorumRequerido: number;
+      /** Lo que respondió por su unidad; null si no tiene unidad convocada. */
+      miAsistencia: EstadoAsistencia | null;
     }
   | {
       tipo: 'RESERVA';
@@ -60,10 +66,22 @@ export type EventoProximo =
       asambleaId: string | null;
     };
 
+/** Un amenity para los accesos rápidos ("Reservar SUM · Libre hoy"). */
+export interface AmenityDeInicio {
+  id: string;
+  nombre: string;
+  icono: string | null;
+  consorcioId: string;
+  reservasHoy: number;
+  bloqueadoHoy: boolean;
+  libreHoy: boolean;
+}
+
 export interface Inicio {
   usuario: { id: string; nombre: string; apellido: string; avatarUrl: string | null };
   unidades: UnidadDeInicio[];
   proximosEventos: EventoProximo[];
+  amenities: AmenityDeInicio[];
   /** Lo último del muro de sus edificios, fijadas primero, con `leida`. */
   novedades: NovedadVista[];
 }
@@ -127,6 +145,10 @@ export class InicioService {
       },
       unidades,
       proximosEventos: await this.proximosEventos(usuario),
+      amenities: await this.reservas.ocupacionDeHoy(
+        usuario,
+        new Date().toLocaleDateString('en-CA', { timeZone: ZONA_POR_DEFECTO }),
+      ),
       novedades: await this.novedades.ultimasDelVecino(usuario, NOVEDADES_DEL_INICIO),
     };
   }
@@ -160,6 +182,9 @@ export class InicioService {
           lugar: a.lugar ?? a.linkVideollamada ?? null,
           estado: a.estado,
           consorcioId: a.consorcioId,
+          quorumPorcentaje: a.quorumPorcentaje,
+          quorumRequerido: a.quorumRequerido,
+          miAsistencia: a.miAsistencia,
         }),
       ),
       ...reservas.items.map(

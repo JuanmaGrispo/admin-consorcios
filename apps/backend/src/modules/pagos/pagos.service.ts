@@ -11,10 +11,13 @@ import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ExpensasService } from '../expensas/expensas.service';
+import { ZONA_POR_DEFECTO } from '../reservas/horario';
+import { ReservasService } from '../reservas/reservas.service';
+import { DestinoPagoDto } from './dto/destino-pago';
 import { aCentavos } from '../expensas/prorrateo';
 import { ListarPagosQuery } from './dto/listar-pagos.query';
 import { RegistrarPagoDto } from './dto/registrar-pago.dto';
-import { MercadoPagoClient } from './mercado-pago.client';
+import { MercadoPagoClient, type PagoMercadoPago } from './mercado-pago.client';
 import { PagosRepository } from './pagos.repository';
 import { formatearNumeroRecibo } from './recibo';
 import { generarReciboPdf } from './recibo-pdf';
@@ -49,6 +52,7 @@ export class PagosService {
     private readonly consorcios: ConsorciosService,
     private readonly mercadoPago: MercadoPagoClient,
     private readonly notificador: Notificador,
+    private readonly reservas: ReservasService,
   ) {}
 
   async listar(usuario: UsuarioActual, query: ListarPagosQuery): Promise<Pago[]> {
@@ -93,10 +97,14 @@ export class PagosService {
     }
 
     const consorcio = await this.consorcios.findOne(pago.unidad.consorcioId);
+    const reserva = pago.reservaId ? await this.reservas.findInterna(pago.reservaId) : null;
     const buffer = await generarReciboPdf({
       pago,
       etiquetaUnidad: pago.unidad.etiqueta,
       periodo: pago.boleta?.liquidacion?.periodo ?? null,
+      concepto: reserva
+        ? `Seña ${reserva.amenity.nombre} · reserva del ${reserva.inicio.toLocaleDateString('es-AR', { timeZone: ZONA_POR_DEFECTO })}`
+        : null,
       consorcio,
     });
     const numero = (pago.reciboNumero ?? pago.id).replace(/[^\w-]+/g, '');
@@ -105,15 +113,13 @@ export class PagosService {
 
   /** Transferencia, efectivo u otro medio que el administrador ya verificó. */
   async registrar(usuario: UsuarioActual, dto: RegistrarPagoDto): Promise<Pago> {
-    const { boleta, saldo } = await this.expensas.boletaPagable(usuario, dto.boletaId);
-    if (aCentavos(dto.monto) > aCentavos(saldo)) {
-      throw new BadRequestException(`El monto supera el saldo de la boleta ($${saldo.toFixed(2)})`);
+    const cobro = await this.cobrable(usuario, dto);
+    if (aCentavos(dto.monto) > aCentavos(cobro.saldo)) {
+      throw new BadRequestException(`El monto supera el saldo ($${cobro.saldo.toFixed(2)})`);
     }
 
     const pago = await this.pagos.crear({
-      concepto: ConceptoPago.EXPENSA,
-      boletaId: boleta.id,
-      unidadId: boleta.unidadId,
+      ...cobro.destino,
       monto: dto.monto,
       medio: dto.medio,
       estado: EstadoPago.APROBADO,
@@ -127,19 +133,19 @@ export class PagosService {
   // ── Mercado Pago ───────────────────────────────────────────────────────────
 
   /**
-   * Arranca un cobro online por el saldo de la boleta. El pago nace PENDIENTE
-   * y su id viaja como `external_reference`: así el webhook sabe a qué pago
-   * corresponde lo que confirma Mercado Pago.
+   * Arranca un cobro online por el saldo de la boleta o de la seña. El pago
+   * nace PENDIENTE y su id viaja como `external_reference`: así el webhook
+   * sabe a qué pago corresponde lo que confirma Mercado Pago.
    */
   async crearPreferencia(
     usuario: UsuarioActual,
-    boletaId: string,
+    dto: DestinoPagoDto,
   ): Promise<{ pagoId: string; initPoint: string }> {
-    const { boleta, saldo } = await this.expensas.boletaPagable(usuario, boletaId);
+    const { destino, saldo, titulo } = await this.cobrable(usuario, dto);
 
     // Un segundo "Pagar" (otra pestaña, un doble click) vuelve al checkout que
     // ya está abierto: dos preferencias por el mismo saldo son dos cobros posibles.
-    const abierto = await this.pagos.pendienteDeMercadoPago(boleta.id);
+    const abierto = await this.pagos.pendienteDeMercadoPago(destino);
     if (abierto && aCentavos(abierto.monto) === aCentavos(saldo)) {
       const preferencia = await this.mercadoPago.obtenerPreferencia(abierto.mpPreferenceId!);
       return { pagoId: abierto.id, initPoint: preferencia.initPoint };
@@ -153,9 +159,7 @@ export class PagosService {
     }
 
     const pago = await this.pagos.crear({
-      concepto: ConceptoPago.EXPENSA,
-      boletaId: boleta.id,
-      unidadId: boleta.unidadId,
+      ...destino,
       monto: saldo,
       medio: MedioPago.MERCADO_PAGO,
       estado: EstadoPago.PENDIENTE,
@@ -164,7 +168,7 @@ export class PagosService {
 
     try {
       const preferencia = await this.mercadoPago.crearPreferencia({
-        titulo: `Expensas ${boleta.liquidacion.periodo.slice(0, 7)} · ${boleta.unidad.etiqueta}`,
+        titulo,
         monto: saldo,
         referencia: pago.id,
       });
@@ -203,7 +207,27 @@ export class PagosService {
       this.logger.warn(`Pago de MP ${mp.id} sin pago nuestro (ref ${mp.external_reference})`);
       return;
     }
+    await this.aplicarMercadoPago(pago, mp);
+  }
 
+  /**
+   * Lo que hace el vecino al volver del checkout: le pregunta a Mercado Pago
+   * cómo quedó su pago, sin esperar al webhook (que puede tardar, o no llegar
+   * nunca en local sin un túnel). Aplica lo mismo que el webhook, así que da
+   * igual cuál de los dos llegue primero.
+   */
+  async sincronizar(usuario: UsuarioActual, id: string): Promise<Pago> {
+    const pago = await this.findOne(usuario, id);
+    if (pago.medio !== MedioPago.MERCADO_PAGO || pago.estado !== EstadoPago.PENDIENTE) {
+      return pago;
+    }
+    const mp = await this.mercadoPago.ultimoIntento(pago.id);
+    if (mp) await this.aplicarMercadoPago(pago, mp);
+    return this.findOne(usuario, id);
+  }
+
+  /** Lleva el pago al estado que dice Mercado Pago. Idempotente. */
+  private async aplicarMercadoPago(pago: Pago, mp: PagoMercadoPago): Promise<void> {
     // Una preferencia admite varios intentos (uno rechazado, después otro
     // aprobado). Un aviso tardío de otro intento no pisa un pago ya aprobado.
     const mpPaymentId = String(mp.id);
@@ -211,24 +235,65 @@ export class PagosService {
       this.logger.warn(`Pago ${pago.id} ya aprobado con ${pago.mpPaymentId}: ignoro el intento ${mpPaymentId}`);
       // Si ese otro intento también se cobró, la plata entró dos veces.
       if (estadoSegunMercadoPago(mp.status) === EstadoPago.APROBADO) {
-        await this.avisarCobroDeMas(pago.boletaId!, mp.transaction_amount, `operación ${mpPaymentId}`);
+        await this.avisarCobroDeMas(pago, mp.transaction_amount, `operación ${mpPaymentId}`);
       }
       return;
     }
 
     const estadoAnterior = pago.estado;
-    const actualizado = await this.pagos.actualizar(pago.id, {
+    const datos = {
       estado: estadoSegunMercadoPago(mp.status),
       mpPaymentId,
       mpStatusDetail: mp.status_detail,
       monto: mp.transaction_amount,
       fechaPago: mp.date_approved ? new Date(mp.date_approved) : null,
-    });
-
-    if (actualizado.estado === estadoAnterior) return;
+    };
+    if (datos.estado === estadoAnterior) {
+      await this.pagos.actualizar(pago.id, datos);
+      return;
+    }
+    // Sólo si nadie lo movió desde que se leyó: el webhook y el "sincronizar"
+    // del vecino pueden llegar juntos, y el recibo y el aviso salen una vez.
+    const actualizado = await this.pagos.actualizarSiEstado(pago.id, estadoAnterior, datos);
+    if (!actualizado) return;
     if (actualizado.estado === EstadoPago.APROBADO) await this.alAprobarse(actualizado);
-    // Un reintegro baja lo pagado: la boleta vuelve atrás.
-    else await this.expensas.sincronizarEstado(actualizado.boletaId!);
+    // Un reintegro baja lo pagado: la boleta vuelve atrás. Una seña reintegrada
+    // vuelve sola a "pendiente", porque se calcula desde los pagos aprobados.
+    else if (actualizado.boletaId) await this.expensas.sincronizarEstado(actualizado.boletaId);
+  }
+
+  /**
+   * A qué se le cobra y cuánto falta: la boleta de expensas (sólo la última
+   * emitida de la unidad) o la seña de una reserva. Va uno de los dos.
+   */
+  private async cobrable(usuario: UsuarioActual, dto: DestinoPagoDto) {
+    if (!!dto.boletaId === !!dto.reservaId) {
+      throw new BadRequestException('Indicá la boleta o la reserva que se paga, una sola');
+    }
+    if (dto.boletaId) {
+      const { boleta, saldo } = await this.expensas.boletaPagable(usuario, dto.boletaId);
+      return {
+        destino: {
+          concepto: ConceptoPago.EXPENSA,
+          boletaId: boleta.id,
+          reservaId: null,
+          unidadId: boleta.unidadId,
+        },
+        saldo,
+        titulo: `Expensas ${boleta.liquidacion.periodo.slice(0, 7)} · ${boleta.unidad.etiqueta}`,
+      };
+    }
+    const { reserva, saldo } = await this.reservas.senaPagable(usuario, dto.reservaId!);
+    return {
+      destino: {
+        concepto: ConceptoPago.SENA_RESERVA,
+        boletaId: null,
+        reservaId: reserva.id,
+        unidadId: reserva.unidadId,
+      },
+      saldo,
+      titulo: `Seña ${reserva.amenity.nombre} · ${reserva.unidad.etiqueta}`,
+    };
   }
 
   /**
@@ -236,13 +301,14 @@ export class PagosService {
    * nunca corta el pago.
    */
   private async alAprobarse(pago: Pago): Promise<void> {
+    if (!pago.boletaId) return this.alAprobarseSena(pago);
     const conRecibo = await this.numerarRecibo(pago);
-    const boleta = await this.expensas.sincronizarEstado(pago.boletaId!);
+    const boleta = await this.expensas.sincronizarEstado(pago.boletaId);
 
     // Dos checkouts pagados (o uno abierto con un saldo viejo) cobran de más.
     // No se puede rechazar plata que ya entró: hay que devolverla a mano.
-    const sobra = aCentavos(await this.pagos.aprobadoDe(boleta.id)) - aCentavos(boleta.total);
-    if (sobra > 0) await this.avisarCobroDeMas(boleta.id, sobra / 100, `recibo ${conRecibo.reciboNumero}`);
+    const sobra = aCentavos(await this.pagos.aprobadoDe({ boletaId: boleta.id })) - aCentavos(boleta.total);
+    if (sobra > 0) await this.avisarCobroDeMas(pago, sobra / 100, `recibo ${conRecibo.reciboNumero}`);
 
     for (const destinatarioId of await this.expensas.vecinosDe(pago.unidadId)) {
       try {
@@ -258,20 +324,67 @@ export class PagosService {
     }
   }
 
-  /** Le avisa al administrador del consorcio que tiene que devolver un cobro duplicado. */
-  private async avisarCobroDeMas(boletaId: string, monto: number, referencia: string): Promise<void> {
-    this.logger.warn(`Cobro de más en la boleta ${boletaId}: $${monto.toFixed(2)} (${referencia})`);
+  /** La seña de una reserva: recibo, aviso, y lo mismo que expensas si entró de más. */
+  private async alAprobarseSena(pago: Pago): Promise<void> {
+    const conRecibo = await this.numerarRecibo(pago);
+    const reserva = await this.reservas.findInterna(pago.reservaId!);
+    const sobra =
+      aCentavos(await this.pagos.aprobadoDe({ reservaId: reserva.id })) -
+      aCentavos(reserva.amenity.montoSena);
+    if (sobra > 0) await this.avisarCobroDeMas(pago, sobra / 100, `recibo ${conRecibo.reciboNumero}`);
     try {
-      const boleta = await this.expensas.findBoletaInterna(boletaId);
-      const consorcio = await this.consorcios.findOne(boleta.liquidacion.consorcioId);
       await this.notificador.enviar({
-        destinatarioId: consorcio.administradorId,
-        asunto: `Cobro duplicado en la unidad ${boleta.unidad.etiqueta}`,
-        cuerpo: `La boleta de ${boleta.liquidacion.periodo.slice(0, 7)} se cobró $${monto.toFixed(2)} de más (${referencia}). Devolvé la diferencia desde Mercado Pago.`,
-        origen: `boleta:${boletaId}`,
+        destinatarioId: reserva.solicitadaPorId,
+        asunto: `Recibimos la seña de ${reserva.amenity.nombre}`,
+        cuerpo: `Registramos un pago de $${pago.monto.toFixed(2)} (recibo ${conRecibo.reciboNumero}).`,
+        origen: `reserva:${reserva.id}`,
       });
     } catch (error) {
-      this.logger.error(`No se pudo avisar el cobro de más de ${boletaId}: ${String(error)}`);
+      this.logger.warn(`No se pudo avisar la seña de ${reserva.id}: ${String(error)}`);
+    }
+  }
+
+  /** Un aviso operativo al administrador del consorcio. Nunca corta el pago. */
+  private async avisarAlAdministrador(
+    consorcioId: string,
+    asunto: string,
+    cuerpo: string,
+    origen: string,
+  ): Promise<void> {
+    this.logger.warn(`${asunto}: ${cuerpo}`);
+    try {
+      const consorcio = await this.consorcios.findOne(consorcioId);
+      await this.notificador.enviar({ destinatarioId: consorcio.administradorId, asunto, cuerpo, origen });
+    } catch (error) {
+      this.logger.error(`No se pudo avisar al administrador (${origen}): ${String(error)}`);
+    }
+  }
+
+  /**
+   * Le avisa al administrador que un pago (de una boleta o de una seña) entró
+   * de más y tiene que devolver la diferencia: la plata ya se cobró.
+   */
+  private async avisarCobroDeMas(pago: Pago, monto: number, referencia: string): Promise<void> {
+    const devolver = `Devolvé la diferencia desde Mercado Pago.`;
+    try {
+      if (pago.boletaId) {
+        const boleta = await this.expensas.findBoletaInterna(pago.boletaId);
+        return await this.avisarAlAdministrador(
+          boleta.liquidacion.consorcioId,
+          `Cobro duplicado en la unidad ${boleta.unidad.etiqueta}`,
+          `La boleta de ${boleta.liquidacion.periodo.slice(0, 7)} se cobró $${monto.toFixed(2)} de más (${referencia}). ${devolver}`,
+          `cobro-duplicado:${boleta.id}`,
+        );
+      }
+      const reserva = await this.reservas.findInterna(pago.reservaId!);
+      await this.avisarAlAdministrador(
+        reserva.amenity.consorcioId,
+        `Cobro duplicado en la seña de ${reserva.unidad.etiqueta}`,
+        `La seña de ${reserva.amenity.nombre} se cobró $${monto.toFixed(2)} de más (${referencia}). ${devolver}`,
+        `cobro-duplicado:${reserva.id}`,
+      );
+    } catch (error) {
+      this.logger.error(`No se pudo avisar el cobro de más del pago ${pago.id}: ${String(error)}`);
     }
   }
 

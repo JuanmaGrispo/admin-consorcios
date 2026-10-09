@@ -11,6 +11,8 @@ import { Notificador } from '../../core/notificaciones/notificador';
 import {
   EstadoAsamblea,
   EstadoVotacion,
+  FormaConteo,
+  PadronVotacion,
   ResultadoVotacion,
   RolUsuario,
   TipoPuntoOrden,
@@ -28,10 +30,11 @@ import { CreateVotacionDto } from './dto/create-votacion.dto';
 import { ListarVotacionesQuery } from './dto/listar-votaciones.query';
 import { ReemplazarOpcionesDto } from './dto/reemplazar-opciones.dto';
 import { UpdateVotacionDto } from './dto/update-votacion.dto';
+import { VistaPadronQuery } from './dto/vista-padron.query';
 import { VotarDto } from './dto/votar.dto';
 import { VotoPresencialDto } from './dto/voto-presencial.dto';
 import { escrutar, type Escrutinio } from './escrutinio';
-import { armarPadron, pesoTotal, type UnidadHabilitada } from './padron';
+import { armarPadron, pesoTotal, type UnidadHabilitada, vistaDelPadron } from './padron';
 import { ETIQUETA_A_FAVOR, ETIQUETA_EN_CONTRA, VotacionesRepository } from './votaciones.repository';
 
 
@@ -123,6 +126,18 @@ export class VotacionesService {
     });
   }
 
+  /** El padrón que tendría una votación con estas reglas, antes de crearla. */
+  async vistaPadron(usuario: UsuarioActual, query: VistaPadronQuery) {
+    if (!gestiona(usuario, query.consorcioId)) {
+      throw new NotFoundException(`Consorcio ${query.consorcioId} no existe`);
+    }
+    return vistaDelPadron(
+      await this.votaciones.unidadesParaPadron(query.consorcioId),
+      query.padron ?? PadronVotacion.SOLO_PROPIETARIOS,
+      query.formaConteo ?? FormaConteo.POR_COEFICIENTE,
+    );
+  }
+
   /** Para el inicio del vecino. */
   async abiertasDelVecino(usuario: UsuarioActual): Promise<Votacion[]> {
     await this.cerrarVencidas();
@@ -140,8 +155,27 @@ export class VotacionesService {
     let asambleaId: string | null = null;
     let apertura = dto.apertura ? new Date(dto.apertura) : undefined;
     let cierre = dto.cierre ? new Date(dto.cierre) : undefined;
+    let nuevoPunto: { asambleaId: string; titulo: string; descripcion: string | null } | undefined;
 
-    if (dto.puntoOrdenDiaId) {
+    if (dto.asambleaId && dto.puntoOrdenDiaId) {
+      throw new BadRequestException('Indicá la asamblea o el punto del orden del día, no los dos');
+    }
+
+    if (dto.asambleaId) {
+      // "Agregar votación" desde una asamblea: se suma como un punto nuevo del
+      // orden del día, aunque ya esté convocada.
+      const asamblea = await this.votaciones.findAsamblea(dto.asambleaId);
+      if (!asamblea || asamblea.consorcioId !== dto.consorcioId) {
+        throw new BadRequestException('Esa asamblea no es de este consorcio');
+      }
+      if (ASAMBLEA_CERRADA.includes(asamblea.estado)) {
+        throw new ConflictException('La asamblea ya está cerrada');
+      }
+      asambleaId = asamblea.id;
+      nuevoPunto = { asambleaId, titulo: dto.titulo, descripcion: dto.descripcion ?? null };
+      apertura ??= asamblea.fechaHora;
+      cierre ??= new Date(apertura.getTime() + HORAS_POR_DEFECTO * HORA_MS);
+    } else if (dto.puntoOrdenDiaId) {
       const punto = await this.votaciones.findPunto(dto.puntoOrdenDiaId);
       if (!punto) throw new BadRequestException('Ese punto del orden del día no existe');
       if (punto.tipo !== TipoPuntoOrden.CON_VOTACION) {
@@ -189,6 +223,7 @@ export class VotacionesService {
         cierre,
       },
       extras,
+      nuevoPunto,
     );
     return this.findOne(usuario, id);
   }

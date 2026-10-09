@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { EventoDomus } from '../../core/mensajeria/eventos';
+import { categoriaDe } from '../../core/notificaciones/categorias';
 import { CanalNotificacion, EstadoEnvio } from '../../database/entities';
 import { type Destinatario, EmailRepository, type VecinoDeUnidad } from './email.repository';
 import { MailerClient } from './mailer.client';
@@ -24,7 +25,7 @@ export class EmailService {
    * la cola de reintento; los que ya salieron quedan ENVIADO y no se repiten.
    */
   async procesar(evento: EventoDomus): Promise<void> {
-    const entregas = await this.entregasDe(evento);
+    const entregas = await this.segunPreferencias(evento, await this.entregasDe(evento));
 
     if (!this.mailer.configurado) {
       for (const { destinatario, contexto } of entregas) {
@@ -108,6 +109,17 @@ export class EmailService {
         }));
       }
     }
+  }
+
+  /** Saca a quienes apagaron el mail para la categoría de este evento. */
+  private async segunPreferencias(evento: EventoDomus, entregas: Entrega[]): Promise<Entrega[]> {
+    const categoria = categoriaDe(evento);
+    if (!categoria) return entregas;
+    const apagados = await this.email.sinMail(
+      entregas.map((e) => e.destinatario.usuarioId),
+      categoria,
+    );
+    return entregas.filter((e) => !apagados.has(e.destinatario.usuarioId));
   }
 
   private async aUnaPersona(usuarioId: string): Promise<Entrega[]> {

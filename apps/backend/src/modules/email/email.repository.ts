@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { EnvioNotificacion } from '../../database/entities';
+import { CategoriaNotificacion, EnvioNotificacion } from '../../database/entities';
 
 export interface Destinatario {
   usuarioId: string;
@@ -45,6 +45,17 @@ export class EmailRepository {
       [id],
     );
     return fila ?? null;
+  }
+
+  /** De estas personas, las que apagaron el mail para esa categoría. */
+  async sinMail(usuarioIds: string[], categoria: CategoriaNotificacion): Promise<Set<string>> {
+    if (usuarioIds.length === 0) return new Set();
+    const filas: { usuarioId: string }[] = await this.envios.manager.query(
+      `SELECT usuario_id AS "usuarioId" FROM preferencia_notificacion
+        WHERE canal = 'EMAIL' AND categoria = $1 AND NOT habilitado AND usuario_id = ANY($2)`,
+      [categoria, usuarioIds],
+    );
+    return new Set(filas.map((f) => f.usuarioId));
   }
 
   async totalesDeLiquidacion(liquidacionId: string): Promise<Map<string, number>> {
