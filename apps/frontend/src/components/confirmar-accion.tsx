@@ -19,13 +19,26 @@ interface ConfirmarAccionProps {
   titulo: string;
   descripcion: string;
   boton: string;
+  /**
+   * `false` para lo irreversible que no borra nada (convocar, cerrar una
+   * votación): el botón va con el color principal en vez del rojo.
+   */
+  destructiva?: boolean;
   /** Si tira error, el diálogo queda abierto y lo muestra (un 409 "tiene reclamos" se explica solo). */
   onConfirmar: () => Promise<void>;
   onCerrar: () => void;
 }
 
 /** Confirmación de algo destructivo (borrar, dar de baja, sacar del muro) que muestra el error del backend adentro. */
-export function ConfirmarAccion({ abierto, titulo, descripcion, boton, onConfirmar, onCerrar }: ConfirmarAccionProps) {
+export function ConfirmarAccion({
+  abierto,
+  titulo,
+  descripcion,
+  boton,
+  destructiva = true,
+  onConfirmar,
+  onCerrar,
+}: ConfirmarAccionProps) {
   const [trabajando, setTrabajando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,7 +79,7 @@ export function ConfirmarAccion({ abierto, titulo, descripcion, boton, onConfirm
         )}
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={confirmar} disabled={trabajando}>
+          <AlertDialogAction variant={destructiva ? 'destructive' : 'default'} onClick={confirmar} disabled={trabajando}>
             {trabajando ? 'Un momento…' : boton}
           </AlertDialogAction>
         </AlertDialogFooter>

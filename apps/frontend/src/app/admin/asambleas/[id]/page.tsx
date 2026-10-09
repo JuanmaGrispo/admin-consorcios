@@ -364,6 +364,7 @@ function DetalleAsamblea({ id }: { id: string }) {
         titulo={confirmacion?.titulo ?? ''}
         descripcion={confirmacion?.descripcion ?? ''}
         boton={confirmacion?.boton ?? ''}
+        destructiva={accion === 'eliminar'}
         onConfirmar={() => ejecutar(accion!)}
         onCerrar={() => setAccion(null)}
       />

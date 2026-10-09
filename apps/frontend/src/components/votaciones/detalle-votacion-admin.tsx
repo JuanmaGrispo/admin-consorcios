@@ -245,6 +245,7 @@ function Contenido({
         titulo="¿Cerrar la votación?"
         descripcion="Se cuentan los votos y queda el resultado. Después no se puede votar."
         boton="Cerrar votación"
+        destructiva={false}
         onConfirmar={async () => {
           await votacionesService.cerrar(votacion.id);
           toast.success('Votación cerrada');
