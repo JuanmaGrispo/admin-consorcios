@@ -2,17 +2,8 @@
 
 import { Archive, ArchiveRestore, MoreHorizontal, Paperclip, Pencil, Pin, PinOff } from 'lucide-react';
 import { useState } from 'react';
+import { ConfirmarAccion } from '@/components/confirmar-accion';
 import { EstadoBadge } from '@/components/estado-badge';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -46,7 +37,7 @@ interface TablaNovedadesProps {
   novedades: Novedad[];
   onEditar: (novedad: Novedad) => void;
   /** Fijar, desfijar, dar de baja o reactivar: todo es un PATCH. */
-  onCambiar: (novedad: Novedad, cambios: NovedadCambios) => void;
+  onCambiar: (novedad: Novedad, cambios: NovedadCambios) => Promise<void>;
 }
 
 /**
@@ -164,25 +155,16 @@ export function TablaNovedades({ novedades, onEditar, onCambiar }: TablaNovedade
         </TableBody>
       </Table>
 
-      <AlertDialog open={aDarDeBaja !== null} onOpenChange={(abierto) => !abierto && setADarDeBaja(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Dar de baja “{aDarDeBaja?.titulo}”?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Deja de verse en el muro de los vecinos. Podés volver a publicarla cuando quieras.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => aDarDeBaja && onCambiar(aDarDeBaja, { activa: false })}
-            >
-              Dar de baja
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmarAccion
+        abierto={aDarDeBaja !== null}
+        titulo={`¿Dar de baja “${aDarDeBaja?.titulo ?? ''}”?`}
+        descripcion="Deja de verse en el muro de los vecinos. Podés volver a publicarla cuando quieras."
+        boton="Dar de baja"
+        onConfirmar={async () => {
+          if (aDarDeBaja) await onCambiar(aDarDeBaja, { activa: false });
+        }}
+        onCerrar={() => setADarDeBaja(null)}
+      />
     </>
   );
 }
