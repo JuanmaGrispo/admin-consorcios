@@ -1,7 +1,7 @@
 'use client';
 
 import { Download, Pencil, Send, Trash2, Vote } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmarAccion } from '@/components/confirmar-accion';
 import { EstadoBadge } from '@/components/estado-badge';
@@ -30,10 +30,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { fechaHora, porcentaje } from '@/lib/formato';
 import { votacionesService } from '@/services/votaciones';
-import type { FilaPadron, Votacion, VotacionDetalle } from '@/types/votacion';
+import type { FilaPadron, Votacion } from '@/types/votacion';
 import { DESEMPATES, FORMAS_CONTEO, MAYORIAS } from './etiquetas';
 import { EscrutinioBarras } from './escrutinio-barras';
 
@@ -75,32 +76,22 @@ function Contenido({
   onEditar: (votacion: Votacion) => void;
   onCambio: () => void;
 }) {
-  const [detalle, setDetalle] = useState<VotacionDetalle | null>(null);
-  const [padron, setPadron] = useState<FilaPadron[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [version, setVersion] = useState(0);
   const [confirmando, setConfirmando] = useState<'cerrar' | 'eliminar' | null>(null);
   const [trabajando, setTrabajando] = useState(false);
 
-  useEffect(() => {
-    let vigente = true;
-    Promise.all([
-      votacionesService.obtener(votacion.id),
-      votacion.estado === 'BORRADOR' ? Promise.resolve(null) : votacionesService.padronConVotos(votacion.id),
-    ])
-      .then(([d, p]) => {
-        if (!vigente) return;
-        setError(null);
-        setDetalle(d);
-        setPadron(p);
-      })
-      .catch((err) => {
-        if (vigente) setError(err instanceof ApiError ? err.message : 'No se pudo cargar la votación.');
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [votacion.id, votacion.estado, version]);
+  // El estado va en la clave: al publicar o cerrar cambia y se pide de nuevo con el padrón.
+  const pedido = usePedido(
+    `votacion:${votacion.id}:${votacion.estado}`,
+    () =>
+      Promise.all([
+        votacionesService.obtener(votacion.id),
+        votacion.estado === 'BORRADOR' ? Promise.resolve(null) : votacionesService.padronConVotos(votacion.id),
+      ]),
+    'No se pudo cargar la votación.',
+  );
+  const [detalle, padron] = pedido.datos ?? pedido.ultimo ?? [null, null];
+  const error = pedido.error ?? null;
+  const recargar = pedido.recargar;
 
   const estado = detalle?.estado ?? votacion.estado;
 
@@ -110,7 +101,7 @@ function Contenido({
       await votacionesService.publicar(votacion.id);
       toast.success('Votación publicada: los vecinos ya pueden votar');
       onCambio();
-      setVersion((v) => v + 1);
+      recargar();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'No se pudo publicar la votación.');
     } finally {
@@ -123,7 +114,7 @@ function Contenido({
       await votacionesService.votarPresencial(votacion.id, unidadId, opcionId);
       toast.success('Voto cargado');
       onCambio();
-      setVersion((v) => v + 1);
+      recargar();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'No se pudo cargar el voto.');
     }
@@ -250,7 +241,7 @@ function Contenido({
           await votacionesService.cerrar(votacion.id);
           toast.success('Votación cerrada');
           onCambio();
-          setVersion((v) => v + 1);
+          recargar();
         }}
         onCerrar={() => setConfirmando(null)}
       />

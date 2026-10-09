@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, Vote } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { useConsorcioActivo } from '@/components/admin/consorcio-activo';
 import { EmptyState } from '@/components/empty-state';
@@ -13,7 +13,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { DetalleVotacionAdmin } from '@/components/votaciones/detalle-votacion-admin';
 import { TablaVotaciones, TablaVotacionesEsqueleto } from '@/components/votaciones/tabla-votaciones';
 import { VotacionDialog, type ValoresVotacion } from '@/components/votaciones/votacion-dialog';
-import { ApiError } from '@/lib/api';
+import { usePedido } from '@/hooks/use-pedido';
 import { votacionesService } from '@/services/votaciones';
 import type { Consorcio } from '@/types/consorcio';
 import type { EstadoVotacion, Votacion } from '@/types/votacion';
@@ -38,34 +38,19 @@ export default function AdminVotacionesPage() {
 
 /** Las votaciones del consorcio activo: crear, publicar, cerrar y seguir el conteo. */
 function VotacionesAdministradas({ consorcio }: { consorcio: Consorcio }) {
-  const [votaciones, setVotaciones] = useState<Votacion[] | null>(null);
   const [filtro, setFiltro] = useState<Filtro>('TODAS');
-  const [error, setError] = useState<string | null>(null);
   const [edicion, setEdicion] = useState<Edicion>({ modo: 'cerrado' });
-  const [seleccionada, setSeleccionada] = useState<Votacion | null>(null);
-  // Sube después de cada cambio para volver a pedir la lista.
-  const [version, setVersion] = useState(0);
+  // Se guarda el id: la votación que muestra el panel sale siempre de la lista recién pedida.
+  const [seleccionadaId, setSeleccionadaId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let vigente = true;
-    votacionesService
-      .listar({ consorcioId: consorcio.id })
-      .then((lista) => {
-        if (!vigente) return;
-        setError(null);
-        setVotaciones(lista);
-        // El panel abierto sigue la versión nueva de su votación (estado, resultado).
-        setSeleccionada((actual) => (actual ? (lista.find((v) => v.id === actual.id) ?? null) : null));
-      })
-      .catch((err) => {
-        if (!vigente) return;
-        setVotaciones(null);
-        setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las votaciones.');
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [consorcio.id, version]);
+  const pedido = usePedido(
+    `votaciones:${consorcio.id}`,
+    () => votacionesService.listar({ consorcioId: consorcio.id }),
+    'No se pudieron cargar las votaciones.',
+  );
+  const votaciones = pedido.datos ?? null;
+  const error = pedido.error ?? null;
+  const seleccionada = votaciones?.find((v) => v.id === seleccionadaId) ?? null;
 
   async function guardar(valores: ValoresVotacion) {
     const { opciones, apertura, cierre, ...resto } = valores;
@@ -79,7 +64,7 @@ function VotacionesAdministradas({ consorcio }: { consorcio: Consorcio }) {
       toast.success('Votación creada en borrador');
     }
     setEdicion({ modo: 'cerrado' });
-    setVersion((v) => v + 1);
+    pedido.recargar();
   }
 
   const cantidad = (estado: EstadoVotacion) => votaciones?.filter((v) => v.estado === estado).length ?? 0;
@@ -146,19 +131,19 @@ function VotacionesAdministradas({ consorcio }: { consorcio: Consorcio }) {
               No hay votaciones con ese estado.
             </p>
           ) : (
-            <TablaVotaciones votaciones={visibles} onVer={setSeleccionada} />
+            <TablaVotaciones votaciones={visibles} onVer={(v) => setSeleccionadaId(v.id)} />
           )}
         </Card>
       )}
 
       <DetalleVotacionAdmin
         votacion={seleccionada}
-        onCerrar={() => setSeleccionada(null)}
+        onCerrar={() => setSeleccionadaId(null)}
         onEditar={(votacion) => {
-          setSeleccionada(null);
+          setSeleccionadaId(null);
           setEdicion({ modo: 'edicion', votacion });
         }}
-        onCambio={() => setVersion((v) => v + 1)}
+        onCambio={pedido.recargar}
       />
 
       {edicion.modo !== 'cerrado' && (

@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { instanteALocal, localAInstante } from '@/lib/fecha-input';
 import { votacionesService } from '@/services/votaciones';
@@ -31,7 +32,6 @@ import type {
   FormaConteo,
   MayoriaRequerida,
   PadronVotacion,
-  VistaPadron,
   Votacion,
 } from '@/types/votacion';
 import { DESEMPATES, FORMAS_CONTEO, MAYORIAS, PADRONES } from './etiquetas';
@@ -132,21 +132,14 @@ function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuarda
   const [extras, setExtras] = useState<string[]>(
     votacion?.opcionVotos.filter((o) => !o.esFija).map((o) => o.etiqueta) ?? [],
   );
-  const [vista, setVista] = useState<VistaPadron | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // La vista previa se pide de nuevo cada vez que cambia el padrón o el conteo.
-  useEffect(() => {
-    let vigente = true;
-    votacionesService
-      .vistaPadron({ consorcioId, padron, formaConteo })
-      .then((v) => vigente && setVista(v))
-      .catch(() => vigente && setVista(null)); // Sin vista previa el formulario anda igual.
-    return () => {
-      vigente = false;
-    };
-  }, [consorcioId, padron, formaConteo]);
+  // Si falla, el formulario anda igual sin ella.
+  const vista = usePedido(`padron:${consorcioId}:${padron}:${formaConteo}`, () =>
+    votacionesService.vistaPadron({ consorcioId, padron, formaConteo }),
+  ).datos;
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
