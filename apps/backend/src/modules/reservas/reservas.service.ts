@@ -28,6 +28,7 @@ import { ListarReservasQuery } from './dto/listar-reservas.query';
 import { RechazarReservaDto } from './dto/rechazar-reserva.dto';
 import { UpdateAmenityDto } from './dto/update-amenity.dto';
 import {
+  cancelableHasta,
   cierraAlDiaSiguiente,
   estadoDelDia,
   largoDeVentana,
@@ -51,7 +52,12 @@ export interface SenaDeReserva {
   devueltaAt: Date | null;
 }
 
-export type ReservaConSena = Reserva & { sena: SenaDeReserva | null };
+/** La reserva como la ve el portal: con su seña y hasta cuándo se puede cancelar. */
+export type ReservaVista = Reserva & {
+  sena: SenaDeReserva | null;
+  /** Hasta cuándo la puede cancelar el vecino; null si ya no se cancela. */
+  cancelableHasta: Date | null;
+};
 
 /** Un mes y algo: el calendario del vecino nunca pide más. */
 const DIAS_MAXIMOS_CALENDARIO = 62;
@@ -314,17 +320,17 @@ export class ReservasService {
     const { items, total } = await this.reservas.listar(query, await this.alcance(usuario));
     const limite = query.limite ?? 20;
     return {
-      items: await this.conSena(items),
+      items: await this.paraMostrar(items),
       total,
       pagina: query.pagina ?? 1,
       paginas: Math.ceil(total / limite) || 1,
     };
   }
 
-  async findOne(usuario: UsuarioActual, id: string): Promise<ReservaConSena> {
+  async findOne(usuario: UsuarioActual, id: string): Promise<ReservaVista> {
     await this.reservas.cerrarVencidas();
-    const [conSena] = await this.conSena([await this.buscarConPermiso(usuario, id)]);
-    return conSena;
+    const [vista] = await this.paraMostrar([await this.buscarConPermiso(usuario, id)]);
+    return vista;
   }
 
   // ── Seña ───────────────────────────────────────────────────────────────────
@@ -357,7 +363,7 @@ export class ReservasService {
   }
 
   /** El administrador registra que devolvió la seña, una vez que la reserva terminó. */
-  async marcarSenaDevuelta(usuario: UsuarioActual, id: string): Promise<ReservaConSena> {
+  async marcarSenaDevuelta(usuario: UsuarioActual, id: string): Promise<ReservaVista> {
     await this.reservas.cerrarVencidas();
     const reserva = await this.buscarConPermiso(usuario, id);
     if (!SENA_DEVOLVIBLE.includes(reserva.estado)) {
@@ -378,7 +384,7 @@ export class ReservasService {
     return this.findOne(usuario, id);
   }
 
-  private async conSena(reservas: Reserva[]): Promise<ReservaConSena[]> {
+  private async paraMostrar(reservas: Reserva[]): Promise<ReservaVista[]> {
     const senas = await this.reservas.senasDe(reservas.map((r) => r.id));
     return reservas.map((r) => {
       const monto = r.amenity?.montoSena ?? 0;
@@ -394,11 +400,14 @@ export class ReservasService {
                 devueltaAt: r.senaDevueltaAt,
               }
             : null,
+        cancelableHasta: CANCELABLES.includes(r.estado)
+          ? cancelableHasta(r.inicio, r.amenity?.cancelacionMinimaHoras ?? 0)
+          : null,
       };
     });
   }
 
-  async crear(usuario: UsuarioActual, dto: CrearReservaDto): Promise<Reserva> {
+  async crear(usuario: UsuarioActual, dto: CrearReservaDto): Promise<ReservaVista> {
     await this.reservas.cerrarVencidas();
 
     const amenity = await this.exigirAmenity(usuario, dto.amenityId);
@@ -478,7 +487,8 @@ export class ReservasService {
       );
     }
 
-    return reserva;
+    const [vista] = await this.paraMostrar([reserva]);
+    return vista;
   }
 
   async aprobar(usuario: UsuarioActual, id: string): Promise<Reserva> {
@@ -550,8 +560,17 @@ export class ReservasService {
       throw new BadRequestException(`La reserva está ${reserva.estado} y no se puede cancelar`);
     }
     // Cancelar algo que ya empezó no es cancelar, es reescribir la historia.
-    if (reserva.inicio <= (await this.reservas.ahora())) {
+    const ahora = await this.reservas.ahora();
+    if (reserva.inicio <= ahora) {
       throw new BadRequestException('La reserva ya empezó: no se puede cancelar');
+    }
+    // El límite es para el vecino: la administración puede cancelar hasta el
+    // final (un caño roto en el SUM no avisa con 24 h).
+    const horas = reserva.amenity.cancelacionMinimaHoras;
+    if (!esGestor(usuario) && ahora > cancelableHasta(reserva.inicio, horas)) {
+      throw new BadRequestException(
+        `${reserva.amenity.nombre} se cancela hasta ${horas} horas antes. Pedíselo a la administración.`,
+      );
     }
 
     const cancelada = await this.reservas.actualizarReserva(reserva, {

@@ -72,6 +72,18 @@ export class CreateAmenityDto {
   @Max(720)
   anticipacionMinimaHoras?: number;
 
+  @ApiPropertyOptional({
+    example: 24,
+    default: 0,
+    maximum: 720,
+    description: 'Hasta cuántas horas antes el vecino puede cancelar. 0: hasta que empieza.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(720)
+  cancelacionMinimaHoras?: number;
+
   @ApiPropertyOptional({ example: 6, description: 'Sin tope si no se indica' })
   @IsOptional()
   @IsInt()

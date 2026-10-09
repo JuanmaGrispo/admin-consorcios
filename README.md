@@ -827,7 +827,10 @@ de `consorcio` y sólo cambia quien la llama.
 - **Aprobar revalida el calendario**: entre el pedido y la aprobación pudo
   entrar un bloqueo o aprobarse otra reserva.
 - **Cancelar sólo antes de que empiece.** Cancelar algo que ya pasó no es
-  cancelar, es reescribir la historia.
+  cancelar, es reescribir la historia. Además, con `cancelacionMinimaHoras` el
+  vecino cancela hasta esas horas antes ("Cancelable hasta 24 h antes"); la
+  administración puede hasta el inicio. Cada reserva trae `cancelableHasta`
+  (null si ya no se puede cancelar).
 - **Con `bloquea_con_deuda`**, una unidad con boletas `VENCIDA` no puede
   reservar. Reservas no toca las tablas de expensas: le pregunta a
   `ExpensasService.tieneDeudaVencida`.

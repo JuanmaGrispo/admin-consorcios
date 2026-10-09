@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  cancelableHasta,
   cierraAlDiaSiguiente,
   estadoDelDia,
   franjaEnMinutos,
@@ -110,5 +111,17 @@ describe('estadoDelDia', () => {
 
   it('un día que ya cerró es pasado', () => {
     assert.equal(estadoDelDia(ventana, [], h('22:00')), 'PASADO');
+  });
+});
+
+describe('cancelableHasta', () => {
+  const inicio = new Date('2026-09-14T16:00:00Z');
+
+  it('con 24 h, hasta el día anterior a la misma hora', () => {
+    assert.equal(cancelableHasta(inicio, 24).toISOString(), '2026-09-13T16:00:00.000Z');
+  });
+
+  it('sin límite, hasta que empieza', () => {
+    assert.equal(cancelableHasta(inicio, 0).getTime(), inicio.getTime());
   });
 });

@@ -67,6 +67,14 @@ export function validarFranja(
   return null;
 }
 
+/**
+ * Hasta cuándo el vecino puede cancelar una reserva que empieza en `inicio`.
+ * Con 0 horas, hasta que empieza.
+ */
+export function cancelableHasta(inicio: Date, horasDeAnticipacion: number): Date {
+  return new Date(inicio.getTime() - horasDeAnticipacion * 3_600_000);
+}
+
 export type EstadoDelDia = 'DISPONIBLE' | 'PARCIAL' | 'SIN_LUGAR' | 'PASADO';
 
 /**
