@@ -140,12 +140,13 @@ src/
 │   ├── estado-badge.tsx  EstadoBadge
 │   ├── empty-state.tsx   EmptyState
 │   ├── paginacion.tsx    Paginacion: el pie de tabla "Mostrando X de N" con páginas numeradas
+│   ├── confirmar-accion.tsx  ConfirmarAccion: confirmación de lo destructivo
 │   ├── en-construccion.tsx  placeholder de las rutas pendientes
 │   └── <modulo>/         componentes exclusivos de cada módulo
 ├── services/             UNA función por endpoint, usan lib/api.ts
 ├── lib/                  api.ts (api, query, descargar, subirArchivo), formato.ts, roles.ts, utils.ts
 ├── types/                espejan lo que devuelve el backend
-├── hooks/                use-mobile y los que vengan
+├── hooks/                usePedido (cargar datos por clave), useMediaQuery, useIsMobile
 └── proxy.ts              guard de rutas por cookie
 ```
 
@@ -193,15 +194,23 @@ Reglas del patrón:
 - **La página se remonta al cambiar de consorcio o unidad**:
   `<Muro key={consorcio.id} … />`. Así el estado (página, filtros, lista)
   arranca de cero sin `setState` dentro de un efecto, que el lint no deja.
-- **Carga en un efecto con bandera `vigente`**: si cambian los filtros antes
-  de que llegue la respuesta, la vieja se descarta. Para recargar después de
-  un cambio, un contador `version` en las dependencias.
+- **Carga con `usePedido(clave, pedir)`** (`hooks/use-pedido.ts`): vuelve a
+  pedir cuando cambia la clave (filtros, página) y descarta la respuesta vieja
+  que llega tarde. Después de un cambio, `recargar()`: vuelve a pedir sin
+  vaciar la pantalla. Con `clave` en `null` no pide (el día todavía no elegido).
+  Nada de `useEffect` + `fetch` a mano en las páginas.
+- **"Ver más"** agranda el `limite` de la clave y muestra `datos ?? ultimo`
+  mientras llega: la lista no parpadea. Tope en 100, que es lo que acepta el
+  backend.
+- **Lo destructivo** (borrar, dar de baja, cancelar) se confirma con
+  `ConfirmarAccion` (`components/confirmar-accion.tsx`), que muestra adentro
+  el error del backend si falla.
 - **Estados de la lista**: `Alert` si falló, `…Esqueleto` mientras carga,
   `EmptyState` (con la acción de alta) si el módulo todavía no tiene nada, y
   un texto dentro de la card si sólo el filtro dejó la lista vacía.
 - **Formulario**: si `onGuardar` tira, el error queda en el diálogo y el
   usuario no pierde lo escrito. La página cierra el diálogo, avisa con
-  `toast.success` y sube `version`.
+  `toast.success` y llama a `recargar()`.
 - **Acciones rápidas** (fijar, dar de baja): `toast.success` / `toast.error`,
   sin `Alert`.
 
