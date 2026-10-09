@@ -15,6 +15,7 @@ import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { ConsorciosModule } from './modules/consorcios/consorcios.module';
 import { EmailModule } from './modules/email/email.module';
 import { ExpensasModule } from './modules/expensas/expensas.module';
+import { BandejaModule } from './modules/bandeja/bandeja.module';
 import { InicioModule } from './modules/inicio/inicio.module';
 import { PanelModule } from './modules/panel/panel.module';
 import { NovedadesModule } from './modules/novedades/novedades.module';
@@ -72,6 +73,8 @@ import { VotacionesModule } from './modules/votaciones/votaciones.module';
     NovedadesModule,
     // Consumidor de la cola de mails: no expone rutas.
     EmailModule,
+    // El centro de notificaciones in-app: consume los mismos eventos que el mail.
+    BandejaModule,
     // Compone la pantalla de inicio del vecino: va último porque depende de
     // todos los anteriores.
     InicioModule,

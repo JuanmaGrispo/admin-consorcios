@@ -1210,6 +1210,7 @@ consumidores deciden qué hacer con cada uno.
 ```
 services ──publicar()──▶ exchange domus.eventos (topic)
                             ├─ q.email-notificador        (#)  → mail a quien corresponda
+                            ├─ q.bandeja-notificaciones   (#)  → aviso en el centro de notificaciones
                             └─ q.muro-novedades-publicador (asamblea.creada, votacion.nueva,
                                                             votacion.cerrada, expensas.emitidas) → novedad
 ```
@@ -1236,6 +1237,16 @@ services ──publicar()──▶ exchange domus.eventos (topic)
 - `modules/email/`: `EmailNotificador` manda con NodeMailer. Cada mail queda en
   `envio_notificacion` (PENDIENTE, ENVIADO o FALLIDO), y un reintento no repite
   los que ya salieron.
+- `modules/bandeja/`: `BandejaNotificaciones` guarda cada evento en la tabla
+  `notificacion` de cada destinatario (los mismos que el mail, se lea o no el
+  mail), con la marca en `evento_procesado`. Es lo que leen la campana y el
+  centro de notificaciones:
+
+  | Método | Ruta | Quién |
+  |---|---|---|
+  | GET | `/notificaciones` | con sesión: las propias, con `noLeidas` (`?soloNoLeidas=`, `pagina`, `limite`) |
+  | PATCH | `/notificaciones/:id/leida` | la propia; ajena, 404 |
+  | POST | `/notificaciones/leer-todas` | con sesión |
 - `modules/novedades/`: `MuroNovedadesPublicador`. La novedad se guarda junto con
   la marca en `evento_procesado`, así un evento repetido no la duplica.
 
