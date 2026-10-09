@@ -68,6 +68,9 @@ export class Reserva {
   @Column({ type: 'timestamptz', name: 'updated_at', default: () => 'now()' })
   updatedAt: Date;
 
+  @Column({ type: 'int', name: 'lugar', default: 1 })
+  lugar: number;
+
   @OneToMany(() => Pago, (row) => row.reserva)
   pagos?: Pago[];
 }
