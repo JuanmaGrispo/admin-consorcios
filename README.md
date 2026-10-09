@@ -835,6 +835,12 @@ de `consorcio` y sólo cambia quien la llama.
   infiere. Una reserva ajena devuelve 404, no 403: un 403 confirmaría que existe.
 - **No se solapa** con otra reserva que ocupe el amenity. Los intervalos son
   semiabiertos `[inicio, fin)`, así que de 10 a 12 y de 12 a 14 conviven.
+- **Lugares.** Con `lugares` > 1 (la cochera de visitas tiene 2) entran tantas
+  reservas simultáneas como lugares. Cada reserva ocupa un `lugar` concreto: el
+  alta toma el primero que nadie usa en todo el horario, con el amenity
+  bloqueado, y responde 409 "No quedan lugares" si no hay. El calendario marca
+  `SIN_LUGAR` sólo donde se juntan tantas reservas como lugares, y cada franja
+  informa `lugaresLibres`. Bajar `lugares` no toca las reservas que ya están.
 - **Aprobar revalida el calendario**: entre el pedido y la aprobación pudo
   entrar un bloqueo o aprobarse otra reserva.
 - **Cancelar sólo antes de que empiece.** Cancelar algo que ya pasó no es
@@ -885,8 +891,9 @@ Tres reglas no las decide el código, las garantiza Postgres (y el generador de
 entities no las muestra, porque sólo lee PK, FK y UNIQUE):
 
 - `ex_reserva_solapada`: un `EXCLUDE USING gist` sobre
-  `(amenity_id, tstzrange(inicio, fin))` con
-  `WHERE estado IN ('PENDIENTE','APROBADA')`. Es la lista de estados que ocupan
+  `(amenity_id, lugar, tstzrange(inicio, fin))` con
+  `WHERE estado IN ('PENDIENTE','APROBADA')`: dos reservas no se pisan dentro
+  del mismo lugar (migración `ReglasDeAmenities`). Es la lista de estados que ocupan
   el calendario, y `ESTADOS_QUE_OCUPAN` en el repositorio la espeja: si se
   separaran, el código y la base dirían cosas distintas. El rango es `[)`, igual
   que el chequeo del service.

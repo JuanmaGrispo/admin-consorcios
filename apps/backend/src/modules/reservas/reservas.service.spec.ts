@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import type { Notificador } from '../../core/notificaciones/notificador';
@@ -136,6 +136,8 @@ function crearEntorno(amenityExtra: Partial<Amenity> = {}, ahora = new Date('202
         (r) => ocupa(r) && r.id !== excluir && r.inicio < fin && r.fin > inicio && (lugar === undefined || r.lugar === lugar),
       ),
     hayBloqueo: async () => false,
+    lugaresTomados: async (_a: string, inicio: Date, fin: Date) =>
+      reservas.filter((r) => ocupa(r) && r.inicio < fin && r.fin > inicio).map((r) => r.lugar),
     crearReserva: async (_a: string, datos: Partial<Reserva>, chequear: (m: unknown) => Promise<Partial<Reserva> | void>) => {
       const extra = (await chequear(null)) ?? {};
       const r = { id: `rs${reservas.length + 1}`, amenity, ...datos, ...extra } as Reserva;
@@ -186,5 +188,34 @@ describe('ReservasService — franjas', () => {
       service.actualizarAmenity(admin, 'am1', { duracionFranjaMinutos: 13 * 60 }),
       BadRequestException,
     );
+  });
+});
+
+describe('ReservasService — lugares', () => {
+  const reservar = (service: ReservasService, horaInicio: string, horaFin: string) =>
+    service.crear(vecino, { amenityId: 'am1', fecha: '2026-09-13', horaInicio, horaFin });
+
+  it('con dos lugares, dos reservas a la vez van a lugares distintos y la tercera no entra', async () => {
+    const { service } = crearEntorno({ lugares: 2 });
+    const a = await reservar(service, '12:00', '16:00');
+    const b = await reservar(service, '14:00', '18:00');
+    assert.deepEqual([a.lugar, b.lugar], [1, 2]);
+    await assert.rejects(reservar(service, '15:00', '17:00'), ConflictException);
+    // Libre el lugar 1 desde las 16: entra ahí.
+    assert.equal((await reservar(service, '16:00', '18:00')).lugar, 1);
+  });
+
+  it('con un lugar, se comporta como siempre', async () => {
+    const { service } = crearEntorno();
+    await reservar(service, '12:00', '14:00');
+    await assert.rejects(reservar(service, '13:00', '15:00'), ConflictException);
+  });
+
+  it('aprobar mira sólo el lugar de la reserva', async () => {
+    const { service } = crearEntorno({ lugares: 2, requiereAprobacion: true });
+    const a = await reservar(service, '12:00', '16:00');
+    const b = await reservar(service, '12:00', '16:00');
+    assert.equal((await service.aprobar(admin, a.id)).estado, EstadoReserva.APROBADA);
+    assert.equal((await service.aprobar(admin, b.id)).estado, EstadoReserva.APROBADA);
   });
 });

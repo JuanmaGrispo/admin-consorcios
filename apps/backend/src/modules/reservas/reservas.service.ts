@@ -30,6 +30,8 @@ import { UpdateAmenityDto } from './dto/update-amenity.dto';
 import {
   cancelableHasta,
   cierraAlDiaSiguiente,
+  elegirLugar,
+  tramosLlenos,
   estadoDeLasFranjas,
   franjasDeLaVentana,
   estadoDelDia,
@@ -218,10 +220,10 @@ export class ReservasService {
       this.reservas.reservasEnRango(id, inicio, fin),
       this.reservas.bloqueosEnRango(id, inicio, fin),
     ]);
-    const ocupado = [
-      ...reservas.map((r) => ({ inicio: r.inicio, fin: r.fin })),
-      ...bloqueos.map((b) => ({ inicio: b.desde, fin: b.hasta })),
-    ];
+    const bloqueado = bloqueos.map((b) => ({ inicio: b.desde, fin: b.hasta }));
+    const ocupado = [...reservas.map((r) => ({ inicio: r.inicio, fin: r.fin })), ...bloqueado];
+    // Sin lugar es donde se juntan tantas reservas como lugares, o un bloqueo.
+    const lleno = [...tramosLlenos(reservas, amenity.lugares), ...bloqueado];
 
     return {
       amenityId: amenity.id,
@@ -230,7 +232,7 @@ export class ReservasService {
       cierraAlDiaSiguiente: cierraAlDiaSiguiente(amenity.horaApertura, amenity.horaCierre),
       dias: ventanas.map((v) => ({
         fecha: v.fecha,
-        estado: estadoDelDia(this.reservable(v, amenity), ocupado, ahora),
+        estado: estadoDelDia(this.reservable(v, amenity), ocupado, ahora, lleno),
       })),
     };
   }
@@ -475,12 +477,21 @@ export class ReservasService {
         resueltaAt: amenity.requiereAprobacion ? null : ahora,
       },
       async (m) => {
-        if (await this.reservas.haySolapamiento(amenity.id, inicio, fin, null, m)) {
-          throw new ConflictException('Ese horario ya está reservado');
-        }
         if (await this.reservas.hayBloqueo(amenity.id, inicio, fin, m)) {
           throw new ConflictException('El amenity está bloqueado por mantenimiento en ese horario');
         }
+        // Con el amenity bloqueado, el primer lugar que nadie ocupa en todo
+        // el horario. Con un solo lugar es el chequeo de solapamiento de siempre.
+        const lugar = elegirLugar(
+          await this.reservas.lugaresTomados(amenity.id, inicio, fin, m),
+          amenity.lugares,
+        );
+        if (lugar === null) {
+          throw new ConflictException(
+            amenity.lugares > 1 ? 'No quedan lugares en ese horario' : 'Ese horario ya está reservado',
+          );
+        }
+        return { lugar };
       },
     );
 
@@ -510,13 +521,15 @@ export class ReservasService {
     const reserva = await this.exigirPendiente(usuario, id);
 
     // Entre el pedido y la aprobación pudo entrar un bloqueo o aprobarse otra
-    // reserva, así que el calendario se vuelve a mirar.
+    // reserva, así que el calendario se vuelve a mirar en su lugar.
     if (
       await this.reservas.haySolapamiento(
         reserva.amenityId,
         reserva.inicio,
         reserva.fin,
         reserva.id,
+        undefined,
+        reserva.lugar,
       )
     ) {
       throw new ConflictException('Ese horario ya está reservado');

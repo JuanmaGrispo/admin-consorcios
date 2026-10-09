@@ -256,6 +256,8 @@ export class ReservasRepository {
     fin: Date,
     excluirId: string | null,
     m?: EntityManager,
+    /** Sólo en ese lugar: con varios, otra reserva a la misma hora puede estar en otro. */
+    lugar?: number,
   ): Promise<boolean> {
     const qb = (m?.getRepository(Reserva) ?? this.reservas)
       .createQueryBuilder('r')
@@ -265,7 +267,21 @@ export class ReservasRepository {
       .andWhere('r.fin > :inicio', { inicio });
 
     if (excluirId) qb.andWhere('r.id != :excluirId', { excluirId });
+    if (lugar !== undefined) qb.andWhere('r.lugar = :lugar', { lugar });
     return qb.getExists();
+  }
+
+  /** Los lugares que ya ocupa alguna reserva en ese horario. */
+  async lugaresTomados(amenityId: string, inicio: Date, fin: Date, m?: EntityManager): Promise<number[]> {
+    const filas = await (m?.getRepository(Reserva) ?? this.reservas)
+      .createQueryBuilder('r')
+      .select('DISTINCT r.lugar', 'lugar')
+      .where('r.amenityId = :amenityId', { amenityId })
+      .andWhere('r.estado IN (:...estados)', { estados: ESTADOS_QUE_OCUPAN })
+      .andWhere('r.inicio < :fin', { fin })
+      .andWhere('r.fin > :inicio', { inicio })
+      .getRawMany<{ lugar: number }>();
+    return filas.map((f) => Number(f.lugar));
   }
 
   hayBloqueo(
@@ -377,14 +393,15 @@ export class ReservasRepository {
   async crearReserva(
     amenityId: string,
     datos: Partial<Reserva>,
-    chequear: (m: EntityManager) => Promise<void>,
+    /** Corre con el amenity bloqueado; lo que devuelve (el lugar) se suma a la reserva. */
+    chequear: (m: EntityManager) => Promise<Partial<Reserva> | void>,
   ): Promise<Reserva> {
     try {
       const creada = await this.dataSource.transaction(async (m) => {
         await m.query('SELECT id FROM amenity WHERE id = $1 FOR UPDATE', [amenityId]);
-        await chequear(m);
+        const extra = (await chequear(m)) ?? {};
         const repo = m.getRepository(Reserva);
-        return repo.save(repo.create(datos));
+        return repo.save(repo.create({ ...datos, ...extra }));
       });
       return (await this.findById(creada.id))!;
     } catch (error) {

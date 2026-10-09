@@ -162,26 +162,73 @@ export type EstadoDelDia = 'DISPONIBLE' | 'PARCIAL' | 'SIN_LUGAR' | 'PASADO';
  */
 export function estadoDelDia(
   ventana: { inicio: Date; fin: Date },
-  ocupado: { inicio: Date; fin: Date }[],
+  ocupado: Intervalo[],
   ahora: Date,
+  /** Los tramos sin ningún lugar libre. Con un solo lugar, es lo mismo que `ocupado`. */
+  lleno: Intervalo[] = ocupado,
 ): EstadoDelDia {
   if (ventana.fin <= ahora) return 'PASADO';
 
   const desde = Math.max(ventana.inicio.getTime(), ahora.getTime());
   const hasta = ventana.fin.getTime();
-  const tramos = ocupado
+  if (cubierto(ocupado, desde, hasta) === 0) return 'DISPONIBLE';
+  return cubierto(lleno, desde, hasta) >= hasta - desde ? 'SIN_LUGAR' : 'PARCIAL';
+}
+
+interface Intervalo {
+  inicio: Date;
+  fin: Date;
+}
+
+/** Cuánto de [desde, hasta) tapan los intervalos, unidos antes de medir. */
+function cubierto(intervalos: Intervalo[], desde: number, hasta: number): number {
+  const tramos = intervalos
     .map((o) => [Math.max(o.inicio.getTime(), desde), Math.min(o.fin.getTime(), hasta)])
     .filter(([i, f]) => f > i)
     .sort((a, b) => a[0] - b[0]);
 
-  let cubierto = 0;
+  let total = 0;
   let cursor = desde;
   for (const [i, f] of tramos) {
     if (f <= cursor) continue;
-    cubierto += f - Math.max(i, cursor);
+    total += f - Math.max(i, cursor);
     cursor = f;
   }
+  return total;
+}
 
-  if (cubierto === 0) return 'DISPONIBLE';
-  return cubierto >= hasta - desde ? 'SIN_LUGAR' : 'PARCIAL';
+/**
+ * Los tramos en que hay `lugares` reservas a la vez, o sea, ningún lugar libre.
+ * La base no deja dos reservas en el mismo lugar a la vez, así que contar
+ * reservas simultáneas es contar lugares tomados.
+ */
+export function tramosLlenos(reservas: Intervalo[], lugares: number): Intervalo[] {
+  const eventos = reservas
+    .flatMap((r) => [
+      { t: r.inicio.getTime(), d: 1 },
+      { t: r.fin.getTime(), d: -1 },
+    ])
+    // A la misma hora, primero salen y después entran: [inicio, fin) no se pisan.
+    .sort((a, b) => a.t - b.t || a.d - b.d);
+
+  const llenos: Intervalo[] = [];
+  let simultaneas = 0;
+  let desde: number | null = null;
+  for (const { t, d } of eventos) {
+    simultaneas += d;
+    if (simultaneas >= lugares && desde === null) desde = t;
+    if (simultaneas < lugares && desde !== null) {
+      if (t > desde) llenos.push({ inicio: new Date(desde), fin: new Date(t) });
+      desde = null;
+    }
+  }
+  return llenos;
+}
+
+/** El primer lugar (1..lugares) que no está tomado, o null si están todos. */
+export function elegirLugar(tomados: number[], lugares: number): number | null {
+  for (let lugar = 1; lugar <= lugares; lugar++) {
+    if (!tomados.includes(lugar)) return lugar;
+  }
+  return null;
 }

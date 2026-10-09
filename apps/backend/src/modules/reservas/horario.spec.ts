@@ -3,11 +3,13 @@ import { describe, it } from 'node:test';
 import {
   cancelableHasta,
   cierraAlDiaSiguiente,
+  elegirLugar,
   estadoDeLasFranjas,
   estadoDelDia,
   franjaEnMinutos,
   franjasDeLaVentana,
   largoDeVentana,
+  tramosLlenos,
   validarFranja,
 } from './horario';
 
@@ -188,5 +190,45 @@ describe('estadoDeLasFranjas', () => {
   it('lo que ya empezó es pasado', () => {
     const estados = estadoDeLasFranjas(franjas, apertura, 240, { ...ctx, ahora: h('15:00') });
     assert.deepEqual(estados.map((e) => e.estado), ['PASADA', 'PASADA', 'LIBRE']);
+  });
+});
+
+describe('varios lugares', () => {
+  const h = (hora: string) => new Date(`2026-09-13T${hora}:00-03:00`);
+  const ventana = { inicio: h('10:00'), fin: h('22:00') };
+
+  it('elige el primer lugar libre', () => {
+    assert.equal(elegirLugar([], 2), 1);
+    assert.equal(elegirLugar([1], 2), 2);
+    assert.equal(elegirLugar([2], 2), 1);
+    assert.equal(elegirLugar([1, 2], 2), null);
+  });
+
+  it('lleno es donde se juntan tantas reservas como lugares', () => {
+    const reservas = [
+      { inicio: h('10:00'), fin: h('16:00') },
+      { inicio: h('14:00'), fin: h('20:00') },
+    ];
+    assert.deepEqual(
+      tramosLlenos(reservas, 2).map((t) => [t.inicio.getTime(), t.fin.getTime()]),
+      [[h('14:00').getTime(), h('16:00').getTime()]],
+    );
+    // Con un lugar, cualquier reserva llena.
+    assert.equal(tramosLlenos(reservas, 1).length, 1);
+  });
+
+  it('reservas que se tocan en el borde no se suman', () => {
+    const reservas = [
+      { inicio: h('10:00'), fin: h('14:00') },
+      { inicio: h('14:00'), fin: h('18:00') },
+    ];
+    assert.deepEqual(tramosLlenos(reservas, 2), []);
+  });
+
+  it('con dos lugares, un día tomado por una sola reserva sigue parcial', () => {
+    const una = [{ inicio: h('10:00'), fin: h('22:00') }];
+    assert.equal(estadoDelDia(ventana, una, h('08:00'), tramosLlenos(una, 2)), 'PARCIAL');
+    const dos = [...una, { inicio: h('10:00'), fin: h('22:00') }];
+    assert.equal(estadoDelDia(ventana, dos, h('08:00'), tramosLlenos(dos, 2)), 'SIN_LUGAR');
   });
 });

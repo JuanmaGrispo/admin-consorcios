@@ -46,6 +46,17 @@ export class CreateAmenityDto {
   cupoPersonas?: number;
 
   @ApiPropertyOptional({
+    example: 2,
+    default: 1,
+    description: 'Cuántas reservas simultáneas admite (la cochera de visitas tiene 2 lugares)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  lugares?: number;
+
+  @ApiPropertyOptional({
     example: 'Música hasta las 01:00. Devolver el SUM limpio.',
     description: 'Las reglas en texto libre: el vecino las ve antes de confirmar',
   })
