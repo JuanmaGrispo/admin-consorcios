@@ -1,4 +1,6 @@
-export type EstadoVotacion = 'BORRADOR' | 'ABIERTA' | 'CERRADA';
+import type { EstadoAsamblea } from './asamblea';
+
+export type EstadoVotacion ='BORRADOR' | 'ABIERTA' | 'CERRADA';
 export type ResultadoVotacion = 'APROBADA' | 'RECHAZADA' | 'SIN_QUORUM';
 export type PadronVotacion = 'SOLO_PROPIETARIOS' | 'TODAS_LAS_UNIDADES';
 export type FormaConteo = 'POR_COEFICIENTE' | 'POR_UNIDAD';
@@ -84,6 +86,8 @@ export interface ResumenPadron {
  */
 export type VotacionDetalle = Omit<Votacion, 'padron'> & {
   padron: ResumenPadron;
+  /** La asamblea de la que cuelga: su estado decide si ya se puede votar. */
+  asamblea: { id: string; estado: EstadoAsamblea } | null;
   escrutinio: Escrutinio | null;
   misUnidades?: MiUnidadVotacion[];
 };

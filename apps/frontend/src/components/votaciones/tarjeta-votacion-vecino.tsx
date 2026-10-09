@@ -16,12 +16,29 @@ interface TarjetaVotacionVecinoProps {
   onVotar: (detalle: VotacionDetalle) => void;
 }
 
+/**
+ * Las mismas reglas que aplica el backend antes de aceptar un voto desde la
+ * app. Devuelve null si se puede votar ahora, o por qué no.
+ */
+function motivoParaNoVotar(detalle: VotacionDetalle): string | null {
+  if (detalle.asamblea) {
+    if (detalle.asamblea.estado === 'EN_CURSO') return null;
+    if (detalle.asamblea.estado === 'CONVOCADA' && detalle.permiteVotoAnticipado) return null;
+    return 'Se vota durante la asamblea.';
+  }
+  if (Date.now() < new Date(detalle.apertura).getTime()) {
+    return `Se puede votar desde el ${fechaHora(detalle.apertura)}.`;
+  }
+  return null;
+}
+
 /** Una votación como la ve el vecino (pantalla 15): qué se vota, hasta cuándo, si ya votó y el resultado. */
 export function TarjetaVotacionVecino({ votacion, detalle, onVotar }: TarjetaVotacionVecinoProps) {
   const abierta = votacion.estado === 'ABIERTA';
   const unidades = detalle?.misUnidades ?? [];
   const pendientes = unidades.filter((u) => !u.voto);
   const opciones = new Map(votacion.opcionVotos.map((o) => [o.id, o.etiqueta]));
+  const motivo = detalle ? motivoParaNoVotar(detalle) : null;
 
   return (
     <Card>
@@ -77,12 +94,16 @@ export function TarjetaVotacionVecino({ votacion, detalle, onVotar }: TarjetaVot
               </ul>
             )}
 
-            {abierta && pendientes.length > 0 && (
-              <Button onClick={() => onVotar(detalle)}>
-                <Vote data-icon="inline-start" />
-                Votar
-              </Button>
-            )}
+            {abierta &&
+              pendientes.length > 0 &&
+              (motivo ? (
+                <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground">{motivo}</p>
+              ) : (
+                <Button onClick={() => onVotar(detalle)}>
+                  <Vote data-icon="inline-start" />
+                  Votar
+                </Button>
+              ))}
 
             {detalle.escrutinio && (
               <div className="border-t pt-3">
