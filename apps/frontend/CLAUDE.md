@@ -139,6 +139,7 @@ src/
 │   ├── page-header.tsx   PageHeader
 │   ├── estado-badge.tsx  EstadoBadge
 │   ├── empty-state.tsx   EmptyState
+│   ├── paginacion.tsx    Paginacion: anterior / siguiente de un Paginado<T>
 │   ├── en-construccion.tsx  placeholder de las rutas pendientes
 │   └── <modulo>/         componentes exclusivos de cada módulo
 ├── services/             UNA función por endpoint, usan lib/api.ts
@@ -168,6 +169,35 @@ src/
   enviar. Sin librería de forms por ahora.
 - `'use client'` solo donde hay estado o efectos. Los layouts son server
   components.
+
+### Patrón de un módulo: tabla, formulario y servicio
+
+Novedades es la referencia. Copiá su forma al armar un módulo nuevo:
+
+| Pieza | Archivo de referencia | Qué hace |
+|---|---|---|
+| Contrato | `types/novedad.ts` | Lo que devuelve el backend, más `…Input` (alta) y `…Cambios` (PATCH) |
+| Service | `services/novedades.ts` | Un objeto `<modulo>Service`, una función por endpoint |
+| Tabla | `components/novedades/tabla-novedades.tsx` | `Card` + `Table`, acciones en `DropdownMenu`, lo destructivo con `AlertDialog`, y su `…Esqueleto` |
+| Formulario | `components/novedades/novedad-dialog.tsx` | Alta y edición en un `Dialog`; el formulario se monta al abrir y entrega valores limpios por `onGuardar` |
+| Página admin | `app/admin/novedades/page.tsx` | Carga, filtros, paginación, toasts |
+| Página vecino | `app/vecino/novedades/page.tsx` | Lectura en cards, "Ver anteriores" en vez de páginas |
+
+Reglas del patrón:
+
+- **La página se remonta al cambiar de consorcio o unidad**:
+  `<Muro key={consorcio.id} … />`. Así el estado (página, filtros, lista)
+  arranca de cero sin `setState` dentro de un efecto, que el lint no deja.
+- **Carga en un efecto con bandera `vigente`**: si cambian los filtros antes
+  de que llegue la respuesta, la vieja se descarta. Para recargar después de
+  un cambio, un contador `version` en las dependencias.
+- **Estados de la lista**: `Alert` si falló, `…Esqueleto` mientras carga,
+  `EmptyState` (con la acción de alta) si vino vacía, tabla y `Paginacion` si no.
+- **Formulario**: si `onGuardar` tira, el error queda en el diálogo y el
+  usuario no pierde lo escrito. La página cierra el diálogo, avisa con
+  `toast.success` y sube `version`.
+- **Acciones rápidas** (fijar, dar de baja): `toast.success` / `toast.error`,
+  sin `Alert`.
 
 ## 6. Antes de dar por terminado un cambio de UI
 
