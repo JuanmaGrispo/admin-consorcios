@@ -111,12 +111,16 @@ function DetalleAsamblea({ id }: { id: string }) {
   const recargar = () => setVersion((v) => v + 1);
 
   async function editar(valores: ValoresAsamblea) {
+    if (!asamblea) return;
+    // El backend exige fecha futura cada vez que la recibe: si no cambió, no se
+    // manda, así un borrador vencido se puede editar sin tocarle la fecha.
+    const mismaFecha = new Date(valores.fechaHora).getTime() === new Date(asamblea.fechaHora).getTime();
     // El orden del día de una existente se edita aparte, con su propio endpoint.
     await asambleasService.actualizar(id, {
       titulo: valores.titulo,
       tipo: valores.tipo,
       modalidad: valores.modalidad,
-      fechaHora: valores.fechaHora,
+      fechaHora: mismaFecha ? undefined : valores.fechaHora,
       lugar: valores.lugar,
       linkVideollamada: valores.linkVideollamada,
       quorumRequerido: valores.quorumRequerido,
