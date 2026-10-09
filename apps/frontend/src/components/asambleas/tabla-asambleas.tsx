@@ -58,7 +58,7 @@ export function TablaAsambleas({ asambleas }: { asambleas: Asamblea[] }) {
               ) : (
                 <span className={a.quorumPorcentaje >= a.quorumRequerido ? 'text-success' : 'text-warning'}>
                   {porcentaje(a.quorumPorcentaje)}
-                  <span className="text-muted-foreground"> / {porcentaje(a.quorumRequerido, 0)}</span>
+                  <span className="text-muted-foreground"> / {porcentaje(a.quorumRequerido, 2)}</span>
                 </span>
               )}
             </TableCell>

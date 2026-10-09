@@ -23,7 +23,7 @@ export function TarjetaQuorum({ quorum }: { quorum: Quorum }) {
             <span className={`text-3xl font-bold tabular-nums ${quorum.alcanzado ? 'text-success' : 'text-warning'}`}>
               {porcentaje(quorum.porcentaje)}
             </span>
-            <span className="text-sm text-muted-foreground">de {porcentaje(quorum.requerido, 0)} requerido</span>
+            <span className="text-sm text-muted-foreground">de {porcentaje(quorum.requerido, 2)} requerido</span>
           </p>
           <Progress value={quorum.porcentaje} className="mt-2 h-2" />
           <p className="mt-2 text-sm text-muted-foreground">
