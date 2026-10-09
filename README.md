@@ -1088,6 +1088,7 @@ Módulo `src/modules/asambleas/`. Diseño en
 | PUT | `/asambleas/:id/orden-dia` | admin |
 | POST | `/asambleas/:id/convocar` · `/iniciar` · `/cerrar` | admin |
 | PATCH | `/asambleas/:id/acta` | admin |
+| GET | `/asambleas/:id/acta-borrador` | admin: el borrador del acta en PDF |
 | GET | `/asambleas/:id/asistencias` | admin |
 | PATCH | `/asambleas/:id/asistencias/:unidadId` | admin |
 | PUT | `/asambleas/:id/asistencia` | vecino |
@@ -1101,7 +1102,11 @@ quórum y su propia respuesta, nunca los nombres de los demás.
 
 ### Acta
 
-El PDF se sube primero con `POST /archivos?destino=actas` y después se guarda
+`GET /asambleas/:id/acta-borrador` arma un borrador en PDF con lo que el
+sistema sabe (quórum, asistencia con poderes, orden del día y resultado de cada
+votación) para completar y firmar. Es el "Descargar acta" del detalle.
+
+El acta firmada se sube primero con `POST /archivos?destino=actas` y después se guarda
 su URL con `PATCH /asambleas/:id/acta`. Una URL que no venga de ahí —externa
 o de otro destino— responde 400.
 

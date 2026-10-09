@@ -27,6 +27,7 @@ import { RegistrarAsistenciaDto } from './dto/registrar-asistencia.dto';
 import { ReemplazarOrdenDiaDto } from './dto/reemplazar-orden-dia.dto';
 import { UpdateAsambleaDto } from './dto/update-asamblea.dto';
 import { datosDeAsamblea } from './datos-evento';
+import { generarActaPdf } from './acta-pdf';
 import { calcularQuorum, porcentajeDeQuorum } from './quorum';
 
 const QUORUM_POR_DEFECTO = 60;
@@ -269,6 +270,24 @@ export class AsambleasService {
     const estado = quorum.alcanzado ? EstadoAsamblea.CERRADA : EstadoAsamblea.CERRADA_SIN_QUORUM;
     await this.asambleas.actualizar(id, { estado });
     return this.findOne(usuario, id);
+  }
+
+  /**
+   * El borrador del acta en PDF ("Descargar acta" del detalle): quórum,
+   * asistencia, orden del día y resultados, para completar, firmar y después
+   * subir como acta definitiva con `PATCH /asambleas/:id/acta`.
+   */
+  async actaBorrador(usuario: UsuarioActual, id: string): Promise<{ buffer: Buffer; nombre: string }> {
+    const asamblea = await this.exigirAsamblea(usuario, id);
+    const [consorcio, asistencias, votaciones] = await Promise.all([
+      this.consorcios.findOne(asamblea.consorcioId),
+      this.asambleas.asistencias(id),
+      this.asambleas.votacionesDe(id),
+    ]);
+    const quorum = asistencias.length > 0 ? calcularQuorum(asistencias, asamblea.quorumRequerido) : null;
+    const buffer = await generarActaPdf({ asamblea, consorcio, quorum, asistencias, votaciones });
+    const fecha = asamblea.fechaHora.toISOString().slice(0, 10);
+    return { buffer, nombre: `acta-borrador-${fecha}.pdf` };
   }
 
   /** El PDF se sube antes con `POST /archivos?destino=actas`; acá sólo se guarda su URL. */

@@ -210,6 +210,14 @@ export class AsambleasRepository {
   }
 
   /** Una asamblea no se cierra con votaciones sin resultado. */
+  /** Las votaciones de la asamblea con su resultado: para el borrador del acta. */
+  votacionesDe(asambleaId: string): Promise<Votacion[]> {
+    return this.votaciones.find({
+      where: { asambleaId },
+      select: { id: true, titulo: true, puntoOrdenDiaId: true, resultado: true },
+    });
+  }
+
   votacionesAbiertas(asambleaId: string): Promise<number> {
     return this.votaciones.count({ where: { asambleaId, estado: EstadoVotacion.ABIERTA } });
   }

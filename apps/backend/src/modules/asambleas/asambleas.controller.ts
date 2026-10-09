@@ -11,8 +11,9 @@ import {
   Post,
   Put,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { RolUsuario } from '../../database/entities';
 import type { UsuarioActual as Usuario } from '../auth/auth.types';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -125,6 +126,22 @@ export class AsambleasController {
     @Body() dto: CargarActaDto,
   ) {
     return this.asambleas.cargarActa(usuario, id, dto);
+  }
+
+  @Roles(RolUsuario.ADMINISTRADOR)
+  @Get(':id/acta-borrador')
+  @ApiOperation({
+    summary: 'Borrador del acta en PDF',
+    description:
+      'Quórum, asistencia, orden del día y resultado de cada votación, para completar y firmar. El acta firmada se sube aparte (PATCH /asambleas/:id/acta).',
+  })
+  @ApiProduces('application/pdf')
+  async actaBorrador(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    const { buffer, nombre } = await this.asambleas.actaBorrador(usuario, id);
+    return new StreamableFile(buffer, {
+      type: 'application/pdf',
+      disposition: `inline; filename="${nombre}"`,
+    });
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
