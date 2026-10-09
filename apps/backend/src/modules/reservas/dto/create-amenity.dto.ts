@@ -45,6 +45,16 @@ export class CreateAmenityDto {
   @Max(9999)
   cupoPersonas?: number;
 
+  @ApiPropertyOptional({
+    example: 'Música hasta las 01:00. Devolver el SUM limpio.',
+    description: 'Las reglas en texto libre: el vecino las ve antes de confirmar',
+  })
+  @IsOptional()
+  @Transform(recortar)
+  @IsString()
+  @MaxLength(4000)
+  reglamento?: string | null;
+
   @ApiPropertyOptional({ example: '08:00', default: '08:00:00' })
   @IsOptional()
   @Matches(HORA, { message: 'horaApertura tiene que tener el formato HH:MM' })

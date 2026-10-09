@@ -735,8 +735,9 @@ preferencia responde 503 y el resto de la app anda igual.
 
 El vecino reserva el SUM desde su portal y el administrador gestiona esas
 reservas. Las reglas no están en el código: las declara cada amenity en sus
-columnas (horario, anticipación, duración, si requiere aprobación, si bloquea
-al que debe expensas).
+columnas (horario, anticipación, duración, franjas, cancelación, lugares, si
+requiere aprobación, si bloquea al que debe expensas). `reglamento` es el texto
+libre que el vecino lee antes de confirmar ("Música hasta las 01:00").
 
 ### Endpoints
 
