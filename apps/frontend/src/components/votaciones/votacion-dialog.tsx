@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, X } from 'lucide-react';
+import { FileText, Loader2, Paperclip, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { instanteALocal, localAInstante } from '@/lib/fecha-input';
+import { archivosService } from '@/services/archivos';
 import { votacionesService } from '@/services/votaciones';
 import type {
   CriterioDesempate,
@@ -37,11 +38,33 @@ import type {
 import { DESEMPATES, FORMAS_CONTEO, MAYORIAS, PADRONES } from './etiquetas';
 
 const MAX_OPCIONES = 8;
+/** Lo que acepta `POST /archivos?destino=votaciones`. */
+const TIPOS_ADJUNTO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+const MAXIMO_MB = 10;
+
+interface Adjunto {
+  url: string;
+  nombre: string;
+  /** Subido en este formulario: si se descarta, se borra del storage. */
+  nuevo: boolean;
+}
+
+/** El nombre del archivo para mostrar: la URL guardada no trae otro. */
+function nombreDeUrl(url: string): string {
+  return decodeURIComponent(url.split('/').pop() ?? 'Adjunto');
+}
+
+/** El adjunto que ya estaba guardado no se borra: la votación lo sigue usando hasta que se guarde el cambio. */
+function descartarSiEsNuevo(adjunto: Adjunto | null) {
+  if (adjunto?.nuevo) archivosService.borrar(adjunto.url).catch(() => undefined);
+}
 
 /** Lo que el formulario le entrega a la página, ya limpio. */
 export interface ValoresVotacion {
   titulo: string;
   descripcion: string | null;
+  /** El presupuesto o la foto que respalda la propuesta; null si no tiene. */
+  adjuntoUrl: string | null;
   padron: PadronVotacion;
   formaConteo: FormaConteo;
   mayoria: MayoriaRequerida;
@@ -132,8 +155,43 @@ function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuarda
   const [extras, setExtras] = useState<string[]>(
     votacion?.opcionVotos.filter((o) => !o.esFija).map((o) => o.etiqueta) ?? [],
   );
+  const [adjunto, setAdjunto] = useState<Adjunto | null>(() =>
+    votacion?.adjuntoUrl ? { url: votacion.adjuntoUrl, nombre: nombreDeUrl(votacion.adjuntoUrl), nuevo: false } : null,
+  );
+  const [subiendo, setSubiendo] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function adjuntar(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!archivo) return;
+    setError(null);
+    if (!TIPOS_ADJUNTO.includes(archivo.type)) {
+      setError('El adjunto tiene que ser un PDF o una foto (JPG, PNG o WEBP).');
+      return;
+    }
+    if (archivo.size > MAXIMO_MB * 1024 * 1024) {
+      setError(`El adjunto pesa más de ${MAXIMO_MB} MB.`);
+      return;
+    }
+    setSubiendo(true);
+    try {
+      const subido = await votacionesService.subirAdjunto(archivo);
+      descartarSiEsNuevo(adjunto);
+      setAdjunto({ url: subido.url, nombre: archivo.name, nuevo: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo subir el adjunto.');
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  function cancelar() {
+    // Lo que se subió en este formulario y no se guarda no tiene que quedar en el storage.
+    descartarSiEsNuevo(adjunto);
+    onCancelar();
+  }
 
   // La vista previa se pide de nuevo cada vez que cambia el padrón o el conteo.
   // Si falla, el formulario anda igual sin ella.
@@ -149,6 +207,7 @@ function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuarda
       await onGuardar({
         titulo: titulo.trim(),
         descripcion: descripcion.trim() || null,
+        adjuntoUrl: adjunto?.url ?? null,
         padron,
         formaConteo,
         mayoria,
@@ -191,7 +250,53 @@ function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuarda
             onChange={(e) => setDescripcion(e.target.value)}
             placeholder="Presupuesto de $ 3.480.000 en 3 cuotas."
           />
-          <FieldDescription>Los vecinos lo leen antes de votar.</FieldDescription>
+          <FieldDescription>
+            Explicá el costo por unidad: es lo primero que pregunta el vecino.
+          </FieldDescription>
+        </Field>
+
+        <Field>
+          <FieldLabel>Presupuesto o foto</FieldLabel>
+          {adjunto ? (
+            <div className="flex items-center gap-2 rounded-lg bg-muted py-1 pr-1 pl-3 text-sm">
+              <FileText className="size-4 shrink-0 text-muted-foreground" />
+              <a
+                href={adjunto.url}
+                target="_blank"
+                rel="noreferrer"
+                className="min-w-0 flex-1 truncate text-secondary-foreground hover:text-primary"
+              >
+                {adjunto.nombre}
+              </a>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Quitar el adjunto"
+                onClick={() => {
+                  descartarSiEsNuevo(adjunto);
+                  setAdjunto(null);
+                }}
+              >
+                <X />
+              </Button>
+            </div>
+          ) : (
+            <Button type="button" variant="outline" size="sm" asChild className="self-start" disabled={subiendo}>
+              <label className="cursor-pointer">
+                {subiendo ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Paperclip data-icon="inline-start" />}
+                {subiendo ? 'Subiendo…' : 'Adjuntar presupuesto o foto'}
+                <input
+                  type="file"
+                  accept={TIPOS_ADJUNTO.join(',')}
+                  className="sr-only"
+                  onChange={adjuntar}
+                  disabled={subiendo}
+                />
+              </label>
+            </Button>
+          )}
+          <FieldDescription>Los vecinos lo pueden abrir antes de votar. PDF o foto, hasta {MAXIMO_MB} MB.</FieldDescription>
         </Field>
 
         <Field>
@@ -332,10 +437,10 @@ function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuarda
         <p className="text-xs text-muted-foreground sm:mr-auto">
           Queda en borrador: los vecinos la ven cuando la publiques.
         </p>
-        <Button type="button" variant="outline" onClick={onCancelar} disabled={enviando}>
+        <Button type="button" variant="outline" onClick={cancelar} disabled={enviando}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={enviando}>
+        <Button type="submit" disabled={enviando || subiendo}>
           {enviando ? 'Guardando…' : votacion ? 'Guardar cambios' : 'Crear votación'}
         </Button>
       </DialogFooter>
