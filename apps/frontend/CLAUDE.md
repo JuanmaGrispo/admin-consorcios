@@ -58,6 +58,7 @@ mapeado ahí. **No existen tokens paralelos**: no hay `--color-ink`,
 | `warning` | `oklch(0.62 0.12 72)` | Pendiente, vencido, atención |
 | `border` / `input` | `#e6e3dd` | Líneas |
 | `ring` | azul Domus | Anillo de focus |
+| `chart-1` / `chart-1-claro` | azul Domus / `oklch(0.7 0.12 254)` | Gráficos: el valor (cobrado) y el total detrás (emitido) |
 | `radius` | `0.625rem` | Base de todos los redondeados |
 
 ### Cómo se usan
