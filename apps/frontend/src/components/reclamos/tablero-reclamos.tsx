@@ -90,7 +90,7 @@ function TarjetaTablero({ reclamo, activa, onClick }: { reclamo: Reclamo; activa
         <span className="text-xs font-semibold">{reclamo.unidad.etiqueta}</span>
         <EstadoBadge dominio="prioridad" estado={reclamo.prioridad} />
       </div>
-      <span className="line-clamp-2 text-sm font-medium">{reclamo.descripcion}</span>
+      <span className="line-clamp-2 text-sm font-medium">{reclamo.titulo ?? reclamo.descripcion}</span>
       <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="flex min-w-0 items-center gap-1">
           <IconoCatalogo nombre={reclamo.categoria?.icono} className="size-3.5" />

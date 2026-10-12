@@ -18,7 +18,9 @@ function titulo(evento: ReclamoEvento, reclamo: ReclamoDetalle, esElUltimoProvee
     case 'CREACION':
       return delVecino ? 'Reclamo creado por el vecino' : 'Reclamo creado por la administración';
     case 'ASIGNACION':
-      // El evento no guarda a quién se asignó: el nombre sólo es seguro para la asignación vigente.
+      // Las asignaciones guardan su proveedor; las viejas no, y para esas el
+      // nombre sólo es seguro en la vigente.
+      if (evento.proveedor) return `Asignado a ${evento.proveedor.razonSocial}`;
       return esElUltimoProveedor && reclamo.proveedor
         ? `Asignado a ${reclamo.proveedor.razonSocial}`
         : 'Proveedor asignado';

@@ -172,7 +172,7 @@ export function ListaReclamos({ consorcioId, version, categorias, seleccionado, 
                 className="cursor-pointer"
               >
                 <TableCell className="max-w-72 pl-5 whitespace-normal">
-                  <div className="line-clamp-1 font-medium">{r.descripcion}</div>
+                  <div className="line-clamp-1 font-medium">{r.titulo ?? r.descripcion}</div>
                   <div className="mt-0.5 text-xs text-muted-foreground">{r.codigo}</div>
                 </TableCell>
                 <TableCell className="font-medium">{r.unidad.etiqueta}</TableCell>

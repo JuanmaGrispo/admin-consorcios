@@ -60,6 +60,7 @@ export default function VecinoReclamosDetallePage() {
             </span>
             <EstadoBadge dominio="reclamo" estado={reclamo.estado} />
           </div>
+          {reclamo.titulo && <p className="font-semibold">{reclamo.titulo}</p>}
           <p className="text-sm whitespace-pre-line">{reclamo.descripcion}</p>
           <p className="text-xs text-muted-foreground">
             Abierto el {fechaDeInstante(reclamo.createdAt)}

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { usePedido } from '@/hooks/use-pedido';
@@ -50,6 +51,7 @@ export function DialogoNuevoReclamo({
   const [unidadId, setUnidadId] = useState('');
   const [categoriaId, setCategoriaId] = useState('');
   const [prioridad, setPrioridad] = useState<PrioridadReclamo>('MEDIA');
+  const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [fotos, setFotos] = useState<FotoSubida[]>([]);
   const [subiendo, setSubiendo] = useState(false);
@@ -60,6 +62,7 @@ export function DialogoNuevoReclamo({
     setUnidadId('');
     setCategoriaId('');
     setPrioridad('MEDIA');
+    setTitulo('');
     setDescripcion('');
     setFotos([]);
     setError(null);
@@ -80,6 +83,10 @@ export function DialogoNuevoReclamo({
       setError('Elegí la unidad y la categoría.');
       return;
     }
+    if (!titulo.trim()) {
+      setError('Poné un título corto: es lo que se ve en la bandeja.');
+      return;
+    }
     if (descripcion.trim().length < 10) {
       setError('La descripción necesita al menos 10 caracteres.');
       return;
@@ -91,6 +98,7 @@ export function DialogoNuevoReclamo({
         unidadId,
         categoriaId,
         prioridad,
+        titulo: titulo.trim(),
         descripcion: descripcion.trim(),
         adjuntos: fotos.map((f) => ({ url: f.url, nombre: f.nombre })),
       });
@@ -160,6 +168,16 @@ export function DialogoNuevoReclamo({
                   ))}
                 </SelectContent>
               </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="nuevo-titulo">Título</FieldLabel>
+              <Input
+                id="nuevo-titulo"
+                value={titulo}
+                onChange={(e) => setTitulo(e.target.value)}
+                maxLength={80}
+                placeholder="Ascensor trabado entre 4º y 5º"
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="nuevo-descripcion">Descripción</FieldLabel>

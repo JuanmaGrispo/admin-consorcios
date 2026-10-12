@@ -135,7 +135,8 @@ export class ReclamosRepository {
       qb.andWhere(
         new Brackets((sub) =>
           sub
-            .where('r.descripcion ILIKE :q', { q: `%${query.buscar}%` })
+            .where('r.titulo ILIKE :q', { q: `%${query.buscar}%` })
+            .orWhere('r.descripcion ILIKE :q', { q: `%${query.buscar}%` })
             .orWhere('r.codigo ILIKE :q', { q: `%${query.buscar}%` }),
         ),
       );
@@ -155,7 +156,7 @@ export class ReclamosRepository {
         reclamoId,
         ...(soloVisibles ? { visibleParaVecino: true } : {}),
       },
-      relations: { autor: true },
+      relations: { autor: true, proveedor: true },
       order: { createdAt: 'DESC' },
     });
   }
@@ -231,6 +232,7 @@ export class ReclamosRepository {
     unidadId: string;
     creadoPorId: string;
     categoriaId: string;
+    titulo: string;
     descripcion: string;
     prioridad: Reclamo['prioridad'];
     adjuntos: { url: string; nombre?: string }[];
@@ -247,6 +249,7 @@ export class ReclamosRepository {
               unidadId: datos.unidadId,
               creadoPorId: datos.creadoPorId,
               categoriaId: datos.categoriaId,
+              titulo: datos.titulo,
               descripcion: datos.descripcion,
               prioridad: datos.prioridad,
               estado: EstadoReclamo.NUEVO,

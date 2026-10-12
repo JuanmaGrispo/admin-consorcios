@@ -42,6 +42,8 @@ export interface Reclamo {
   categoria: CategoriaReclamo;
   proveedorId: string | null;
   proveedor: Proveedor | null;
+  /** Null en los reclamos anteriores a que existiera: se muestra la descripción. */
+  titulo: string | null;
   descripcion: string;
   prioridad: PrioridadReclamo;
   estado: EstadoReclamo;
@@ -62,6 +64,9 @@ export interface ReclamoEvento {
   estadoAnterior: EstadoReclamo | null;
   estadoNuevo: EstadoReclamo | null;
   visibleParaVecino: boolean;
+  /** En las asignaciones: a quién. Null en los eventos anteriores a que se guardara. */
+  proveedorId: string | null;
+  proveedor: Pick<Proveedor, 'id' | 'razonSocial'> | null;
   createdAt: string;
 }
 
@@ -97,6 +102,8 @@ export interface FiltrosReclamos {
 /** POST /reclamos */
 export interface CrearReclamoInput {
   categoriaId: string;
+  /** Hasta 80 caracteres: lo que encabeza la tarjeta. */
+  titulo: string;
   descripcion: string;
   /** El vecino con una sola unidad puede omitirla; el administrador, nunca. */
   unidadId?: string;

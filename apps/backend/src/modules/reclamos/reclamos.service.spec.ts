@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import type { Notificador } from '../../core/notificaciones/notificador';
-import { Reclamo, RolUsuario } from '../../database/entities';
+import { EstadoReclamo, Reclamo, ReclamoEvento, RolUsuario, TipoEventoReclamo } from '../../database/entities';
 import type { ArchivosService } from '../archivos/archivos.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { CategoriasReclamoService } from '../categorias-reclamo/categorias-reclamo.service';
@@ -87,7 +87,7 @@ describe('ReclamosService — administrador de otro consorcio', () => {
   it('no abre reclamos sobre una unidad ajena', async () => {
     const { service } = crearService();
     await assert.rejects(
-      service.crear(adminAjeno, { unidadId: 'u1', categoriaId: 'k1', descripcion: 'Gotera' }),
+      service.crear(adminAjeno, { unidadId: 'u1', categoriaId: 'k1', titulo: 'Gotera', descripcion: 'Gotera en el techo' }),
       NotFoundException,
     );
   });
@@ -99,10 +99,37 @@ describe('ReclamosService — adjuntos', () => {
     await assert.rejects(
       service.crear(vecino, {
         categoriaId: 'c1',
+        titulo: 'Inodoro',
         descripcion: 'Pierde el inodoro',
         adjuntos: [{ url: 'https://otro.com/foto.jpg' }],
       }),
       BadRequestException,
     );
+  });
+});
+
+describe('ReclamosService — asignación', () => {
+  it('el evento guarda a qué proveedor se asignó', async () => {
+    const eventos: Partial<ReclamoEvento>[] = [];
+    const reclamo = { id: 'r1', codigo: 'RC-1', consorcioId: 'c1', estado: EstadoReclamo.NUEVO } as Reclamo;
+    const repo = {
+      findById: async () => reclamo,
+      actualizarConEvento: async (r: Reclamo, evento: Partial<ReclamoEvento>) => {
+        eventos.push(evento);
+        return r;
+      },
+    } as unknown as ReclamosRepository;
+    const service = new ReclamosService(
+      repo,
+      { enviar: async () => undefined } as unknown as Notificador,
+      {} as CategoriasReclamoService,
+      { exigirAsignable: async () => ({}) } as unknown as ProveedoresService,
+      {} as ArchivosService,
+      { publicar: () => undefined } as unknown as PublicadorEventos,
+    );
+
+    await service.asignarProveedor(superAdmin, 'r1', { proveedorId: 'p1' });
+    assert.equal(eventos[0].proveedorId, 'p1');
+    assert.equal(eventos[0].tipo, TipoEventoReclamo.ASIGNACION);
   });
 });
