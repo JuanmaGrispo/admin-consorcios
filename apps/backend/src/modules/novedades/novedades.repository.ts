@@ -59,7 +59,7 @@ export class NovedadesRepository {
     const filas: { consorcioId: string }[] = await this.novedades.manager.query(
       `SELECT DISTINCT un.consorcio_id AS "consorcioId"
          FROM unidad_usuario uu JOIN unidad un ON un.id = uu.unidad_id
-        WHERE uu.usuario_id = $1 AND (uu.hasta IS NULL OR uu.hasta >= CURRENT_DATE)`,
+        WHERE uu.usuario_id = $1 AND (uu.hasta IS NULL OR uu.hasta > CURRENT_DATE)`,
       [usuarioId],
     );
     return filas.map((f) => f.consorcioId);

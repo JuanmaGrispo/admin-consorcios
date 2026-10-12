@@ -242,7 +242,7 @@ export class VotacionesRepository {
     return this.vinculos
       .createQueryBuilder('v')
       .innerJoin('v.unidad', 'u')
-      .where(new Brackets((qb) => qb.where('v.hasta IS NULL').orWhere('v.hasta >= CURRENT_DATE')));
+      .where(new Brackets((qb) => qb.where('v.hasta IS NULL').orWhere('v.hasta > CURRENT_DATE')));
   }
 
   /** Van después de las fijas (orden 1 y 2). */

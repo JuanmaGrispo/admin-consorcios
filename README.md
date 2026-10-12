@@ -338,7 +338,9 @@ Reglas:
   vecino en reclamos.
 - Hay **un solo titular vigente** por unidad: es a quien se le emite la boleta.
 - **Terminar un vínculo** le pone `hasta` = hoy y lo deja en el historial
-  (quién vivía cuando se abrió un reclamo). Si todavía no había empezado a
+  (quién vivía cuando se abrió un reclamo). `hasta` es el primer día sin
+  acceso: un vínculo es vigente si `hasta IS NULL OR hasta > CURRENT_DATE`, así
+  que el vecino deja de ver la unidad en el momento. Si todavía no había empezado a
   regir, se borra: no hay historia que cuidar, y la base exige `hasta > desde`.
   "Hoy" sale de la base (`CURRENT_DATE`), no del reloj de la app, para que no
   choque con el default de `desde`.

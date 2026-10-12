@@ -33,7 +33,7 @@ export class ConsorciosRepository {
         `c.id IN (SELECT u.consorcio_id FROM unidad u
                   JOIN unidad_usuario uu ON uu.unidad_id = u.id
                   WHERE uu.usuario_id = :vecinoId
-                    AND (uu.hasta IS NULL OR uu.hasta >= CURRENT_DATE))`,
+                    AND (uu.hasta IS NULL OR uu.hasta > CURRENT_DATE))`,
         { vecinoId: filtro.vecinoId },
       );
     }

@@ -310,7 +310,7 @@ export class AsambleasRepository {
     return this.vinculos
       .createQueryBuilder('v')
       .innerJoin('v.unidad', 'u')
-      .where(new Brackets((qb) => qb.where('v.hasta IS NULL').orWhere('v.hasta >= CURRENT_DATE')));
+      .where(new Brackets((qb) => qb.where('v.hasta IS NULL').orWhere('v.hasta > CURRENT_DATE')));
   }
 
   private async insertarPuntos(m: EntityManager, asambleaId: string, puntos: PuntoNuevo[]) {

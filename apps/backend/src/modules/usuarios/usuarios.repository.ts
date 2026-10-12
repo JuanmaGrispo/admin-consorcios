@@ -8,7 +8,7 @@ const VIVE_EN = `EXISTS (
   SELECT 1 FROM unidad_usuario uu
     JOIN unidad un ON un.id = uu.unidad_id
    WHERE uu.usuario_id = us.id
-     AND (uu.hasta IS NULL OR uu.hasta >= CURRENT_DATE)
+     AND (uu.hasta IS NULL OR uu.hasta > CURRENT_DATE)
      AND un.consorcio_id IN (:...consorcioIds))`;
 
 @Injectable()

@@ -86,7 +86,7 @@ const RELACIONES_GASTO = { rubro: true, proveedor: true, reclamo: true, votacion
 
 /** Mismo criterio de vigencia que usan reclamos y unidades. */
 const VINCULO_VIGENTE = new Brackets((qb) =>
-  qb.where('v.hasta IS NULL').orWhere('v.hasta >= CURRENT_DATE'),
+  qb.where('v.hasta IS NULL').orWhere('v.hasta > CURRENT_DATE'),
 );
 
 @Injectable()
@@ -596,7 +596,7 @@ export class ExpensasRepository {
               `EXISTS (SELECT 1 FROM unidad_usuario vu
                          JOIN usuario us ON us.id = vu.usuario_id
                         WHERE vu.unidad_id = b.unidad_id
-                          AND (vu.hasta IS NULL OR vu.hasta >= CURRENT_DATE)
+                          AND (vu.hasta IS NULL OR vu.hasta > CURRENT_DATE)
                           AND (us.nombre || ' ' || us.apellido) ILIKE :q)`,
             ),
         ),

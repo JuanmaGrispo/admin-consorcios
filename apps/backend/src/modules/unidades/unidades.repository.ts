@@ -4,11 +4,12 @@ import { Brackets, QueryFailedError, Repository } from 'typeorm';
 import { Unidad, UnidadUsuario, Usuario } from '../../database/entities';
 
 /**
- * Un vínculo está vigente mientras no tenga `hasta` o `hasta` no haya pasado.
+ * Un vínculo está vigente mientras no tenga `hasta` o `hasta` no haya llegado:
+ * `hasta` es el primer día sin acceso, así terminarlo hoy corta en el momento.
  * Es el mismo criterio que usa reclamos para decidir qué ve cada vecino.
  */
 const VIGENTE = new Brackets((qb) =>
-  qb.where('v.hasta IS NULL').orWhere('v.hasta >= CURRENT_DATE'),
+  qb.where('v.hasta IS NULL').orWhere('v.hasta > CURRENT_DATE'),
 );
 
 @Injectable()

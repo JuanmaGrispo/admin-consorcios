@@ -76,7 +76,7 @@ export class ReclamosRepository {
       .where('v.usuarioId = :usuarioId', { usuarioId })
       .andWhere(
         new Brackets((qb) =>
-          qb.where('v.hasta IS NULL').orWhere('v.hasta >= CURRENT_DATE'),
+          qb.where('v.hasta IS NULL').orWhere('v.hasta > CURRENT_DATE'),
         ),
       )
       .getRawMany<{ unidadId: string }>();

@@ -21,7 +21,7 @@ const VECINOS_VIGENTES = `
     JOIN unidad un ON un.id = uu.unidad_id
     JOIN usuario us ON us.id = uu.usuario_id
    WHERE un.activa AND us.activo
-     AND (uu.hasta IS NULL OR uu.hasta >= CURRENT_DATE)`;
+     AND (uu.hasta IS NULL OR uu.hasta > CURRENT_DATE)`;
 
 @Injectable()
 export class EmailRepository {

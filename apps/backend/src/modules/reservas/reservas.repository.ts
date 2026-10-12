@@ -26,7 +26,7 @@ export const ESTADOS_QUE_OCUPAN = [EstadoReserva.PENDIENTE, EstadoReserva.APROBA
 
 /** Mismo criterio de vigencia que usan reclamos, unidades y expensas. */
 const VINCULO_VIGENTE = new Brackets((qb) =>
-  qb.where('v.hasta IS NULL').orWhere('v.hasta >= CURRENT_DATE'),
+  qb.where('v.hasta IS NULL').orWhere('v.hasta > CURRENT_DATE'),
 );
 
 const RELACIONES = { amenity: true, unidad: true, solicitadaPor: true } as const;
