@@ -399,6 +399,7 @@ lo asigna a un proveedor, responde sobre la línea de tiempo y lo cierra.
 | POST   | `/reclamos/:id/mensajes`  | respuesta o nota interna |
 | PATCH  | `/reclamos/:id/proveedor` | sólo administrador |
 | PATCH  | `/reclamos/:id/estado`    | sólo administrador |
+| PATCH  | `/reclamos/:id/prioridad` | sólo administrador |
 
 Filtros de `GET /reclamos`: `estado`, `situacion` (`abiertos`/`cerrados`, las
 solapas del portal vecino), `prioridad`, `categoriaId`, `consorcioId`,
@@ -417,7 +418,8 @@ Las tres primeras las impone la base y el código las respeta, no las duplica:
 - El **consorcio se deriva de la unidad**, no se recibe: son dos columnas que
   tienen que coincidir.
 - La **prioridad la fija el administrador**. Si la eligiera el vecino, todos los
-  reclamos entrarían en ALTA.
+  reclamos entrarían en ALTA. El del vecino entra en MEDIA y el administrador
+  la cambia después; el cambio queda como nota interna y no se avisa.
 - El vecino reclama **sobre su unidad**; si está vinculado a una sola, se
   infiere. Un reclamo de otra unidad devuelve 404, no 403: un 403 confirmaría
   que ese reclamo existe.

@@ -4,6 +4,7 @@ import type {
   CrearReclamoInput,
   EstadoReclamo,
   FiltrosReclamos,
+  PrioridadReclamo,
   Reclamo,
   ReclamoDetalle,
   ReclamoEvento,
@@ -45,5 +46,12 @@ export const reclamosService = {
     api<Reclamo>(`/reclamos/${id}/estado`, {
       method: 'PATCH',
       body: JSON.stringify({ estado, mensaje }),
+    }),
+
+  /** Queda como nota interna: el vecino no recibe aviso. */
+  cambiarPrioridad: (id: string, prioridad: PrioridadReclamo) =>
+    api<Reclamo>(`/reclamos/${id}/prioridad`, {
+      method: 'PATCH',
+      body: JSON.stringify({ prioridad }),
     }),
 };

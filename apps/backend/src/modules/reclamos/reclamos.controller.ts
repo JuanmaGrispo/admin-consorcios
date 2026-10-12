@@ -21,6 +21,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import { AsignarProveedorDto } from './dto/asignar-proveedor.dto';
 import { CambiarEstadoDto } from './dto/cambiar-estado.dto';
+import { CambiarPrioridadDto } from './dto/cambiar-prioridad.dto';
 import { CrearReclamoDto } from './dto/crear-reclamo.dto';
 import { ListarReclamosQuery } from './dto/listar-reclamos.query';
 import { MensajeReclamoDto } from './dto/mensaje-reclamo.dto';
@@ -120,5 +121,19 @@ export class ReclamosController {
     @Body() dto: CambiarEstadoDto,
   ) {
     return this.reclamos.cambiarEstado(usuario, id, dto);
+  }
+
+  @Patch(':id/prioridad')
+  @Roles(RolUsuario.ADMINISTRADOR)
+  @ApiOperation({
+    summary: 'Cambia la prioridad',
+    description: 'Queda como nota interna en la timeline; el vecino no recibe aviso.',
+  })
+  cambiarPrioridad(
+    @UsuarioActual() usuario: Usuario,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CambiarPrioridadDto,
+  ) {
+    return this.reclamos.cambiarPrioridad(usuario, id, dto);
   }
 }

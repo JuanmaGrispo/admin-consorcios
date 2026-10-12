@@ -2,6 +2,7 @@
 
 import { Check, ChevronDown, RotateCcw, Truck, UserPlus } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { EstadoBadge } from '@/components/estado-badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -14,9 +15,10 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePedido } from '@/hooks/use-pedido';
+import { ApiError } from '@/lib/api';
 import { fechaDeInstante } from '@/lib/formato';
 import { reclamosService } from '@/services/reclamos';
-import type { EstadoReclamo } from '@/types/reclamo';
+import { type EstadoReclamo, PRIORIDADES_RECLAMO, type PrioridadReclamo } from '@/types/reclamo';
 import { DialogoAsignarProveedor } from './dialogo-asignar-proveedor';
 import { DialogoCambiarEstado } from './dialogo-cambiar-estado';
 import { FotosAdjuntas } from './fotos-adjuntas';
@@ -57,6 +59,16 @@ export function DetalleReclamoAdmin({ reclamoId, onCambio }: DetalleReclamoAdmin
   function actualizado() {
     recargar();
     onCambio();
+  }
+
+  async function cambiarPrioridad(prioridad: PrioridadReclamo) {
+    try {
+      await reclamosService.cambiarPrioridad(reclamoId, prioridad);
+      toast.success(`Prioridad ${PRIORIDAD[prioridad]}`);
+      actualizado();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'No se pudo cambiar la prioridad.');
+    }
   }
 
   if (error) {
@@ -163,6 +175,21 @@ export function DetalleReclamoAdmin({ reclamoId, onCambio }: DetalleReclamoAdmin
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  Prioridad
+                  <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {PRIORIDADES_RECLAMO.filter((p) => p !== reclamo.prioridad).map((p) => (
+                  <DropdownMenuItem key={p} onSelect={() => cambiarPrioridad(p)}>
+                    Pasar a {PRIORIDAD[p]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button className="sm:ml-auto" onClick={() => setDestino('RESUELTO')}>
               <Check />
               Marcar resuelto

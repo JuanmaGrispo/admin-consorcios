@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import type { Notificador } from '../../core/notificaciones/notificador';
-import { EstadoReclamo, Reclamo, ReclamoEvento, RolUsuario, TipoEventoReclamo } from '../../database/entities';
+import {
+  EstadoReclamo,
+  PrioridadReclamo,
+  Reclamo,
+  ReclamoEvento,
+  RolUsuario,
+  TipoEventoReclamo,
+} from '../../database/entities';
 import type { ArchivosService } from '../archivos/archivos.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { CategoriasReclamoService } from '../categorias-reclamo/categorias-reclamo.service';
@@ -131,5 +138,63 @@ describe('ReclamosService — asignación', () => {
     await service.asignarProveedor(superAdmin, 'r1', { proveedorId: 'p1' });
     assert.equal(eventos[0].proveedorId, 'p1');
     assert.equal(eventos[0].tipo, TipoEventoReclamo.ASIGNACION);
+  });
+});
+
+describe('ReclamosService — prioridad', () => {
+  function conReclamo(reclamo: Reclamo) {
+    const eventos: Partial<ReclamoEvento>[] = [];
+    const avisos: unknown[] = [];
+    const repo = {
+      findById: async () => reclamo,
+      actualizarConEvento: async (r: Reclamo, evento: Partial<ReclamoEvento>) => {
+        eventos.push(evento);
+        return r;
+      },
+    } as unknown as ReclamosRepository;
+    const service = new ReclamosService(
+      repo,
+      { enviar: async (a: unknown) => void avisos.push(a) } as unknown as Notificador,
+      {} as CategoriasReclamoService,
+      {} as ProveedoresService,
+      {} as ArchivosService,
+      { publicar: () => undefined } as unknown as PublicadorEventos,
+    );
+    return { service, eventos, avisos };
+  }
+  const abierto = () =>
+    ({ id: 'r1', codigo: 'RC-1', consorcioId: 'c1', estado: EstadoReclamo.NUEVO, prioridad: PrioridadReclamo.MEDIA }) as Reclamo;
+
+  it('la cambia y lo deja como nota interna, sin avisar al vecino', async () => {
+    const { service, eventos, avisos } = conReclamo(abierto());
+    const r = await service.cambiarPrioridad(superAdmin, 'r1', { prioridad: PrioridadReclamo.ALTA });
+    assert.equal(r.prioridad, PrioridadReclamo.ALTA);
+    assert.equal(eventos[0].tipo, TipoEventoReclamo.NOTA_INTERNA);
+    assert.equal(eventos[0].visibleParaVecino, false);
+    assert.deepEqual(avisos, []);
+  });
+
+  it('rechaza la misma prioridad que ya tiene', async () => {
+    const { service } = conReclamo(abierto());
+    await assert.rejects(
+      service.cambiarPrioridad(superAdmin, 'r1', { prioridad: PrioridadReclamo.MEDIA }),
+      BadRequestException,
+    );
+  });
+
+  it('un reclamo resuelto no se reprioriza', async () => {
+    const { service } = conReclamo({ ...abierto(), estado: EstadoReclamo.RESUELTO } as Reclamo);
+    await assert.rejects(
+      service.cambiarPrioridad(superAdmin, 'r1', { prioridad: PrioridadReclamo.ALTA }),
+      BadRequestException,
+    );
+  });
+
+  it('un reclamo de otro consorcio da 404', async () => {
+    const { service } = conReclamo(abierto());
+    await assert.rejects(
+      service.cambiarPrioridad(adminAjeno, 'r1', { prioridad: PrioridadReclamo.ALTA }),
+      NotFoundException,
+    );
   });
 });

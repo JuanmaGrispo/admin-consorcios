@@ -21,6 +21,7 @@ import { CategoriasReclamoService } from '../categorias-reclamo/categorias-recla
 import { ProveedoresService } from '../proveedores/proveedores.service';
 import { AsignarProveedorDto } from './dto/asignar-proveedor.dto';
 import { CambiarEstadoDto } from './dto/cambiar-estado.dto';
+import { CambiarPrioridadDto } from './dto/cambiar-prioridad.dto';
 import { CrearReclamoDto } from './dto/crear-reclamo.dto';
 import { ListarReclamosQuery } from './dto/listar-reclamos.query';
 import { MensajeReclamoDto } from './dto/mensaje-reclamo.dto';
@@ -254,6 +255,39 @@ export class ReclamosService {
     }
 
     return actualizado;
+  }
+
+  /**
+   * La prioridad ordena el trabajo de la administración: el cambio queda en la
+   * timeline como nota interna y no se le avisa al vecino.
+   */
+  async cambiarPrioridad(
+    usuario: UsuarioActual,
+    id: string,
+    dto: CambiarPrioridadDto,
+  ): Promise<Reclamo> {
+    const reclamo = await this.buscarConPermiso(usuario, id);
+    const anterior = reclamo.prioridad;
+
+    if (anterior === dto.prioridad) {
+      throw new BadRequestException(
+        `El reclamo ${reclamo.codigo} ya tiene prioridad ${dto.prioridad}`,
+      );
+    }
+    if (reclamo.estado === EstadoReclamo.RESUELTO) {
+      throw new BadRequestException(
+        `El reclamo ${reclamo.codigo} está resuelto: reabrilo para cambiarle la prioridad.`,
+      );
+    }
+
+    reclamo.prioridad = dto.prioridad;
+    return this.reclamos.actualizarConEvento(reclamo, {
+      reclamoId: reclamo.id,
+      autorId: usuario.id,
+      tipo: TipoEventoReclamo.NOTA_INTERNA,
+      mensaje: `Prioridad cambiada de ${anterior} a ${dto.prioridad}`,
+      visibleParaVecino: false,
+    });
   }
 
   // ── Para otros módulos ─────────────────────────────────────────────────────
