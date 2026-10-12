@@ -142,7 +142,6 @@ src/
 │   ├── empty-state.tsx   EmptyState
 │   ├── paginacion.tsx    Paginacion: el pie de tabla "Mostrando X de N" con páginas numeradas
 │   ├── confirmar-accion.tsx  ConfirmarAccion: confirmación de lo destructivo
-│   ├── en-construccion.tsx  placeholder de las rutas pendientes
 │   └── <modulo>/         componentes exclusivos de cada módulo
 ├── services/             UNA función por endpoint, usan lib/api.ts
 ├── lib/                  api.ts (api, query, descargar, subirArchivo), formato.ts, roles.ts, utils.ts

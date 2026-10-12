@@ -1,12 +1,6 @@
-import { EnConstruccion } from '@/components/en-construccion';
+import { redirect } from 'next/navigation';
 
-/** Módulo Panel, inicio y perfil: quien lo toma reemplaza esta página entera. */
+/** El "Configuración" del prototipo (rubros, categorías, proveedores) es Catálogos. */
 export default function AdminConfiguracionPage() {
-  return (
-    <EnConstruccion
-      titulo="Configuración"
-      pantalla="menú Configuración (rubros, categorías, proveedores)"
-      modulo="Panel, inicio y perfil"
-    />
-  );
+  redirect('/admin/catalogos');
 }
