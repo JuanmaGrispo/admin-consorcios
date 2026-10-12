@@ -49,6 +49,10 @@ function crearRepo() {
     hoy: async () => estado.hoy,
     unidadesDelUsuario: async (usuarioId: string) =>
       estado.vinculos.filter((v) => v.usuarioId === usuarioId).map((v) => v.unidadId),
+    vinculosDelUsuario: async (usuarioId: string) =>
+      estado.vinculos
+        .filter((v) => v.usuarioId === usuarioId && !v.hasta)
+        .sort((a, b) => Number(b.esTitular) - Number(a.esTitular)),
     findVinculo: async (id: string) => estado.vinculos.find((v) => v.id === id) ?? null,
     findVinculoVigente: async (u: string, us: string) =>
       estado.vinculos.find((v) => v.unidadId === u && v.usuarioId === us && !v.hasta) ?? null,
@@ -138,6 +142,22 @@ describe('UnidadesService', () => {
       estado.vinculos.push({ id: 'x', unidadId: 'u2', usuarioId: 'v1' } as UnidadUsuario);
       const vistas = await service.listar(vecino, {});
       assert.deepEqual(vistas.map((u) => u.id), ['u2']);
+    });
+
+    it('al vecino cada unidad le llega con su vínculo, el de titular si tiene dos', async () => {
+      estado.unidades.push(unidad());
+      estado.vinculos.push(
+        { id: 'a', unidadId: 'u1', usuarioId: 'v1', vinculo: VinculoUnidad.INQUILINO, esTitular: false } as UnidadUsuario,
+        { id: 'b', unidadId: 'u1', usuarioId: 'v1', vinculo: VinculoUnidad.PROPIETARIO, esTitular: true } as UnidadUsuario,
+      );
+      const [vista] = await service.listar(vecino, {});
+      assert.deepEqual(vista.miVinculo, { vinculo: VinculoUnidad.PROPIETARIO, esTitular: true });
+    });
+
+    it('al administrador no le agrega vínculo', async () => {
+      estado.unidades.push(unidad());
+      const [vista] = await service.listar(admin, {});
+      assert.equal(vista.miVinculo, undefined);
     });
 
     it('el administrador ve las de su consorcio', async () => {

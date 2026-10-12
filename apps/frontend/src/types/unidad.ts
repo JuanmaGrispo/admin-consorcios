@@ -15,6 +15,8 @@ export interface Unidad {
   activa: boolean;
   /** Vínculos vigentes: cuántos vecinos tiene hoy. */
   cantidadVecinos?: number;
+  /** Sólo al vecino: cómo está vinculado él a la unidad. */
+  miVinculo?: { vinculo: VinculoUnidad; esTitular: boolean } | null;
 }
 
 /** POST /unidades */

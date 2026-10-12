@@ -19,6 +19,8 @@ interface UnidadActiva {
   unidad: Unidad;
   /** El edificio de esa unidad. */
   consorcio: Consorcio;
+  /** Los edificios de todas sus unidades. */
+  consorcios: Consorcio[];
   cambiar: (id: string) => void;
 }
 
@@ -106,7 +108,7 @@ export function UnidadActivaProvider({ children }: { children: React.ReactNode }
   }
 
   return (
-    <UnidadActivaContext.Provider value={{ unidades: datos.unidades, unidad, consorcio, cambiar }}>
+    <UnidadActivaContext.Provider value={{ unidades: datos.unidades, unidad, consorcio, consorcios: datos.consorcios, cambiar }}>
       {children}
     </UnidadActivaContext.Provider>
   );
