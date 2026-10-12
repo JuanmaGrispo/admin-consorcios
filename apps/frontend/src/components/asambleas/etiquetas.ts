@@ -1,4 +1,4 @@
-import type { ModalidadAsamblea, TipoAsamblea } from '@/types/asamblea';
+import type { EstadoAsamblea, ModalidadAsamblea, TipoAsamblea } from '@/types/asamblea';
 
 export const TIPOS: Record<TipoAsamblea, string> = {
   ORDINARIA: 'Ordinaria',
@@ -20,4 +20,18 @@ export function dondeSeHace(a: {
   if (a.modalidad === 'DIGITAL') return 'Videollamada';
   if (a.modalidad === 'HIBRIDA') return [a.lugar, 'videollamada'].filter(Boolean).join(' + ');
   return a.lugar ?? '—';
+}
+
+const CERRADAS: EstadoAsamblea[] = ['CERRADA', 'CERRADA_SIN_QUORUM'];
+
+/** Ya terminó: con quórum o sin él. */
+export function estaCerrada(a: { estado: EstadoAsamblea }): boolean {
+  return CERRADAS.includes(a.estado);
+}
+
+/** El año de la asamblea en Buenos Aires: una del 31/12 a las 22 h es de ese año, no del siguiente. */
+export function anioDe(fechaHora: string): number {
+  return Number(
+    new Date(fechaHora).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric' }),
+  );
 }

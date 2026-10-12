@@ -41,6 +41,17 @@ export interface Asamblea {
   createdAt: string;
   /** Null mientras no se convocó (no hay padrón de asistencia). */
   quorumPorcentaje: number | null;
+  /**
+   * Las votaciones ya cerradas de la asamblea según su resultado. `total`
+   * cuenta también las cerradas sin quórum, que no son ni una ni otra.
+   */
+  votaciones: ResumenVotaciones;
+}
+
+export interface ResumenVotaciones {
+  total: number;
+  aprobadas: number;
+  rechazadas: number;
 }
 
 export interface UnidadResumen {
@@ -60,7 +71,7 @@ export interface Asistencia {
 }
 
 /** GET /asambleas/:id. Lo que viene de más según el rol está como opcional. */
-export interface AsambleaDetalle extends Omit<Asamblea, 'quorumPorcentaje'> {
+export interface AsambleaDetalle extends Omit<Asamblea, 'quorumPorcentaje' | 'votaciones'> {
   puntoOrdenDias: PuntoOrdenDia[];
   quorum: Quorum | null;
   /** Sólo el administrador: las últimas confirmaciones de asistencia. */

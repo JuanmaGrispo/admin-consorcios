@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { DetalleVotacionAdmin } from '@/components/votaciones/detalle-votacion-admin';
+import { crearVotacion } from '@/components/votaciones/crear-votacion';
 import { TablaVotaciones, TablaVotacionesEsqueleto } from '@/components/votaciones/tabla-votaciones';
 import { VotacionDialog, type ValoresVotacion } from '@/components/votaciones/votacion-dialog';
 import { usePedido } from '@/hooks/use-pedido';
@@ -52,16 +53,15 @@ function VotacionesAdministradas({ consorcio }: { consorcio: Consorcio }) {
   const error = pedido.error ?? null;
   const seleccionada = votaciones?.find((v) => v.id === seleccionadaId) ?? null;
 
-  async function guardar(valores: ValoresVotacion) {
-    const { opciones, apertura, cierre, ...resto } = valores;
+  async function guardar(valores: ValoresVotacion, publicar: boolean) {
+    const { opciones, apertura, cierre, asambleaId, ...resto } = valores;
     if (edicion.modo === 'edicion') {
       const { id } = edicion.votacion;
       await votacionesService.actualizar(id, { ...resto, apertura, cierre });
       await votacionesService.reemplazarOpciones(id, opciones);
       toast.success('Votación actualizada');
     } else {
-      await votacionesService.crear({ consorcioId: consorcio.id, ...resto, apertura, cierre, opciones });
-      toast.success('Votación creada en borrador');
+      await crearVotacion({ consorcioId: consorcio.id, asambleaId, ...resto, apertura, cierre, opciones }, publicar);
     }
     setEdicion({ modo: 'cerrado' });
     pedido.recargar();

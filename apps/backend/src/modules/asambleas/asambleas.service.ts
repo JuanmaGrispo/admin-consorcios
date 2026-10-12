@@ -36,6 +36,7 @@ const ULTIMAS_CONFIRMACIONES = 10;
 /** Mientras se puede responder la asistencia. */
 const ASISTENCIA_ABIERTA = [EstadoAsamblea.CONVOCADA, EstadoAsamblea.EN_CURSO];
 const CERRADAS = [EstadoAsamblea.CERRADA, EstadoAsamblea.CERRADA_SIN_QUORUM];
+const SIN_VOTACIONES = { total: 0, aprobadas: 0, rechazadas: 0 };
 
 /** Lo que se muestra de una asistencia: nunca la entidad `Usuario` entera (trae el hash). */
 function vistaAsistencia(a: Asistencia) {
@@ -77,13 +78,19 @@ export class AsambleasService {
       : { consorcioIds: await this.asambleas.consorciosDelUsuario(usuario.id), ocultarBorradores: true };
 
     const asambleas = await this.asambleas.listar(query, filtro);
-    const agregados = await this.asambleas.agregadosQuorum(asambleas.map((a) => a.id));
+    const ids = asambleas.map((a) => a.id);
+    const [agregados, resumenes] = await Promise.all([
+      this.asambleas.agregadosQuorum(ids),
+      this.asambleas.resumenVotaciones(ids),
+    ]);
 
     return asambleas.map((a) => {
       const agregado = agregados.get(a.id);
       return {
         ...a,
         quorumPorcentaje: agregado ? porcentajeDeQuorum(agregado.presente, agregado.total) : null,
+        // Sin votaciones cerradas el resumen va en cero, nunca ausente.
+        votaciones: resumenes.get(a.id) ?? SIN_VOTACIONES,
       };
     });
   }

@@ -131,10 +131,16 @@ export class VotacionesService {
     if (!gestiona(usuario, query.consorcioId)) {
       throw new NotFoundException(`Consorcio ${query.consorcioId} no existe`);
     }
+    const unidades = await this.votaciones.unidadesParaPadron(query.consorcioId);
+    // Una sola consulta por todo el consorcio, no `tieneDeudaVencida` por unidad.
+    const conDeuda = query.bloqueaConDeuda
+      ? await this.expensas.unidadesConDeudaVencida(unidades.map((u) => u.unidadId))
+      : undefined;
     return vistaDelPadron(
-      await this.votaciones.unidadesParaPadron(query.consorcioId),
+      unidades,
       query.padron ?? PadronVotacion.SOLO_PROPIETARIOS,
       query.formaConteo ?? FormaConteo.POR_COEFICIENTE,
+      conDeuda,
     );
   }
 

@@ -21,7 +21,12 @@ export const votacionesService = {
   obtener: (id: string) => api<VotacionDetalle>(`/votaciones/${id}`),
 
   /** Antes de crear: cuántas unidades votarían con ese padrón y forma de conteo. */
-  vistaPadron: (filtros: { consorcioId: string; padron?: PadronVotacion; formaConteo?: FormaConteo }) =>
+  vistaPadron: (filtros: {
+    consorcioId: string;
+    padron?: PadronVotacion;
+    formaConteo?: FormaConteo;
+    bloqueaConDeuda?: boolean;
+  }) =>
     api<VistaPadron>(`/votaciones/padron${query(filtros)}`),
 
   crear: (input: VotacionInput) =>

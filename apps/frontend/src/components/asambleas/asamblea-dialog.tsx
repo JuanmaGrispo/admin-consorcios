@@ -51,14 +51,24 @@ interface AsambleaDialogProps {
   subtitulo: string;
   /** Si viene, edita ese borrador; si no, es un alta. */
   asamblea?: AsambleaDetalle;
-  onGuardar: (valores: ValoresAsamblea) => Promise<void>;
+  /** A cuántas unidades les llega la citación, para el pie del alta. */
+  unidades?: number;
+  /** En el alta, `citar` dice si además de crearla hay que convocarla. */
+  onGuardar: (valores: ValoresAsamblea, citar: boolean) => Promise<void>;
 }
 
 /**
  * Alta y edición de una asamblea en borrador (pantalla 07 del prototipo). El
  * orden del día se arma en el alta; después se edita desde el detalle.
  */
-export function AsambleaDialog({ abierto, onOpenChange, subtitulo, asamblea, onGuardar }: AsambleaDialogProps) {
+export function AsambleaDialog({
+  abierto,
+  onOpenChange,
+  subtitulo,
+  asamblea,
+  unidades,
+  onGuardar,
+}: AsambleaDialogProps) {
   return (
     <Dialog open={abierto} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -66,7 +76,12 @@ export function AsambleaDialog({ abierto, onOpenChange, subtitulo, asamblea, onG
           <DialogTitle>{asamblea ? 'Editar asamblea' : 'Nueva asamblea'}</DialogTitle>
           <DialogDescription>{subtitulo}</DialogDescription>
         </DialogHeader>
-        <Formulario asamblea={asamblea} onGuardar={onGuardar} onCancelar={() => onOpenChange(false)} />
+        <Formulario
+          asamblea={asamblea}
+          unidades={unidades}
+          onGuardar={onGuardar}
+          onCancelar={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -74,11 +89,13 @@ export function AsambleaDialog({ abierto, onOpenChange, subtitulo, asamblea, onG
 
 function Formulario({
   asamblea,
+  unidades,
   onGuardar,
   onCancelar,
 }: {
   asamblea?: AsambleaDetalle;
-  onGuardar: (valores: ValoresAsamblea) => Promise<void>;
+  unidades?: number;
+  onGuardar: (valores: ValoresAsamblea, citar: boolean) => Promise<void>;
   onCancelar: () => void;
 }) {
   const [titulo, setTitulo] = useState(asamblea?.titulo ?? '');
@@ -94,22 +111,29 @@ function Formulario({
 
   const pideLugar = modalidad !== 'DIGITAL';
   const pideLink = modalidad !== 'PRESENCIAL';
+  // Para citar, el backend pide al menos un punto en el orden del día.
+  const puedeCitar = puntos.some((p) => p.titulo.trim() !== '');
 
-  async function enviar(e: React.FormEvent) {
+  async function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Dos botones mandan el formulario: el de citar lo dice en su `name`.
+    const citar = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('name') === 'citar';
     setError(null);
     setEnviando(true);
     try {
-      await onGuardar({
-        titulo: titulo.trim(),
-        tipo,
-        modalidad,
-        fechaHora: localAInstante(fechaHora),
-        lugar: pideLugar ? lugar.trim() || null : null,
-        linkVideollamada: pideLink ? link.trim() || null : null,
-        quorumRequerido: Number(quorum),
-        puntos: puntosParaEnviar(puntos),
-      });
+      await onGuardar(
+        {
+          titulo: titulo.trim(),
+          tipo,
+          modalidad,
+          fechaHora: localAInstante(fechaHora),
+          lugar: pideLugar ? lugar.trim() || null : null,
+          linkVideollamada: pideLink ? link.trim() || null : null,
+          quorumRequerido: Number(quorum),
+          puntos: puntosParaEnviar(puntos),
+        },
+        citar,
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar la asamblea.');
       setEnviando(false);
@@ -234,14 +258,31 @@ function Formulario({
 
       <DialogFooter className="sm:items-center">
         <p className="text-xs text-muted-foreground sm:mr-auto">
-          Queda en borrador: los vecinos la ven cuando la convoques.
+          {asamblea
+            ? 'Sigue en borrador: los vecinos la ven cuando la convoques.'
+            : !puedeCitar
+              ? 'Para citar hace falta al menos un punto en el orden del día.'
+              : unidades
+                ? `Al citar se notifica a ${unidades} ${unidades === 1 ? 'unidad' : 'unidades'}, con un recordatorio 48 h antes.`
+                : 'Al citar se notifica a los vecinos, con un recordatorio 48 h antes.'}
         </p>
-        <Button type="button" variant="outline" onClick={onCancelar} disabled={enviando}>
+        <Button type="button" variant="ghost" onClick={onCancelar} disabled={enviando}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={enviando}>
-          {enviando ? 'Guardando…' : asamblea ? 'Guardar cambios' : 'Crear asamblea'}
-        </Button>
+        {asamblea ? (
+          <Button type="submit" disabled={enviando}>
+            {enviando ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        ) : (
+          <>
+            <Button type="submit" name="borrador" variant="outline" disabled={enviando}>
+              Guardar borrador
+            </Button>
+            <Button type="submit" name="citar" disabled={enviando || !puedeCitar}>
+              {enviando ? 'Guardando…' : 'Crear y citar'}
+            </Button>
+          </>
+        )}
       </DialogFooter>
     </form>
   );

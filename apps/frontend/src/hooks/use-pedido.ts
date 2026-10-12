@@ -8,6 +8,8 @@ interface Respuesta<T> {
   version: number;
   datos?: T;
   error?: string;
+  /** Si este pedido falló, lo último que había llegado bien: un refresco que falla no borra la pantalla. */
+  previo?: T;
 }
 
 export interface Pedido<T> {
@@ -62,7 +64,7 @@ export function usePedido<T>(
       .catch((err: unknown) => {
         if (cancelado) return;
         const error = err instanceof ApiError ? err.message : mensajeDeError;
-        setRespuesta({ clave, version, error });
+        setRespuesta((anterior) => ({ clave, version, error, previo: anterior?.datos ?? anterior?.previo }));
       });
     return () => {
       cancelado = true;
@@ -75,7 +77,7 @@ export function usePedido<T>(
   return {
     datos: deEstaClave ? respuesta.datos : undefined,
     error: deEstaClave ? respuesta.error : undefined,
-    ultimo: respuesta?.datos,
+    ultimo: respuesta?.datos ?? respuesta?.previo,
     cargando: clave !== null && (!deEstaClave || respuesta.version !== version),
     recargar,
   };

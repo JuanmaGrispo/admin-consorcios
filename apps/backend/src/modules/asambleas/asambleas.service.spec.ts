@@ -73,6 +73,7 @@ function crearService(
     unidadesDelVecino?: string[];
     consorciosDelVecino?: string[];
     votacionesAbiertas?: number;
+    listadas?: Asamblea[];
   } = {},
 ) {
   const escrito = {
@@ -88,9 +89,10 @@ function crearService(
   const repo = {
     listar: async (_q: unknown, filtro: unknown) => {
       escrito.listarFiltro = filtro;
-      return [];
+      return opts.listadas ?? [];
     },
     agregadosQuorum: async () => new Map([['as1', { presente: 54.3, total: 100 }]]),
+    resumenVotaciones: async () => new Map([['as1', { total: 3, aprobadas: 0, rechazadas: 2 }]]),
     findById: async () => (opts.asamblea === undefined ? asamblea() : opts.asamblea),
     crear: async (datos: unknown) => {
       escrito.creada = datos;
@@ -201,6 +203,20 @@ describe('AsambleasService — crear y editar', () => {
   it('inexistente es 404', async () => {
     const { service } = crearService({ asamblea: null });
     await assert.rejects(service.findOne(admin, 'as1'), NotFoundException);
+  });
+});
+
+describe('AsambleasService — listado', () => {
+  it('el listado trae el quórum y el resumen de votaciones de cada asamblea', async () => {
+    const { service } = crearService({
+      listadas: [asamblea({ estado: EstadoAsamblea.CERRADA }), asamblea({ id: 'as2' })],
+    });
+    const [cerrada, sinVotar] = await service.listar(admin, {});
+    assert.equal(cerrada.quorumPorcentaje, 54.3);
+    assert.deepEqual(cerrada.votaciones, { total: 3, aprobadas: 0, rechazadas: 2 });
+    // Sin votaciones cerradas el resumen va en cero, no ausente.
+    assert.equal(sinVotar.quorumPorcentaje, null);
+    assert.deepEqual(sinVotar.votaciones, { total: 0, aprobadas: 0, rechazadas: 0 });
   });
 });
 

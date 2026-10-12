@@ -16,6 +16,7 @@ import {
   EstadoAsistencia,
   EstadoVotacion,
   PuntoOrdenDia,
+  ResultadoVotacion,
   TipoPuntoOrden,
   Unidad,
   UnidadUsuario,
@@ -39,6 +40,16 @@ export interface AsistenciaNueva {
 export interface AgregadoQuorum {
   presente: number;
   total: number;
+}
+
+/**
+ * Votaciones cerradas de una asamblea según su resultado, para el listado.
+ * `total` incluye las cerradas sin quórum, que no suman a ninguno de los dos.
+ */
+export interface ResumenVotaciones {
+  total: number;
+  aprobadas: number;
+  rechazadas: number;
 }
 
 @Injectable()
@@ -95,6 +106,30 @@ export class AsambleasRepository {
 
     return new Map(
       filas.map((f) => [f.asambleaId, { presente: Number(f.presente), total: Number(f.total) }]),
+    );
+  }
+
+  /** Igual que el quórum: un `COUNT` agrupado para todo el listado. */
+  async resumenVotaciones(asambleaIds: string[]): Promise<Map<string, ResumenVotaciones>> {
+    if (asambleaIds.length === 0) return new Map();
+
+    const filas = await this.votaciones
+      .createQueryBuilder('v')
+      .select('v.asamblea_id', 'asambleaId')
+      .addSelect('COUNT(*)', 'total')
+      .addSelect('COUNT(*) FILTER (WHERE v.resultado = :aprobada)', 'aprobadas')
+      .addSelect('COUNT(*) FILTER (WHERE v.resultado = :rechazada)', 'rechazadas')
+      .where('v.asamblea_id IN (:...asambleaIds)', { asambleaIds })
+      .andWhere('v.estado = :cerrada', { cerrada: EstadoVotacion.CERRADA })
+      .setParameters({ aprobada: ResultadoVotacion.APROBADA, rechazada: ResultadoVotacion.RECHAZADA })
+      .groupBy('v.asamblea_id')
+      .getRawMany<{ asambleaId: string; total: string; aprobadas: string; rechazadas: string }>();
+
+    return new Map(
+      filas.map((f) => [
+        f.asambleaId,
+        { total: Number(f.total), aprobadas: Number(f.aprobadas), rechazadas: Number(f.rechazadas) },
+      ]),
     );
   }
 

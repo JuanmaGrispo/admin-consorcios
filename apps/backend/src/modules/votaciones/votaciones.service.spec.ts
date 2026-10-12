@@ -121,6 +121,7 @@ function crearService(
     actualizada: [] as unknown[],
     votos: [] as Partial<Voto>[],
     publicados: [] as unknown[][],
+    consultasDeuda: 0,
   };
   const votos = opts.votos ?? [];
   const repo = {
@@ -158,7 +159,14 @@ function crearService(
   const service = new VotacionesService(
     repo,
     { findOne: async () => ({ id: 'c1' }) } as unknown as ConsorciosService,
-    { tieneDeudaVencida: async () => opts.conDeuda ?? false } as unknown as ExpensasService,
+    {
+      tieneDeudaVencida: async () => opts.conDeuda ?? false,
+      // Con `conDeuda`, sólo la 1B debe expensas.
+      unidadesConDeudaVencida: async (ids: string[]) => {
+        escrito.consultasDeuda++;
+        return new Set(opts.conDeuda ? ids.filter((id) => id === 'u2') : []);
+      },
+    } as unknown as ExpensasService,
     {
       exigirPropia: (url: string) => {
         if (!url.startsWith('https://storage/votaciones/')) throw new BadRequestException('ajena');
@@ -540,5 +548,32 @@ describe('VotacionesService — visibilidad', () => {
     const { service } = crearService();
     const detalle = (await service.findOne(p1, 'vt1')) as { misUnidades: { pesoPorcentaje: number }[] };
     assert.equal(detalle.misUnidades[0].pesoPorcentaje, 60);
+  });
+});
+
+describe('VotacionesService — vista previa del padrón', () => {
+  it('sin bloqueo por deuda no consulta expensas ni trae la lista', async () => {
+    const { service, escrito } = crearService({ conDeuda: true });
+    const vista = await service.vistaPadron(admin, { consorcioId: 'c1' });
+    assert.equal(vista.habilitadas, 2);
+    assert.equal('conDeuda' in vista, false);
+    assert.equal(escrito.consultasDeuda, 0);
+  });
+
+  it('con bloqueo por deuda nombra las habilitadas que no votarían, en una sola consulta', async () => {
+    const { service, escrito } = crearService({ conDeuda: true });
+    const vista = await service.vistaPadron(admin, { consorcioId: 'c1', bloqueaConDeuda: true });
+    assert.deepEqual(vista.conDeuda, [{ unidadId: 'u2', etiqueta: '1B' }]);
+    // Siguen en el padrón: el bloqueo es al votar, no al armarlo.
+    assert.equal(vista.habilitadas, 2);
+    assert.equal(escrito.consultasDeuda, 1);
+  });
+
+  it('al administrador de otro consorcio le da 404', async () => {
+    const { service } = crearService();
+    await assert.rejects(
+      service.vistaPadron(adminAjeno, { consorcioId: 'c1', bloqueaConDeuda: true }),
+      NotFoundException,
+    );
   });
 });
