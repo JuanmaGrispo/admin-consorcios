@@ -9,10 +9,12 @@ export interface Pago {
   id: string;
   concepto: ConceptoPago;
   boletaId: string | null;
-  boleta?: { id: string; liquidacion?: { periodo: string } | null } | null;
+  /** Con la liquidación: el período y, si se rechazó, hasta cuándo sigue vigente la deuda. */
+  boleta?: { id: string; liquidacion?: { periodo: string; fechaVencimiento: string } | null } | null;
   reservaId: string | null;
   unidadId: string;
-  unidad?: { id: string; etiqueta: string } | null;
+  /** Con el consorcio: la dirección del comprobante sale de ahí. */
+  unidad?: { id: string; etiqueta: string; consorcioId: string } | null;
   monto: number;
   medio: MedioPago;
   estado: EstadoPago;
