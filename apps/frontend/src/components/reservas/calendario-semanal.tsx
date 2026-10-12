@@ -96,6 +96,8 @@ interface CalendarioSemanalProps {
   /** Tocar una reserva pendiente deja aprobarla o rechazarla ahí mismo. */
   onAprobar: (reserva: Reserva) => void;
   onRechazar: (reserva: Reserva) => void;
+  /** Una aprobada que todavía no empezó se puede cancelar, aunque el vecino ya no pueda. */
+  onCancelar: (reserva: Reserva) => void;
 }
 
 /**
@@ -111,6 +113,7 @@ export function CalendarioSemanal({
   onBloqueo,
   onAprobar,
   onRechazar,
+  onCancelar,
 }: CalendarioSemanalProps) {
   const dias = Array.from({ length: 7 }, (_, i) => sumarDias(lunes, i));
   const domingo = dias[6];
@@ -181,6 +184,7 @@ export function CalendarioSemanal({
                     onBloqueo={onBloqueo}
                     onAprobar={onAprobar}
                     onRechazar={onRechazar}
+                    onCancelar={onCancelar}
                   />
                 );
               })}
@@ -199,9 +203,10 @@ interface CeldaSemanaProps {
   onBloqueo: (b: Bloqueo) => void;
   onAprobar: (r: Reserva) => void;
   onRechazar: (r: Reserva) => void;
+  onCancelar: (r: Reserva) => void;
 }
 
-function CeldaSemana({ celda: c, onBloqueo, onAprobar, onRechazar }: CeldaSemanaProps) {
+function CeldaSemana({ celda: c, onBloqueo, onAprobar, onRechazar, onCancelar }: CeldaSemanaProps) {
   if (c.tipo === 'cerrado') {
     return <div className={cn(BASE, 'border-transparent bg-muted text-muted-foreground')}>Cerrado</div>;
   }
@@ -229,6 +234,7 @@ function CeldaSemana({ celda: c, onBloqueo, onAprobar, onRechazar }: CeldaSemana
 
   const r = c.reserva;
   const pendiente = r.estado === 'PENDIENTE';
+  const cancelable = r.estado === 'APROBADA' && new Date(r.inicio) > new Date();
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -280,6 +286,11 @@ function CeldaSemana({ celda: c, onBloqueo, onAprobar, onRechazar }: CeldaSemana
               Rechazar
             </Button>
           </div>
+        )}
+        {cancelable && (
+          <Button size="sm" variant="outline" className="text-destructive" onClick={() => onCancelar(r)}>
+            Cancelar reserva
+          </Button>
         )}
       </PopoverContent>
     </Popover>

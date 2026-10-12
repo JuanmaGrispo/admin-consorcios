@@ -13,7 +13,7 @@ import { DialogoBloqueo } from '@/components/reservas/dialogo-bloqueo';
 import { DialogoRechazo } from '@/components/reservas/dialogo-rechazo';
 import { ListaAmenities, PendientesAprobacion, ReglasAmenity } from '@/components/reservas/panel-amenity';
 import { debeSena, SENA_DEVOLVIBLE, SenasADevolver } from '@/components/reservas/senas-a-devolver';
-import { fechaCorta, fechaDe, hoy, lunesDe, sumarDias } from '@/components/reservas/tiempo';
+import { fechaCorta, fechaDe, horaDe, hoy, lunesDe, sumarDias } from '@/components/reservas/tiempo';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,6 +43,7 @@ function Reservas({ consorcio }: { consorcio: Consorcio }) {
   const [aRechazar, setARechazar] = useState<Reserva | null>(null);
   const [aQuitar, setAQuitar] = useState<Bloqueo | null>(null);
   const [aDevolver, setADevolver] = useState<Reserva | null>(null);
+  const [aCancelar, setACancelar] = useState<Reserva | null>(null);
 
   // Los amenities, incluidos los dados de baja: quien administra los puede reactivar.
   const amenitiesPedido = usePedido(
@@ -211,6 +212,7 @@ function Reservas({ consorcio }: { consorcio: Consorcio }) {
             onBloqueo={setAQuitar}
             onAprobar={aprobar}
             onRechazar={setARechazar}
+            onCancelar={setACancelar}
           />
         </div>
       )}
@@ -252,6 +254,23 @@ function Reservas({ consorcio }: { consorcio: Consorcio }) {
           recargar();
         }}
         onCerrar={() => setADevolver(null)}
+      />
+      <ConfirmarAccion
+        abierto={aCancelar !== null}
+        titulo={`¿Cancelar la reserva de ${aCancelar?.unidad.etiqueta ?? ''}?`}
+        descripcion={
+          aCancelar
+            ? `${fechaCorta(fechaDe(aCancelar.inicio))}, ${horaDe(aCancelar.inicio)} a ${horaDe(aCancelar.fin)}. El lugar queda libre y se le avisa al vecino.${aCancelar.sena?.pagada ? ' La seña queda para devolver.' : ''}`
+            : ''
+        }
+        boton="Cancelar reserva"
+        onConfirmar={async () => {
+          if (!aCancelar) return;
+          await reservasService.cancelar(aCancelar.id);
+          toast.success(`Reserva de ${aCancelar.unidad.etiqueta} cancelada`);
+          recargar();
+        }}
+        onCerrar={() => setACancelar(null)}
       />
       <DialogoRechazo reserva={aRechazar} onCerrar={() => setARechazar(null)} onRechazar={rechazar} />
       <ConfirmarAccion
