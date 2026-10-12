@@ -330,7 +330,9 @@ export class ReservasService {
         // está dejando gente sin el amenity, y decidirlo explícitamente.
         if (vigentes.length > 0 && !dto.cancelarReservas) {
           throw new ConflictException(
-            `El bloqueo pisa ${vigentes.length} reserva(s). Mandá cancelarReservas: true para cancelarlas.`,
+            vigentes.length === 1
+              ? 'Hay una reserva en esas fechas. Para bloquear igual, hay que cancelarla.'
+              : `Hay ${vigentes.length} reservas en esas fechas. Para bloquear igual, hay que cancelarlas.`,
           );
         }
         return vigentes;
