@@ -86,26 +86,28 @@ export class ReservasRepository {
   }
 
   /**
-   * La ventana del amenity en cada día del rango, como instantes, y el reloj
-   * de la base. Misma regla que `instantes`: un cierre igual o anterior a la
-   * apertura es del día siguiente.
+   * La ventana de cada día como instantes, y el reloj de la base. Cada día
+   * trae su horario (el amenity puede abrir distinto según el día). Misma
+   * regla que `instantes`: un cierre igual o anterior a la apertura es del día
+   * siguiente.
    */
   async ventanasDelRango(
-    desde: string,
-    hasta: string,
-    horaApertura: string,
-    horaCierre: string,
+    dias: { fecha: string; horaApertura: string; horaCierre: string }[],
     zona: string,
   ): Promise<{ ventanas: { fecha: string; inicio: Date; fin: Date }[]; ahora: Date }> {
+    if (dias.length === 0) {
+      const [{ ahora }]: { ahora: Date }[] = await this.dataSource.query('SELECT now() AS ahora');
+      return { ventanas: [], ahora };
+    }
     const filas: { fecha: string; inicio: Date; fin: Date; ahora: Date }[] = await this.dataSource.query(
-      `SELECT d::date::text AS fecha,
-              (d::date + $3::time) AT TIME ZONE $5 AS inicio,
-              (d::date + (CASE WHEN $4::time <= $3::time THEN 1 ELSE 0 END) + $4::time)
-                AT TIME ZONE $5 AS fin,
+      `SELECT d.fecha::text AS fecha,
+              (d.fecha + d.apertura) AT TIME ZONE $4 AS inicio,
+              (d.fecha + (CASE WHEN d.cierre <= d.apertura THEN 1 ELSE 0 END) + d.cierre)
+                AT TIME ZONE $4 AS fin,
               now() AS ahora
-         FROM generate_series($1::date, $2::date, interval '1 day') AS d
-        ORDER BY d`,
-      [desde, hasta, horaApertura, horaCierre, zona],
+         FROM unnest($1::date[], $2::time[], $3::time[]) AS d(fecha, apertura, cierre)
+        ORDER BY d.fecha`,
+      [dias.map((d) => d.fecha), dias.map((d) => d.horaApertura), dias.map((d) => d.horaCierre), zona],
     );
     return {
       ventanas: filas.map(({ fecha, inicio, fin }) => ({ fecha, inicio, fin })),

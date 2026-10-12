@@ -11,11 +11,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TIPOS_UNIDAD } from '@/components/unidades/etiquetas';
+import { TIPOS_UNIDAD, VINCULOS } from '@/components/unidades/etiquetas';
 import { useUnidadActiva } from '@/components/vecino/unidad-activa';
 import { usePedido } from '@/hooks/use-pedido';
-import { porcentaje } from '@/lib/formato';
+import { domicilio, porcentaje } from '@/lib/formato';
 import { perfilService } from '@/services/perfil';
+import type { Consorcio } from '@/types/consorcio';
+
+/** "Av. Rivadavia 4820", o el nombre del consorcio si no tiene calle cargada. */
+const direccion = (c?: Consorcio) => (c ? domicilio(c.calle, c.numero) || c.nombre : null);
 
 /** Lo que no está en la barra de abajo se abre desde acá. */
 const ACCESOS = [
@@ -27,7 +31,7 @@ const ACCESOS = [
 /** Perfil y preferencias de aviso del vecino (pantalla 16). */
 export default function VecinoPerfilPage() {
   const { cerrarSesion } = useSesion();
-  const { unidades, unidad: activa } = useUnidadActiva();
+  const { unidades, unidad: activa, consorcios } = useUnidadActiva();
   const pedido = usePedido('perfil', () => perfilService.obtener(), 'No se pudo cargar tu perfil.');
   const perfil = pedido.datos ?? pedido.ultimo;
 
@@ -65,9 +69,18 @@ export default function VecinoPerfilPage() {
                       <span className="ml-2 text-xs font-normal text-muted-foreground">(la que estás viendo)</span>
                     )}
                   </p>
-                  <p className="text-sm text-muted-foreground">{TIPOS_UNIDAD[u.tipo]}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {/* "Propietario · Departamento · Av. Rivadavia 4820" */}
+                    {[
+                      u.miVinculo && `${VINCULOS[u.miVinculo.vinculo]}${u.miVinculo.esTitular ? ' titular' : ''}`,
+                      TIPOS_UNIDAD[u.tipo],
+                      direccion(consorcios.find((c) => c.id === u.consorcioId)),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
                 </div>
-                <span className="text-sm text-secondary-foreground tabular-nums">
+                <span className="shrink-0 text-sm whitespace-nowrap text-secondary-foreground tabular-nums">
                   Coef. {porcentaje(u.coeficiente, 4)}
                 </span>
               </li>

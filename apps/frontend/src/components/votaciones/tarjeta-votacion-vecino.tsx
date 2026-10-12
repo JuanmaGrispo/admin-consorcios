@@ -11,6 +11,8 @@ import { EscrutinioBarras } from './escrutinio-barras';
 
 interface TarjetaVotacionVecinoProps {
   votacion: Votacion;
+  /** El título de la asamblea de la que cuelga, si cuelga de una. */
+  tituloAsamblea?: string;
   /** Se carga aparte: trae mis unidades habilitadas, mi voto y el conteo si ya lo puedo ver. */
   detalle?: VotacionDetalle;
   onVotar: (detalle: VotacionDetalle) => void;
@@ -32,8 +34,18 @@ function motivoParaNoVotar(detalle: VotacionDetalle): string | null {
   return null;
 }
 
+/** "Cierra en 8 días", "Cierra en 5 horas": lo que le queda a una votación abierta. */
+function cierraEn(cierre: string, ahora = Date.now()): string {
+  const minutos = Math.floor((new Date(cierre).getTime() - ahora) / 60_000);
+  if (minutos < 60) return 'Cierra en menos de una hora';
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `Cierra en ${horas} ${horas === 1 ? 'hora' : 'horas'}`;
+  const dias = Math.floor(horas / 24);
+  return `Cierra en ${dias} ${dias === 1 ? 'día' : 'días'}`;
+}
+
 /** Una votación como la ve el vecino (pantalla 15): qué se vota, hasta cuándo, si ya votó y el resultado. */
-export function TarjetaVotacionVecino({ votacion, detalle, onVotar }: TarjetaVotacionVecinoProps) {
+export function TarjetaVotacionVecino({ votacion, tituloAsamblea, detalle, onVotar }: TarjetaVotacionVecinoProps) {
   const abierta = votacion.estado === 'ABIERTA';
   const unidades = detalle?.misUnidades ?? [];
   const pendientes = unidades.filter((u) => !u.voto);
@@ -41,14 +53,24 @@ export function TarjetaVotacionVecino({ votacion, detalle, onVotar }: TarjetaVot
   const motivo = detalle ? motivoParaNoVotar(detalle) : null;
 
   return (
-    <Card>
+    <Card id={`votacion-${votacion.id}`} className="scroll-mt-20">
       <CardContent className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-xs text-muted-foreground tabular-nums">
-              {abierta ? `Cierra el ${fechaHora(votacion.cierre)}` : `Cerró el ${fechaHora(votacion.cierre)}`}
+            <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+              {votacion.asambleaId ? `En asamblea${tituloAsamblea ? ` · ${tituloAsamblea}` : ''}` : 'Votación digital'}
             </p>
             <h2 className="mt-1 leading-snug font-semibold">{votacion.titulo}</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+              {abierta ? (
+                <>
+                  <span className="font-medium text-foreground">{cierraEn(votacion.cierre)}</span> · el{' '}
+                  {fechaHora(votacion.cierre)}
+                </>
+              ) : (
+                `Cerró el ${fechaHora(votacion.cierre)}`
+              )}
+            </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <EstadoBadge dominio="votacion" estado={votacion.estado} />
@@ -107,7 +129,11 @@ export function TarjetaVotacionVecino({ votacion, detalle, onVotar }: TarjetaVot
 
             {detalle.escrutinio && (
               <div className="border-t pt-3">
-                <EscrutinioBarras escrutinio={detalle.escrutinio} cerrada={votacion.estado === 'CERRADA'} />
+                <EscrutinioBarras
+                  escrutinio={detalle.escrutinio}
+                  cerrada={votacion.estado === 'CERRADA'}
+                  reglas={votacion}
+                />
               </div>
             )}
           </>

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fechaHora, porcentaje } from '@/lib/formato';
+import { fechaDeInstante, fechaHora, porcentaje } from '@/lib/formato';
 import { cn } from '@/lib/utils';
 import type { Asamblea, AsambleaDetalle, EstadoAsistencia } from '@/types/asamblea';
 import { MODALIDADES, TIPOS } from './etiquetas';
@@ -40,7 +40,7 @@ export function TarjetaAsambleaVecino({ asamblea, detalle, unidadId, onResponder
   }
 
   return (
-    <Card className={cn(asamblea.estado === 'EN_CURSO' && 'ring-primary')}>
+    <Card id={`asamblea-${asamblea.id}`} className={cn('scroll-mt-20', asamblea.estado === 'EN_CURSO' && 'ring-primary')}>
       <CardContent className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -55,7 +55,11 @@ export function TarjetaAsambleaVecino({ asamblea, detalle, unidadId, onResponder
         <ul className="flex flex-col gap-1 text-sm text-secondary-foreground">
           <li className="flex items-center gap-2">
             <CalendarClock className="size-4 shrink-0 text-muted-foreground" />
-            <span className="tabular-nums">{fechaHora(asamblea.fechaHora)}</span>
+            <span className="tabular-nums">
+              {abierta ? fechaHora(asamblea.fechaHora) : fechaDeInstante(asamblea.fechaHora)}
+              {/* Ya cerrada, el día y el quórum con el que terminó: "14/08/2026 · quórum 78,1%". */}
+              {!abierta && asamblea.quorumPorcentaje !== null && ` · quórum ${porcentaje(asamblea.quorumPorcentaje)}`}
+            </span>
           </li>
           <li className="flex items-center gap-2">
             <MapPin className="size-4 shrink-0 text-muted-foreground" />
@@ -99,7 +103,10 @@ export function TarjetaAsambleaVecino({ asamblea, detalle, unidadId, onResponder
                 {miRespuesta === 'NO_ASISTE' ? 'Avisaste que no podés ir.' : 'Confirmaste tu asistencia.'}
               </p>
             ) : (
-              <p className="text-sm font-medium">Confirmá tu asistencia</p>
+              <div>
+                <p className="text-sm font-medium">Confirmá tu asistencia</p>
+                <p className="text-xs text-muted-foreground">Tu confirmación ayuda a alcanzar el quórum.</p>
+              </div>
             )}
             <div className="grid grid-cols-2 gap-2">
               <Button

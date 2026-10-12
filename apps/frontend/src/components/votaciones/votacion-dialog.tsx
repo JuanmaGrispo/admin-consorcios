@@ -23,11 +23,16 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { estaCerrada } from '@/components/asambleas/etiquetas';
 import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { instanteALocal, localAInstante } from '@/lib/fecha-input';
+import { fechaHora } from '@/lib/formato';
 import { archivosService } from '@/services/archivos';
+import { asambleasService } from '@/services/asambleas';
 import { votacionesService } from '@/services/votaciones';
+import type { EstadoAsamblea } from '@/types/asamblea';
 import type {
   CriterioDesempate,
   FormaConteo,
@@ -77,7 +82,21 @@ export interface ValoresVotacion {
   cierre?: string;
   /** Además de “A favor” y “En contra”, que siempre están. */
   opciones: string[];
+  /** Sólo en el alta con “¿Dónde se vota?”: la asamblea elegida, que la suma a su orden del día. */
+  asambleaId?: string;
 }
+
+/** La asamblea donde se vota, con su estado: de eso depende si ya se puede publicar. */
+export interface AsambleaDeVotacion {
+  id: string;
+  titulo: string;
+  estado: EstadoAsamblea;
+}
+
+/** Una votación de asamblea se publica con la asamblea convocada o en curso (lo exige el backend). */
+const SE_PUBLICA_CON: EstadoAsamblea[] = ['CONVOCADA', 'EN_CURSO'];
+
+type Donde = 'ASAMBLEA' | 'INDEPENDIENTE';
 
 interface VotacionDialogProps {
   abierto: boolean;
@@ -87,11 +106,15 @@ interface VotacionDialogProps {
   subtitulo: string;
   /** Si viene, edita esa votación (en borrador); si no, es un alta. */
   votacion?: Votacion;
-  /** Si viene, la votación es un punto nuevo de esa asamblea y no pide fechas. */
-  asamblea?: { id: string; titulo: string };
+  /**
+   * Si viene, la votación es un punto nuevo de esa asamblea y no pide fechas.
+   * Si no viene en un alta, el formulario pregunta dónde se vota.
+   */
+  asamblea?: AsambleaDeVotacion;
   /** Para precargar el título cuando nace de un punto del orden del día. */
   tituloInicial?: string;
-  onGuardar: (valores: ValoresVotacion) => Promise<void>;
+  /** En el alta, `publicar` dice si además de crearla hay que abrirla. */
+  onGuardar: (valores: ValoresVotacion, publicar: boolean) => Promise<void>;
 }
 
 /**
@@ -122,7 +145,7 @@ export function VotacionDialog({
           consorcioId={consorcioId}
           votacion={votacion}
           tituloInicial={tituloInicial}
-          deAsamblea={asamblea !== undefined || votacion?.asambleaId != null}
+          asamblea={asamblea}
           onGuardar={onGuardar}
           onCancelar={() => onOpenChange(false)}
         />
@@ -135,12 +158,26 @@ interface FormularioProps {
   consorcioId: string;
   votacion?: Votacion;
   tituloInicial?: string;
-  deAsamblea: boolean;
-  onGuardar: (valores: ValoresVotacion) => Promise<void>;
+  asamblea?: AsambleaDeVotacion;
+  onGuardar: (valores: ValoresVotacion, publicar: boolean) => Promise<void>;
   onCancelar: () => void;
 }
 
-function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuardar, onCancelar }: FormularioProps) {
+function Formulario({ consorcioId, votacion, tituloInicial, asamblea, onGuardar, onCancelar }: FormularioProps) {
+  // Sólo un alta sin asamblea fija pregunta dónde se vota: una existente no se mueve.
+  const eligeDonde = !votacion && !asamblea;
+  const [donde, setDonde] = useState<Donde>('INDEPENDIENTE');
+  const [asambleaId, setAsambleaId] = useState('');
+
+  // Las asambleas que todavía aceptan una votación: las que no cerraron.
+  const abiertas = usePedido(eligeDonde ? `asambleas-sin-cerrar:${consorcioId}` : null, async () =>
+    (await asambleasService.listar({ consorcioId })).filter((a) => !estaCerrada(a)),
+  ).datos;
+  const elegida = abiertas?.find((a) => a.id === asambleaId);
+
+  const deAsamblea = asamblea !== undefined || votacion?.asambleaId != null || (eligeDonde && donde === 'ASAMBLEA');
+  const estadoAsamblea = asamblea?.estado ?? elegida?.estado;
+  const puedePublicar = !deAsamblea || (estadoAsamblea !== undefined && SE_PUBLICA_CON.includes(estadoAsamblea));
   const [titulo, setTitulo] = useState(votacion?.titulo ?? tituloInicial ?? '');
   const [descripcion, setDescripcion] = useState(votacion?.descripcion ?? '');
   const [padron, setPadron] = useState<PadronVotacion>(votacion?.padron ?? 'SOLO_PROPIETARIOS');
@@ -193,32 +230,42 @@ function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuarda
     onCancelar();
   }
 
-  // La vista previa se pide de nuevo cada vez que cambia el padrón o el conteo.
-  // Si falla, el formulario anda igual sin ella.
-  const vista = usePedido(`padron:${consorcioId}:${padron}:${formaConteo}`, () =>
-    votacionesService.vistaPadron({ consorcioId, padron, formaConteo }),
+  // La vista previa se pide de nuevo cada vez que cambia el padrón, el conteo
+  // o el bloqueo por deuda. Si falla, el formulario anda igual sin ella.
+  const vista = usePedido(`padron:${consorcioId}:${padron}:${formaConteo}:${bloqueaConDeuda}`, () =>
+    votacionesService.vistaPadron({ consorcioId, padron, formaConteo, bloqueaConDeuda }),
   ).datos;
 
-  async function enviar(e: React.FormEvent) {
+  async function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Dos botones mandan el formulario: el de publicar lo dice en su `name`.
+    const publicar = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('name') === 'publicar';
+    if (eligeDonde && donde === 'ASAMBLEA' && !asambleaId) {
+      setError('Elegí en qué asamblea se vota.');
+      return;
+    }
     setError(null);
     setEnviando(true);
     try {
-      await onGuardar({
-        titulo: titulo.trim(),
-        descripcion: descripcion.trim() || null,
-        adjuntoUrl: adjunto?.url ?? null,
-        padron,
-        formaConteo,
-        mayoria,
-        desempate,
-        mostrarParcial,
-        bloqueaConDeuda,
-        permiteVotoAnticipado: deAsamblea && anticipado,
-        apertura: deAsamblea ? undefined : localAInstante(apertura),
-        cierre: deAsamblea ? undefined : localAInstante(cierre),
-        opciones: extras.map((o) => o.trim()).filter(Boolean),
-      });
+      await onGuardar(
+        {
+          titulo: titulo.trim(),
+          descripcion: descripcion.trim() || null,
+          adjuntoUrl: adjunto?.url ?? null,
+          padron,
+          formaConteo,
+          mayoria,
+          desempate,
+          mostrarParcial,
+          bloqueaConDeuda,
+          permiteVotoAnticipado: deAsamblea && anticipado,
+          apertura: deAsamblea ? undefined : localAInstante(apertura),
+          cierre: deAsamblea ? undefined : localAInstante(cierre),
+          opciones: extras.map((o) => o.trim()).filter(Boolean),
+          asambleaId: eligeDonde && donde === 'ASAMBLEA' ? asambleaId : undefined,
+        },
+        publicar,
+      );
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo guardar la votación.');
       setEnviando(false);
@@ -228,6 +275,56 @@ function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuarda
   return (
     <form onSubmit={enviar} className="flex flex-col gap-4">
       <FieldGroup>
+        {eligeDonde && (
+          <Field>
+            <FieldLabel>¿Dónde se vota?</FieldLabel>
+            <ToggleGroup
+              type="single"
+              spacing={1}
+              value={donde}
+              onValueChange={(valor) => valor && setDonde(valor as Donde)}
+              className="w-full rounded-lg border bg-muted p-0.5"
+            >
+              <ToggleGroupItem
+                value="ASAMBLEA"
+                size="sm"
+                disabled={abiertas?.length === 0}
+                className="flex-1 data-[state=on]:bg-card data-[state=on]:font-semibold data-[state=on]:shadow-xs"
+              >
+                Dentro de una asamblea
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="INDEPENDIENTE"
+                size="sm"
+                className="flex-1 data-[state=on]:bg-card data-[state=on]:font-semibold data-[state=on]:shadow-xs"
+              >
+                Votación digital independiente
+              </ToggleGroupItem>
+            </ToggleGroup>
+            {donde === 'ASAMBLEA' && (
+              <Select value={asambleaId} onValueChange={setAsambleaId}>
+                <SelectTrigger className="w-full" aria-label="Asamblea">
+                  <SelectValue placeholder="Elegí la asamblea" />
+                </SelectTrigger>
+                <SelectContent>
+                  {abiertas?.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.titulo} · {fechaHora(a.fechaHora)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <FieldDescription>
+              {abiertas?.length === 0
+                ? 'No hay asambleas sin cerrar: se vota sólo desde la app, con su propia apertura y cierre.'
+                : donde === 'ASAMBLEA'
+                  ? 'Se suma como punto del orden del día y se vota durante la asamblea.'
+                  : 'Se vota sólo desde la app, con su propia apertura y cierre.'}
+            </FieldDescription>
+          </Field>
+        )}
+
         <Field>
           <FieldLabel htmlFor="titulo">Qué se vota</FieldLabel>
           <Input
@@ -375,6 +472,13 @@ function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuarda
                 {vista.sinVotante.map((u) => u.etiqueta).join(', ')}.
               </p>
             )}
+            {bloqueaConDeuda && vista.conDeuda && vista.conDeuda.length > 0 && (
+              <p className="mt-1 text-muted-foreground">
+                {vista.conDeuda.length}{' '}
+                {vista.conDeuda.length === 1 ? 'unidad no votaría' : 'unidades no votarían'} por
+                expensas vencidas: {vista.conDeuda.map((u) => u.etiqueta).join(', ')}.
+              </p>
+            )}
           </div>
         )}
 
@@ -435,14 +539,29 @@ function Formulario({ consorcioId, votacion, tituloInicial, deAsamblea, onGuarda
 
       <DialogFooter className="sm:items-center">
         <p className="text-xs text-muted-foreground sm:mr-auto">
-          Queda en borrador: los vecinos la ven cuando la publiques.
+          {votacion
+            ? 'Sigue en borrador: los vecinos la ven cuando la publiques.'
+            : !puedePublicar
+              ? 'Se publica cuando la asamblea esté convocada. Mientras, queda en borrador.'
+              : 'Al publicar se avisa a los vecinos y ya pueden votar.'}
         </p>
-        <Button type="button" variant="outline" onClick={cancelar} disabled={enviando}>
+        <Button type="button" variant="ghost" onClick={cancelar} disabled={enviando}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={enviando || subiendo}>
-          {enviando ? 'Guardando…' : votacion ? 'Guardar cambios' : 'Crear votación'}
-        </Button>
+        {votacion ? (
+          <Button type="submit" disabled={enviando || subiendo}>
+            {enviando ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        ) : (
+          <>
+            <Button type="submit" name="borrador" variant="outline" disabled={enviando || subiendo}>
+              Guardar borrador
+            </Button>
+            <Button type="submit" name="publicar" disabled={enviando || subiendo || !puedePublicar}>
+              {enviando ? 'Guardando…' : 'Publicar votación'}
+            </Button>
+          </>
+        )}
       </DialogFooter>
     </form>
   );

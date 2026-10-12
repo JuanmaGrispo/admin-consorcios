@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { pesos } from '@/lib/formato';
+import { periodo as nombrePeriodo, pesos, porcentaje } from '@/lib/formato';
 import { NATURALEZAS_GASTO } from '@/types/catalogo';
 import type { Gasto } from '@/types/expensa';
 
@@ -24,6 +24,8 @@ const BORDES = '[&>*:first-child]:pl-4 [&>*:last-child]:pr-4';
 interface TablaGastosProps {
   gastos: Gasto[];
   total: number;
+  /** El período anterior, para comparar el total ("+6,2% vs julio"). */
+  anterior?: { periodo: string; totalGastos: number };
   /** Emitida, la lista queda de sólo lectura. */
   editable: boolean;
   onAgregar: () => void;
@@ -32,7 +34,7 @@ interface TablaGastosProps {
 }
 
 /** Los gastos del período (paso 1 de la pantalla 03), con el total al pie. */
-export function TablaGastos({ gastos, total, editable, onAgregar, onEditar, onBorrar }: TablaGastosProps) {
+export function TablaGastos({ gastos, total, anterior, editable, onAgregar, onEditar, onBorrar }: TablaGastosProps) {
   const sinComprobante = gastos.filter((g) => !g.comprobanteUrl && !g.comprobanteNumero).length;
 
   return (
@@ -127,7 +129,10 @@ export function TablaGastos({ gastos, total, editable, onAgregar, onEditar, onBo
             <TableRow className={BORDES}>
               <TableCell className="font-semibold">Total del período</TableCell>
               <TableCell className="hidden md:table-cell" />
-              <TableCell className="text-right font-semibold tabular-nums">{pesos(total)}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                <p className="font-semibold">{pesos(total)}</p>
+                {anterior && anterior.totalGastos > 0 && <Comparacion total={total} anterior={anterior} />}
+              </TableCell>
               <TableCell className="hidden sm:table-cell" />
               {editable && <TableCell />}
             </TableRow>
@@ -135,6 +140,19 @@ export function TablaGastos({ gastos, total, editable, onAgregar, onEditar, onBo
         </Table>
       )}
     </Card>
+  );
+}
+
+/** "+6,2% vs julio ($ 4.568.900)": cuánto cambió el total contra el período anterior. */
+function Comparacion({ total, anterior }: { total: number; anterior: { periodo: string; totalGastos: number } }) {
+  const variacion = ((total - anterior.totalGastos) / anterior.totalGastos) * 100;
+  const signo = variacion > 0 ? '+' : variacion < 0 ? '−' : '';
+  const mes = nombrePeriodo(anterior.periodo).split(' ')[0].toLowerCase();
+  return (
+    <p className="text-xs font-normal whitespace-nowrap text-muted-foreground">
+      {signo}
+      {porcentaje(Math.abs(variacion))} vs {mes} ({pesos(anterior.totalGastos, { redondo: true })})
+    </p>
   );
 }
 

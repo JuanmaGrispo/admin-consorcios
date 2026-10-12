@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, LogOut } from 'lucide-react';
+import { Building2, LayoutDashboard, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,23 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {/* El superadmin también gestiona consorcios desde el portal del administrador. */}
+        {usuario.rol === 'SUPER_ADMIN' && (
+          <SidebarGroup className="mt-auto">
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild onClick={() => setOpenMobile(false)}>
+                    <Link href="/admin">
+                      <LayoutDashboard />
+                      <span>Administrar consorcios</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarSeparator />

@@ -4,8 +4,9 @@ import { Pencil, Plus, Vote } from 'lucide-react';
 import { useState } from 'react';
 import { EstadoBadge } from '@/components/estado-badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -48,6 +49,11 @@ export function OrdenDelDia({
     <Card>
       <CardHeader>
         <CardTitle>Orden del día</CardTitle>
+        {puntos.length > 0 && (
+          <CardDescription>
+            {puntos.length} {puntos.length === 1 ? 'punto' : 'puntos'}
+          </CardDescription>
+        )}
         {editable && (
           <CardAction>
             <Button variant="outline" size="sm" onClick={() => setEditando(true)}>
@@ -74,8 +80,10 @@ export function OrdenDelDia({
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{p.titulo}</p>
                     {p.descripcion && <p className="text-sm text-muted-foreground">{p.descripcion}</p>}
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {p.tipo === 'CON_VOTACION' ? 'Con votación' : 'Informativo'}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <span className="whitespace-nowrap">{p.tipo === 'CON_VOTACION' ? 'Con votación' : 'Informativo'}</span>
+                      {/* El punto que se está votando ahora es el que está en tratamiento. */}
+                      {votacion?.estado === 'ABIERTA' && <Badge variant="warning">En tratamiento</Badge>}
                     </p>
                   </div>
                   {p.tipo === 'CON_VOTACION' &&

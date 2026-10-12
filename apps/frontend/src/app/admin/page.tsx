@@ -1,8 +1,10 @@
 'use client';
 
-import { CalendarDays, ChevronRight, Plus, TrendingDown, TrendingUp, Vote, Wrench } from 'lucide-react';
+import { CalendarDays, ChevronRight, Download, Plus, TrendingDown, TrendingUp, Vote, Wrench } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
+import { etiquetaDeEstado } from '@/components/estado-badge';
 import { PageHeader } from '@/components/page-header';
 import { GraficoCobranza } from '@/components/panel/grafico-cobranza';
 import { RequiereAtencion } from '@/components/panel/requiere-atencion';
@@ -10,13 +12,36 @@ import { TablaConsorcios } from '@/components/panel/tabla-consorcios';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePedido } from '@/hooks/use-pedido';
-import { periodo, pesos, porcentaje } from '@/lib/formato';
+import { guardarCsv, importeCsv } from '@/lib/csv';
+import { domicilio, periodo, pesos, porcentaje } from '@/lib/formato';
 import { cn } from '@/lib/utils';
 import { panelService } from '@/services/panel';
 import type { Panel } from '@/types/panel';
+
+/** Cuántos consorcios muestra "Mis consorcios" antes de "Ver todos". */
+const PRIMEROS_CONSORCIOS = 5;
+
+/** "Mis consorcios" en CSV para Excel: la cobranza del período, un consorcio por fila. */
+function exportar(panel: Panel) {
+  guardarCsv(
+    `panel-${panel.periodo}.csv`,
+    ['Consorcio', 'Domicilio', 'Barrio', 'Unidades', 'Emitido', 'Cobrado', 'Pendiente', 'Morosidad %', 'Estado'],
+    panel.porConsorcio.map((c) => [
+      c.nombre,
+      domicilio(c.calle, c.numero),
+      c.barrio ?? '',
+      c.unidades,
+      importeCsv(c.emitido),
+      importeCsv(c.cobrado),
+      importeCsv(c.pendiente),
+      importeCsv(c.morosidad),
+      etiquetaDeEstado('cobranza', c.estado),
+    ]),
+  );
+}
 
 /** "julio" a partir de "2026-07". */
 function mes(p: string): string {
@@ -83,6 +108,7 @@ const TONO_TENDENCIA = {
 /** Pantalla 01 del prototipo: todos los consorcios del administrador de un vistazo. */
 export default function AdminPanelPage() {
   const { datos: panel, error } = usePedido('panel', () => panelService.obtener(), 'No se pudo cargar el panel.');
+  const [verTodos, setVerTodos] = useState(false);
 
   if (error) {
     return (
@@ -103,12 +129,18 @@ export default function AdminPanelPage() {
         titulo="Panel general"
         descripcion={`${panel.consorcios} ${panel.consorcios === 1 ? 'consorcio' : 'consorcios'} · ${panel.unidades} unidades`}
         acciones={
-          <Button asChild>
-            <Link href="/admin/liquidaciones">
-              <Plus />
-              Nueva liquidación
-            </Link>
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => exportar(panel)}>
+              <Download data-icon="inline-start" />
+              Exportar a Excel
+            </Button>
+            <Button asChild>
+              <Link href="/admin/liquidaciones">
+                <Plus />
+                Nueva liquidación
+              </Link>
+            </Button>
+          </>
         }
       />
 
@@ -181,8 +213,17 @@ export default function AdminPanelPage() {
           <CardHeader>
             <CardTitle>Mis consorcios</CardTitle>
             <CardDescription>Estado de cobranza del período en curso</CardDescription>
+            {panel.porConsorcio.length > PRIMEROS_CONSORCIOS && (
+              <CardAction>
+                <Button variant="ghost" size="sm" onClick={() => setVerTodos((v) => !v)}>
+                  {verTodos ? 'Ver menos' : `Ver todos (${panel.porConsorcio.length})`}
+                </Button>
+              </CardAction>
+            )}
           </CardHeader>
-          <TablaConsorcios consorcios={panel.porConsorcio} />
+          <TablaConsorcios
+            consorcios={verTodos ? panel.porConsorcio : panel.porConsorcio.slice(0, PRIMEROS_CONSORCIOS)}
+          />
         </Card>
 
         <Card>

@@ -9,6 +9,7 @@ import {
   IsString,
   IsUrl,
   IsUUID,
+  Matches,
   MaxLength,
   MinLength,
   ValidateNested,
@@ -31,6 +32,13 @@ export class CrearReclamoDto {
   @ApiProperty({ format: 'uuid', description: 'Categoría del reclamo' })
   @IsUUID()
   categoriaId: string;
+
+  /** Lo que encabeza la tarjeta en las listas. Los reclamos viejos no tienen. */
+  @ApiProperty({ example: 'Pérdida de agua en el baño', maxLength: 80 })
+  @IsString()
+  @Matches(/\S/, { message: 'Poné un título corto al reclamo' })
+  @MaxLength(80, { message: 'El título va hasta 80 caracteres' })
+  titulo: string;
 
   @ApiProperty({
     example: 'Hay una pérdida en la canilla del baño desde el domingo.',

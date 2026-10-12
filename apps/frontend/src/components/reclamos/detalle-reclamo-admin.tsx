@@ -89,7 +89,14 @@ export function DetalleReclamoAdmin({ reclamoId, onCambio }: DetalleReclamoAdmin
           </span>
           <EstadoBadge dominio="reclamo" estado={reclamo.estado} />
         </div>
-        <h2 className="text-base font-semibold whitespace-pre-line">{reclamo.descripcion}</h2>
+        {reclamo.titulo ? (
+          <>
+            <h2 className="text-base font-semibold">{reclamo.titulo}</h2>
+            <p className="text-sm whitespace-pre-line text-secondary-foreground">{reclamo.descripcion}</p>
+          </>
+        ) : (
+          <h2 className="text-base font-semibold whitespace-pre-line">{reclamo.descripcion}</h2>
+        )}
         <p className="text-xs text-muted-foreground">
           {autor} · abierto el {fechaDeInstante(reclamo.createdAt)} · prioridad {PRIORIDAD[reclamo.prioridad]}
           {reclamo.categoria && ` · ${reclamo.categoria.nombre}`}

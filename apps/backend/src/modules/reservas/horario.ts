@@ -8,6 +8,77 @@ export interface VentanaAmenity {
 
 export type ProblemaFranja = 'FUERA_DE_HORARIO' | 'DEMASIADO_LARGA' | 'FUERA_DE_FRANJA';
 
+/** El horario de un día: de qué hora a qué hora abre. */
+export interface HorasDelDia {
+  horaApertura: string;
+  horaCierre: string;
+}
+
+/**
+ * Las excepciones al horario general por día de la semana ISO ("1" lunes …
+ * "7" domingo), como se guardan en `amenity.horario_semanal`. Un día con
+ * `null` está cerrado; uno que no figura usa el horario general.
+ */
+export type HorarioSemanal = Partial<Record<string, { apertura: string; cierre: string } | null>>;
+
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Lee y valida lo que viene en `horario_semanal` (de la base o del DTO).
+ * Devuelve el error en castellano si algo no cierra, para que el alta lo
+ * rechace con un 400 en vez de guardar un horario que nadie puede usar.
+ */
+export function leerHorarioSemanal(valor: unknown): { horario: HorarioSemanal | null; error?: string } {
+  if (valor === null || valor === undefined) return { horario: null };
+  if (typeof valor !== 'object' || Array.isArray(valor)) {
+    return { horario: null, error: 'El horario por día tiene que ser un objeto por día de la semana' };
+  }
+  const horario: HorarioSemanal = {};
+  for (const [dia, horas] of Object.entries(valor as Record<string, unknown>)) {
+    if (!/^[1-7]$/.test(dia)) {
+      return { horario: null, error: `"${dia}" no es un día de la semana (1 lunes … 7 domingo)` };
+    }
+    if (horas === null) {
+      horario[dia] = null;
+      continue;
+    }
+    const { apertura, cierre } = (horas ?? {}) as { apertura?: unknown; cierre?: unknown };
+    if (typeof apertura !== 'string' || typeof cierre !== 'string' || !HORA.test(apertura) || !HORA.test(cierre)) {
+      return { horario: null, error: 'Cada día lleva apertura y cierre en formato HH:MM, o null si está cerrado' };
+    }
+    horario[dia] = { apertura, cierre };
+  }
+  return { horario: Object.keys(horario).length ? horario : null };
+}
+
+/** Día de la semana ISO de una fecha "2026-09-12": 1 lunes … 7 domingo. */
+export function diaDeLaSemana(fecha: string): number {
+  const dia = new Date(`${fecha.slice(0, 10)}T12:00:00Z`).getUTCDay();
+  return dia === 0 ? 7 : dia;
+}
+
+/** "2026-09-12" → "2026-09-11". */
+export function diaAnterior(fecha: string): string {
+  const d = new Date(`${fecha.slice(0, 10)}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * El horario de ese día: el general, el del día si tiene uno propio, o null
+ * si ese día está cerrado.
+ */
+export function horasDelDia(
+  amenity: HorasDelDia & { horarioSemanal?: object | null },
+  fecha: string,
+): HorasDelDia | null {
+  const { horario } = leerHorarioSemanal(amenity.horarioSemanal);
+  const propio = horario?.[String(diaDeLaSemana(fecha))];
+  if (propio === undefined) return { horaApertura: amenity.horaApertura, horaCierre: amenity.horaCierre };
+  if (propio === null) return null;
+  return { horaApertura: propio.apertura, horaCierre: propio.cierre };
+}
+
 export const ZONA_POR_DEFECTO = 'America/Argentina/Buenos_Aires';
 
 const DIA = 24 * 60;
@@ -43,22 +114,36 @@ export function franjaEnMinutos(horaInicio: string, horaFin: string): { inicio: 
   return { inicio, fin: fin > inicio ? fin : fin + DIA };
 }
 
+/**
+ * Si la franja entra en el horario. Sin `dias`, todos los días abren igual
+ * (`ventana`); con `dias`, cada uno con el suyo: `hoy` es el del día de la
+ * reserva y `ayer` el del anterior, cuya ventana puede seguir de madrugada.
+ * Null en cualquiera de los dos es día cerrado.
+ */
 export function validarFranja(
   horaInicio: string,
   horaFin: string,
   ventana: VentanaAmenity,
+  dias?: { hoy: HorasDelDia | null; ayer: HorasDelDia | null },
 ): ProblemaFranja | null {
   const { inicio, fin } = franjaEnMinutos(horaInicio, horaFin);
-  const largo = largoDeVentana(ventana.horaApertura, ventana.horaCierre);
-  const apertura = minutosDeHora(ventana.horaApertura);
+  const hoy = dias ? dias.hoy : ventana;
+  const ayer = dias ? dias.ayer : ventana;
 
   // La franja tiene que caer en la ventana que abre ese día o en la que abrió
   // el día anterior: de 00:30 a 01:30 del sábado es la noche del viernes.
-  // Abierto las 24 h, la ventana que cuenta es la que abrió antes del inicio.
-  const desde =
-    largo === DIA
-      ? apertura + DIA * Math.floor((inicio - apertura) / DIA)
-      : [apertura, apertura - DIA].find((d) => inicio >= d && fin <= d + largo);
+  // Abierto las 24 h, la ventana que cuenta es la que abrió antes del inicio
+  // y la franja puede seguir en la del día siguiente.
+  const candidatas = [
+    hoy && { desde: minutosDeHora(hoy.horaApertura), largo: largoDeVentana(hoy.horaApertura, hoy.horaCierre) },
+    ayer && {
+      desde: minutosDeHora(ayer.horaApertura) - DIA,
+      largo: largoDeVentana(ayer.horaApertura, ayer.horaCierre),
+    },
+  ].filter((c): c is { desde: number; largo: number } => !!c);
+  const desde = candidatas.find(
+    (c) => inicio >= c.desde && (c.largo === DIA ? inicio < c.desde + DIA : fin <= c.desde + c.largo),
+  )?.desde;
   if (desde === undefined) return 'FUERA_DE_HORARIO';
 
   // Con turnos fijos, la reserva arranca en el borde de una franja y ocupa

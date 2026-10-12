@@ -22,6 +22,10 @@ export interface PagoMercadoPago {
   external_reference: string | null;
   transaction_amount: number;
   date_approved: string | null;
+  /** "visa", "master", "account_money"… */
+  payment_method_id?: string | null;
+  /** Sólo si se pagó con tarjeta. */
+  card?: { last_four_digits?: string | null } | null;
 }
 
 /**

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { RolUsuario, Unidad, UnidadUsuario } from '../../database/entities';
+import { RolUsuario, Unidad, UnidadUsuario, VinculoUnidad } from '../../database/entities';
 import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
@@ -26,6 +26,11 @@ export type VinculoPublico = Omit<UnidadUsuario, 'usuario' | 'unidad'> & {
  */
 const enDiezmilesimos = (n: number) => Math.round(n * 10_000);
 
+/** Una unidad del listado; al vecino le llega además cómo está vinculado a ella. */
+export type UnidadListada = Unidad & {
+  miVinculo?: { vinculo: VinculoUnidad; esTitular: boolean } | null;
+};
+
 @Injectable()
 export class UnidadesService {
   constructor(
@@ -36,14 +41,35 @@ export class UnidadesService {
 
   // ── Unidades ───────────────────────────────────────────────────────────────
 
-  /** El administrador ve las de sus consorcios; el vecino, sólo aquellas a las que está vinculado. */
-  async listar(usuario: UsuarioActual, query: ListarUnidadesQuery): Promise<Unidad[]> {
-    const gestor = esGestor(usuario);
-    return this.unidades.listar({
+  /**
+   * El administrador ve las de sus consorcios; el vecino, sólo aquellas a las
+   * que está vinculado, cada una con su vínculo (`miVinculo`): el perfil dice
+   * "Propietario · Unidad 5º C".
+   */
+  async listar(usuario: UsuarioActual, query: ListarUnidadesQuery): Promise<UnidadListada[]> {
+    if (esGestor(usuario)) {
+      return this.unidades.listar({
+        consorcioId: query.consorcioId,
+        consorcioIds: consorciosGestionados(usuario),
+        incluirInactivas: query.incluirInactivas ?? false,
+      });
+    }
+
+    const [ids, vinculos] = await Promise.all([
+      this.unidades.unidadesDelUsuario(usuario.id),
+      this.unidades.vinculosDelUsuario(usuario.id),
+    ]);
+    const unidades = await this.unidades.listar({
       consorcioId: query.consorcioId,
-      consorcioIds: gestor ? consorciosGestionados(usuario) : undefined,
-      ids: gestor ? undefined : await this.unidades.unidadesDelUsuario(usuario.id),
+      ids,
       incluirInactivas: query.incluirInactivas ?? false,
+    });
+    // Vienen con el titular primero: si hay dos vínculos con la misma unidad, vale ese.
+    const porUnidad = new Map<string, UnidadUsuario>();
+    for (const v of vinculos) if (!porUnidad.has(v.unidadId)) porUnidad.set(v.unidadId, v);
+    return unidades.map((u) => {
+      const v = porUnidad.get(u.id);
+      return { ...u, miVinculo: v ? { vinculo: v.vinculo, esTitular: v.esTitular } : null };
     });
   }
 

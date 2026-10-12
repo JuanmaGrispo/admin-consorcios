@@ -97,6 +97,7 @@ export class ReclamosService {
       unidadId,
       creadoPorId: usuario.id,
       categoriaId: dto.categoriaId,
+      titulo: dto.titulo.trim(),
       descripcion: dto.descripcion.trim(),
       prioridad,
       adjuntos: dto.adjuntos ?? [],
@@ -104,7 +105,7 @@ export class ReclamosService {
 
     await this.avisar(
       reclamo,
-      `Nuevo reclamo ${reclamo.codigo}`,
+      `Nuevo reclamo ${reclamo.codigo}: ${reclamo.titulo}`,
       `Se registró el reclamo ${reclamo.codigo}: ${reclamo.descripcion}`,
     );
 
@@ -177,6 +178,8 @@ export class ReclamosService {
       reclamoId: reclamo.id,
       autorId: usuario.id,
       tipo: TipoEventoReclamo.ASIGNACION,
+      // A quién se asignó: si después se reasigna, la timeline sigue diciendo el nombre de cada uno.
+      proveedorId: dto.proveedorId,
       mensaje: dto.mensaje?.trim() ?? null,
       estadoAnterior,
       estadoNuevo: reclamo.estado,

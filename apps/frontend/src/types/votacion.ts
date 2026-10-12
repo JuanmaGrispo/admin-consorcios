@@ -105,6 +105,11 @@ export interface VistaPadron {
   habilitadas: number;
   pesoTotal: number;
   sinVotante: { unidadId: string; etiqueta: string }[];
+  /**
+   * Sólo si se pidió con `bloqueaConDeuda`: las habilitadas que hoy no podrían
+   * votar por expensas vencidas. Siguen contando en el padrón.
+   */
+  conDeuda?: { unidadId: string; etiqueta: string }[];
 }
 
 /** POST /votaciones */

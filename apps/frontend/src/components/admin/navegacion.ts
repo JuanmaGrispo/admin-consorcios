@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   Megaphone,
   Receipt,
-  Settings,
   Tags,
   Users,
   Vote,
@@ -26,9 +25,9 @@ export interface GrupoNavegacion {
 }
 
 /**
- * El menú del administrador, igual al de la pantalla 01 del prototipo. Todas
- * las rutas ya existen (las que faltan muestran "en construcción"), así que
- * nadie necesita tocar este archivo para sumar su pantalla.
+ * El menú del administrador, el de la pantalla 01 del prototipo. Su
+ * "Configuración" (rubros, categorías, proveedores) es Catálogos, y
+ * `/admin/configuracion` redirige ahí.
  */
 export const NAVEGACION_ADMIN: GrupoNavegacion[] = [
   {
@@ -62,12 +61,6 @@ export const NAVEGACION_ADMIN: GrupoNavegacion[] = [
     ],
   },
 ];
-
-export const CONFIGURACION_ADMIN: ItemNavegacion = {
-  href: '/admin/configuracion',
-  etiqueta: 'Configuración',
-  icono: Settings,
-};
 
 /** El panel general es `/admin` a secas: no tiene que quedar activo en `/admin/reclamos`. */
 export function estaActivo(href: string, pathname: string): boolean {

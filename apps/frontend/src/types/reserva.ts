@@ -1,5 +1,12 @@
 export type EstadoReserva = 'PENDIENTE' | 'APROBADA' | 'RECHAZADA' | 'CANCELADA' | 'FINALIZADA';
 
+/**
+ * Las excepciones al horario general por día de la semana ISO ("1" lunes …
+ * "7" domingo): otro horario ("HH:MM"), o null si ese día está cerrado. Un
+ * día que no figura abre en el horario general.
+ */
+export type HorarioSemanal = Partial<Record<string, { apertura: string; cierre: string } | null>>;
+
 /** Un espacio común reservable (GET /amenities). Las horas vienen "HH:MM:SS". */
 export interface Amenity {
   id: string;
@@ -12,6 +19,8 @@ export interface Amenity {
   lugares: number;
   horaApertura: string;
   horaCierre: string;
+  /** Null: todos los días con el horario general. */
+  horarioSemanal: HorarioSemanal | null;
   anticipacionMinimaHoras: number;
   cancelacionMinimaHoras: number;
   /** Turnos fijos desde la apertura; null es horario libre. */
@@ -35,6 +44,7 @@ export interface AmenityInput {
   reglamento?: string | null;
   horaApertura?: string;
   horaCierre?: string;
+  horarioSemanal?: HorarioSemanal | null;
   anticipacionMinimaHoras?: number;
   cancelacionMinimaHoras?: number;
   duracionFranjaMinutos?: number | null;
@@ -91,6 +101,8 @@ export type EstadoDeFranja = 'LIBRE' | 'OCUPADA' | 'BLOQUEADA' | 'PASADA';
 /** GET /amenities/:id/disponibilidad */
 export interface Disponibilidad {
   fecha: string;
+  /** Ese día el amenity no abre: no hay franjas ni horario que ofrecer. */
+  cerrado: boolean;
   horaApertura: string;
   horaCierre: string;
   cierraAlDiaSiguiente: boolean;
@@ -107,7 +119,7 @@ export interface Disponibilidad {
   bloqueos: { desde: string; hasta: string; motivo: string | null }[];
 }
 
-export type EstadoDelDia = 'DISPONIBLE' | 'PARCIAL' | 'SIN_LUGAR' | 'PASADO';
+export type EstadoDelDia = 'DISPONIBLE' | 'PARCIAL' | 'SIN_LUGAR' | 'PASADO' | 'CERRADO';
 
 /** GET /amenities/:id/calendario */
 export interface CalendarioAmenity {

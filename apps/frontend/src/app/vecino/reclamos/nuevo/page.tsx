@@ -9,6 +9,7 @@ import { MAXIMO_FOTOS, SelectorFotos, type FotoSubida } from '@/components/recla
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -32,6 +33,7 @@ export default function VecinoReclamosNuevoPage() {
   );
 
   const [categoriaId, setCategoriaId] = useState('');
+  const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [fotos, setFotos] = useState<FotoSubida[]>([]);
   const [subiendo, setSubiendo] = useState(false);
@@ -46,6 +48,10 @@ export default function VecinoReclamosNuevoPage() {
       setError('Elegí una categoría: así le llega a quien corresponde.');
       return;
     }
+    if (!titulo.trim()) {
+      setError('Poné un título corto: es lo que se ve en la lista.');
+      return;
+    }
     if (descripcion.trim().length < MINIMO_DESCRIPCION) {
       setError('Contá un poco más: al menos 10 caracteres.');
       return;
@@ -55,6 +61,7 @@ export default function VecinoReclamosNuevoPage() {
     try {
       const creado = await reclamosService.crear({
         categoriaId,
+        titulo: titulo.trim(),
         descripcion: descripcion.trim(),
         // Siempre la unidad elegida arriba: con más de una, el backend no puede adivinarla.
         unidadId: unidad.id,
@@ -113,6 +120,18 @@ export default function VecinoReclamosNuevoPage() {
                 La administración todavía no cargó categorías de reclamo. Avisale para que lo haga.
               </FieldDescription>
             )}
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="titulo">Título</FieldLabel>
+            <Input
+              id="titulo"
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              maxLength={80}
+              className="bg-card"
+              placeholder="Pérdida de agua en el baño"
+            />
           </Field>
 
           <Field>

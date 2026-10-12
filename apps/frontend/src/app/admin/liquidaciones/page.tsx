@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Calculator, Lock, Plus, RefreshCw, Send, Trash2 } from 'lucide-react';
+import { ArrowRight, Calculator, Lock, Plus, RefreshCw, Send, Trash2, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -35,6 +35,12 @@ import type { Gasto, GastoInput, Liquidacion, LiquidacionCambios, LiquidacionInp
 
 type Accion = 'emitir' | 'cerrar' | 'eliminar' | { gasto: Gasto };
 type EdicionGasto = { modo: 'cerrado' } | { modo: 'alta' } | { modo: 'edicion'; gasto: Gasto };
+
+/** "A", "A y B", "A, B y C", sin repetir. */
+function enLista(nombres: string[]): string {
+  const unicos = [...new Set(nombres)];
+  return unicos.length <= 1 ? (unicos[0] ?? '') : `${unicos.slice(0, -1).join(', ')} y ${unicos.at(-1)}`;
+}
 
 /** El mes que sigue a "2026-08-01" → "2026-09". Sin liquidaciones, el mes actual. */
 function periodoSiguiente(ultima?: Liquidacion): string {
@@ -204,6 +210,11 @@ function DetalleLiquidacion({
 
   const editable = esEditable(liquidacion.estado);
   const nombre = nombrePeriodo(liquidacion.periodo);
+  // El período anterior más cercano, para comparar el total de gastos.
+  const anterior = liquidaciones
+    .filter((l) => l.periodo < liquidacion.periodo)
+    .sort((a, b) => b.periodo.localeCompare(a.periodo))[0];
+  const sinComprobante = liquidacion.gastos.filter((g) => !g.comprobanteUrl && !g.comprobanteNumero);
 
   const confirmacion =
     accion === 'emitir'
@@ -324,10 +335,21 @@ function DetalleLiquidacion({
 
       <PasosLiquidacion estado={liquidacion.estado} />
 
+      {editable && sinComprobante.length > 0 && (
+        <Alert>
+          <TriangleAlert />
+          <AlertDescription>
+            Falta el comprobante de {enLista(sinComprobante.map((g) => g.proveedor?.razonSocial ?? g.descripcion))}. Podés
+            emitir igual, pero después de emitir el gasto ya no se edita.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <TablaGastos
           gastos={liquidacion.gastos}
           total={liquidacion.totalGastos}
+          anterior={anterior}
           editable={editable}
           onAgregar={() => setEdicion({ modo: 'alta' })}
           onEditar={(gasto) => setEdicion({ modo: 'edicion', gasto })}

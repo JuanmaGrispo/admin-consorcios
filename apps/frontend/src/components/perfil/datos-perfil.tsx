@@ -20,7 +20,7 @@ interface DatosPerfilProps {
   onGuardado: () => void;
 }
 
-/** Foto, nombre y teléfono propios. El email lo cambia la administración. */
+/** Foto, nombre y teléfono propios. El email y el DNI los cambia la administración. */
 export function DatosPerfil({ perfil, onGuardado }: DatosPerfilProps) {
   const entrada = useRef<HTMLInputElement>(null);
   const [nombre, setNombre] = useState(perfil.nombre);
@@ -149,6 +149,11 @@ export function DatosPerfil({ perfil, onGuardado }: DatosPerfilProps) {
                 <FieldLabel htmlFor="email">Email</FieldLabel>
                 <Input id="email" type="email" value={perfil.email} disabled />
                 <FieldDescription>Para cambiarlo, pedíselo a la administración.</FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="dni">DNI</FieldLabel>
+                <Input id="dni" value={perfil.dni ?? ''} placeholder="Sin cargar" disabled />
+                <FieldDescription>Lo carga y lo corrige la administración.</FieldDescription>
               </Field>
             </div>
           </FieldGroup>

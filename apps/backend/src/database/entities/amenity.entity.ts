@@ -73,6 +73,9 @@ export class Amenity {
   @Column({ type: 'int', name: 'lugares', default: 1 })
   lugares: number;
 
+  @Column({ type: 'jsonb', name: 'horario_semanal', nullable: true })
+  horarioSemanal: object | null;
+
   @OneToMany(() => AmenityBloqueo, (row) => row.amenity)
   amenityBloqueos?: AmenityBloqueo[];
 

@@ -73,4 +73,18 @@ describe('vistaDelPadron', () => {
     assert.deepEqual(vista.sinVotante.map((u) => u.etiqueta), ['2B']);
     assert.equal(vista.pesoTotal, 3);
   });
+
+  it('con deuda: lista sólo las habilitadas que deben, sin sacarlas del total', () => {
+    // u4 debe pero no está en el padrón: ya figura como sin votante.
+    const conDeuda = new Set(['u2', 'u4']);
+    const vista = vistaDelPadron(UNIDADES, PadronVotacion.SOLO_PROPIETARIOS, FormaConteo.POR_COEFICIENTE, conDeuda);
+    assert.deepEqual(vista.conDeuda, [{ unidadId: 'u2', etiqueta: '1B' }]);
+    assert.equal(vista.habilitadas, 2);
+    assert.equal(vista.pesoTotal, 4);
+  });
+
+  it('sin el conjunto de deuda no agrega la lista', () => {
+    const vista = vistaDelPadron(UNIDADES, PadronVotacion.SOLO_PROPIETARIOS, FormaConteo.POR_COEFICIENTE);
+    assert.equal('conDeuda' in vista, false);
+  });
 });

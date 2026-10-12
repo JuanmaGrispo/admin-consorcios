@@ -97,7 +97,9 @@ function Formulario({
             onChange={(e) => setAjuste(e.target.value)}
             placeholder="-1500"
           />
-          <FieldDescription>En negativo descuenta. En 0 saca el ajuste.</FieldDescription>
+          <FieldDescription>
+            En negativo descuenta. En 0 saca el ajuste. La diferencia se reparte entre las demás unidades.
+          </FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor="motivo">Motivo</FieldLabel>

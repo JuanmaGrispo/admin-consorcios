@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronsUpDown, LogOut } from 'lucide-react';
+import { Check, ChevronsUpDown, Globe, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -30,10 +30,11 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { iniciales } from '@/lib/formato';
+import { expensasService } from '@/services/expensas';
 import { reclamosService } from '@/services/reclamos';
 import type { Consorcio } from '@/types/consorcio';
 import { useConsorcioActivo } from './consorcio-activo';
-import { CONFIGURACION_ADMIN, estaActivo, NAVEGACION_ADMIN, type ItemNavegacion } from './navegacion';
+import { estaActivo, NAVEGACION_ADMIN, type ItemNavegacion } from './navegacion';
 
 function subtitulo(c: Consorcio): string {
   const unidades = c.cantidadUnidades !== undefined ? `${c.cantidadUnidades} unidades` : null;
@@ -116,11 +117,23 @@ export function AdminSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         ))}
-        <SidebarGroup className="mt-auto">
-          <SidebarGroupContent>
-            <SidebarMenu>{item(CONFIGURACION_ADMIN)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* El superadmin entra a los dos portales: desde acá vuelve al de la plataforma. */}
+        {usuario.rol === 'SUPER_ADMIN' && (
+          <SidebarGroup className="mt-auto">
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild onClick={() => setOpenMobile(false)}>
+                    <Link href="/">
+                      <Globe />
+                      <span>Plataforma</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarSeparator />
@@ -156,22 +169,46 @@ export function AdminSidebar() {
 }
 
 /**
- * Los números del menú (reclamos abiertos del consorcio). Si falla, el menú
- * sigue sin números: no es motivo para romper la navegación.
+ * Los números del menú: reclamos abiertos y boletas vencidas del período que
+ * se está cobrando (el último emitido, el mismo que abre Cobranzas). Cada uno
+ * se pide por su lado: si uno falla, el menú sigue con el otro o sin números.
  */
 function useContadores(consorcioId: string): Record<string, number> {
-  const [contadores, setContadores] = useState<Record<string, number>>({});
+  const [contadores, setContadores] = useState<{ consorcioId: string; valores: Record<string, number> }>({
+    consorcioId,
+    valores: {},
+  });
 
   useEffect(() => {
     let cancelado = false;
+    const sumar = (href: string, valor: number) =>
+      !cancelado &&
+      setContadores((prev) => ({
+        consorcioId,
+        valores: { ...(prev.consorcioId === consorcioId ? prev.valores : {}), [href]: valor },
+      }));
+
     reclamosService
       .resumen(consorcioId)
-      .then((r) => !cancelado && setContadores({ '/admin/reclamos': r.abiertos }))
-      .catch(() => !cancelado && setContadores({}));
+      .then((r) => sumar('/admin/reclamos', r.abiertos))
+      .catch(() => undefined);
+
+    expensasService
+      .listarLiquidaciones({ consorcioId })
+      .then((liquidaciones) => {
+        const cobrando = liquidaciones.find((l) => l.estado === 'EMITIDA' || l.estado === 'CERRADA');
+        if (!cobrando) return;
+        return expensasService
+          .resumen({ consorcioId, periodo: cobrando.periodo.slice(0, 7) })
+          .then((r) => sumar('/admin/cobranzas', r.conteos.vencidos));
+      })
+      .catch(() => undefined);
+
     return () => {
       cancelado = true;
     };
   }, [consorcioId]);
 
-  return contadores;
+  // Los de otro consorcio no se muestran mientras llegan los del nuevo.
+  return contadores.consorcioId === consorcioId ? contadores.valores : {};
 }

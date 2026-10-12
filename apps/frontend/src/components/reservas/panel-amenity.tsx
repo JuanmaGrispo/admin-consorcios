@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { pesos } from '@/lib/formato';
 import { cn } from '@/lib/utils';
 import type { Amenity, Reserva } from '@/types/reserva';
-import { horario, horas, resumenAmenity } from './amenity';
+import { excepcionesDeHorario, horario, horas, resumenAmenity } from './amenity';
 import { IconoAmenity } from './icono-amenity';
 import { fechaDe, horaDe, diaMes, nombreDelDia } from './tiempo';
 
@@ -64,7 +64,18 @@ export function ListaAmenities({
 /** "Reglas del SUM": lo que el vecino tiene que cumplir para reservar. */
 export function ReglasAmenity({ amenity: a }: { amenity: Amenity }) {
   const filas: [string, React.ReactNode][] = [
-    ['Horario', horario(a)],
+    [
+      'Horario',
+      // El general y, debajo, los días que abren distinto.
+      <span key="horario" className="flex flex-col items-end">
+        {horario(a)}
+        {excepcionesDeHorario(a).map((e) => (
+          <span key={e} className="text-xs font-normal text-muted-foreground">
+            {e}
+          </span>
+        ))}
+      </span>,
+    ],
     ['Anticipación mínima', a.anticipacionMinimaHoras ? horas(a.anticipacionMinimaHoras) : 'Sin mínimo'],
     ['Duración máxima', a.duracionMaximaHoras ? horas(a.duracionMaximaHoras) : 'Sin límite'],
     ['Seña', a.montoSena > 0 ? <span className="font-mono tabular-nums">{pesos(a.montoSena)}</span> : 'Sin seña'],

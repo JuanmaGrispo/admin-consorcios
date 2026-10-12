@@ -106,6 +106,11 @@ interface EstadoBadgeProps<D extends DominioEstado> {
   children?: React.ReactNode;
 }
 
+/** El texto del estado, para cuando no va en un badge (una exportación, un título). */
+export function etiquetaDeEstado(dominio: DominioEstado, estado: string): string {
+  return (ESTADOS[dominio] as Record<string, Estilo>)[estado]?.etiqueta ?? estado;
+}
+
 export function EstadoBadge<D extends DominioEstado>({ dominio, estado, children }: EstadoBadgeProps<D>) {
   const estilo = (ESTADOS[dominio] as Record<string, Estilo>)[estado] ?? {
     etiqueta: estado,

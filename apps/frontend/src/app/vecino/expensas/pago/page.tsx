@@ -11,9 +11,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useUnidadActiva } from '@/components/vecino/unidad-activa';
 import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
-import { fechaHora, pesos, periodo } from '@/lib/formato';
+import { domicilio, fecha, fechaHora, pesos, periodo } from '@/lib/formato';
 import { cn } from '@/lib/utils';
 import { expensasService } from '@/services/expensas';
 import { pagosService } from '@/services/pagos';
@@ -37,7 +38,8 @@ function SegunParametros() {
   const referencia = parametros.get('external_reference');
   const boletaId = parametros.get('boleta');
 
-  if (referencia) return <Resultado pagoId={referencia} />;
+  // Mercado Pago también manda su número de operación: sirve para mostrarlo mientras se confirma.
+  if (referencia) return <Resultado pagoId={referencia} paymentId={numeroDeOperacion(parametros.get('payment_id'))} />;
   if (boletaId) return <Resumen boletaId={boletaId} />;
   return (
     <div className="flex flex-col gap-3">
@@ -138,7 +140,7 @@ function Resumen({ boletaId }: { boletaId: string }) {
 }
 
 /** A la vuelta del checkout: se le pregunta a Mercado Pago cómo quedó, sin esperar al webhook. */
-function Resultado({ pagoId }: { pagoId: string }) {
+function Resultado({ pagoId, paymentId }: { pagoId: string; paymentId: string | null }) {
   const pedido = usePedido(`sincronizar:${pagoId}`, () => pagosService.sincronizar(pagoId), 'No se pudo consultar el pago.');
   const pago = pedido.datos;
   const esReserva = pago?.concepto === 'SENA_RESERVA';
@@ -157,6 +159,7 @@ function Resultado({ pagoId }: { pagoId: string }) {
             <Clock className="size-10 text-muted-foreground" />
             <p className="font-semibold">Confirmando el pago</p>
             <p className="text-sm text-muted-foreground">No cierres esta pantalla: estamos consultando con Mercado Pago.</p>
+            <p className="font-mono text-xs text-muted-foreground">Operación {operacion(paymentId, pagoId)}</p>
           </CardContent>
         </Card>
       ) : (
@@ -185,6 +188,13 @@ function TarjetaResultado({
     }
   }
 
+  const { consorcios } = useUnidadActiva();
+  // La dirección del edificio de la unidad que pagó, que no tiene por qué ser la elegida arriba.
+  const consorcio = pago.unidad && consorcios.find((c) => c.id === pago.unidad?.consorcioId);
+  const direccion = consorcio ? domicilio(consorcio.calle, consorcio.numero) : '';
+  const vencimiento = pago.boleta?.liquidacion?.fechaVencimiento;
+  const rechazo = explicarRechazo(pago.mpStatusDetail);
+
   const aprobado = pago.estado === 'APROBADO';
   const pendiente = pago.estado === 'PENDIENTE';
   const Icono = aprobado ? CircleCheck : pendiente ? Clock : CircleX;
@@ -211,22 +221,40 @@ function TarjetaResultado({
 
         {aprobado && (
           <dl className="grid w-full gap-2 rounded-lg bg-muted p-3 text-left text-sm">
-            {pago.unidad && <Dato nombre="Unidad" valor={pago.unidad.etiqueta} />}
+            {pago.unidad && (
+              <Dato nombre="Unidad" valor={[pago.unidad.etiqueta, direccion].filter(Boolean).join(' · ')} />
+            )}
             {pago.boleta?.liquidacion && <Dato nombre="Período" valor={periodo(pago.boleta.liquidacion.periodo)} />}
-            <Dato nombre="Medio" valor={MEDIOS[pago.medio]} />
+            <Dato nombre="Medio" valor={medioDe(pago)} />
             {pago.reciboNumero && <Dato nombre="N° de recibo" valor={pago.reciboNumero} />}
           </dl>
         )}
         {pendiente && (
-          <p className="text-sm text-muted-foreground">
-            Mercado Pago todavía lo está procesando (pasa con efectivo o transferencia). Te avisamos cuando se acredite.
-          </p>
+          <>
+            <p className="text-sm text-muted-foreground">
+              Mercado Pago todavía lo está procesando (pasa con efectivo o transferencia). Te avisamos cuando se acredite.
+            </p>
+            <p className="font-mono text-xs text-muted-foreground">Operación {operacion(pago.mpPaymentId, pago.id)}</p>
+          </>
         )}
-        {!aprobado && !pendiente && (
-          <p className="text-sm text-muted-foreground">
-            No se hizo ningún cargo. Podés intentar de nuevo con otro medio.
-            {pago.mpStatusDetail && <span className="mt-1 block text-xs">Código MP: {pago.mpStatusDetail}</span>}
-          </p>
+        {pago.estado === 'REINTEGRADO' && (
+          <p className="text-sm text-muted-foreground">Mercado Pago te devolvió el dinero de esta operación.</p>
+        )}
+        {pago.estado === 'RECHAZADO' && (
+          <>
+            <p className="text-sm text-muted-foreground">{rechazo} No se realizó ningún cargo.</p>
+            <div className="w-full rounded-lg bg-muted p-3 text-left text-sm">
+              <p className="font-medium">Qué podés hacer</p>
+              <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5 text-secondary-foreground">
+                <li>Reintentar con otra tarjeta o con dinero en cuenta de Mercado Pago.</li>
+                <li>Pagar en efectivo o por transferencia desde el checkout de Mercado Pago.</li>
+                {pago.concepto === 'EXPENSA' && <li>Avisarle a la administración si el problema sigue.</li>}
+              </ul>
+            </div>
+            {pago.mpStatusDetail && (
+              <p className="font-mono text-xs text-muted-foreground">Código MP: {pago.mpStatusDetail}</p>
+            )}
+          </>
         )}
 
         <div className="flex w-full flex-col gap-2">
@@ -243,14 +271,29 @@ function TarjetaResultado({
             </Button>
           )}
           {!aprobado && !pendiente && pago.boletaId && (
+            // El checkout de Mercado Pago deja elegir otra tarjeta, dinero en cuenta o efectivo.
             <Button asChild>
-              <Link href={`/vecino/expensas/pago?boleta=${pago.boletaId}`}>Reintentar</Link>
+              <Link href={`/vecino/expensas/pago?boleta=${pago.boletaId}`}>
+                <CreditCard data-icon="inline-start" />
+                Cambiar medio de pago
+              </Link>
             </Button>
           )}
-          <Button asChild variant="outline">
-            <Link href={volver}>{pago.concepto === 'SENA_RESERVA' ? 'Ver mis reservas' : 'Ver mis expensas'}</Link>
-          </Button>
+          {pago.estado === 'RECHAZADO' && pago.concepto === 'EXPENSA' ? (
+            <Button asChild variant="outline">
+              <Link href="/vecino">Volver al inicio</Link>
+            </Button>
+          ) : (
+            <Button asChild variant="outline">
+              <Link href={volver}>{pago.concepto === 'SENA_RESERVA' ? 'Ver mis reservas' : 'Ver mis expensas'}</Link>
+            </Button>
+          )}
         </div>
+        {pago.estado === 'RECHAZADO' && vencimiento && (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            La deuda sigue vigente y vence el {fecha(vencimiento)}.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -265,6 +308,29 @@ function Linea({ concepto, monto }: { concepto: string; monto: number }) {
   );
 }
 
+/** Los `payment_method_id` de Mercado Pago más comunes, como los ve el vecino. */
+const MEDIOS_MP: Record<string, string> = {
+  visa: 'Visa',
+  debvisa: 'Visa débito',
+  master: 'Mastercard',
+  debmaster: 'Mastercard débito',
+  amex: 'American Express',
+  naranja: 'Naranja',
+  cabal: 'Cabal',
+  debcabal: 'Cabal débito',
+  maestro: 'Maestro',
+  account_money: 'Dinero en cuenta de Mercado Pago',
+  rapipago: 'Rapipago',
+  pagofacil: 'Pago Fácil',
+};
+
+/** "Visa ···· 4417", "Dinero en cuenta de Mercado Pago" o, si no se sabe, el medio del pago. */
+function medioDe(pago: Pago): string {
+  if (!pago.mpMedioPago) return MEDIOS[pago.medio];
+  const nombre = MEDIOS_MP[pago.mpMedioPago] ?? pago.mpMedioPago;
+  return pago.mpUltimosDigitos ? `${nombre} ···· ${pago.mpUltimosDigitos}` : nombre;
+}
+
 function Dato({ nombre, valor }: { nombre: string; valor: string }) {
   return (
     <div className="flex justify-between gap-3">
@@ -272,4 +338,43 @@ function Dato({ nombre, valor }: { nombre: string; valor: string }) {
       <dd className="font-medium">{valor}</dd>
     </div>
   );
+}
+
+/** El número corto de la operación: el de Mercado Pago si ya lo hay; si no, el nuestro. */
+function operacion(mpPaymentId: string | null, pagoId: string): string {
+  return `#${mpPaymentId ?? pagoId.slice(0, 8).toUpperCase()}`;
+}
+
+/** Por qué rechazó Mercado Pago (`status_detail`), dicho para el vecino. */
+const RECHAZOS: Record<string, string> = {
+  cc_rejected_insufficient_amount: 'El banco rechazó la operación por fondos insuficientes.',
+  cc_rejected_bad_filled_security_code: 'El código de seguridad de la tarjeta no es correcto.',
+  cc_rejected_bad_filled_date: 'La fecha de vencimiento de la tarjeta no es correcta.',
+  cc_rejected_bad_filled_card_number: 'El número de la tarjeta no es correcto.',
+  cc_rejected_bad_filled_other: 'Alguno de los datos de la tarjeta no es correcto.',
+  cc_rejected_call_for_authorize: 'Tu banco necesita que autorices este pago: llamalo y volvé a intentar.',
+  cc_rejected_card_disabled: 'La tarjeta no está activa: llamá a tu banco para habilitarla.',
+  cc_rejected_card_error: 'No se pudo procesar la tarjeta.',
+  cc_rejected_duplicated_payment: 'Ya hiciste un pago por el mismo monto hace instantes.',
+  cc_rejected_high_risk: 'Mercado Pago rechazó la operación por seguridad.',
+  cc_rejected_max_attempts: 'Llegaste al límite de intentos con esta tarjeta.',
+  cc_rejected_invalid_installments: 'La tarjeta no acepta esa cantidad de cuotas.',
+  cc_rejected_blacklist: 'Mercado Pago no pudo procesar el pago con esta tarjeta.',
+  cc_rejected_insufficient_data: 'Faltaron datos para procesar el pago.',
+  cc_rejected_other_reason: 'El banco rechazó la operación.',
+  cc_amount_rate_limit_exceeded: 'La tarjeta superó el límite de monto permitido.',
+  rejected_by_bank: 'El banco rechazó la operación.',
+  rejected_insufficient_data: 'Faltaron datos para procesar el pago.',
+  rejected_high_risk: 'Mercado Pago rechazó la operación por seguridad.',
+  expired: 'El pago venció antes de completarse.',
+  cancelled: 'El pago se canceló antes de completarse.',
+};
+
+function explicarRechazo(codigo: string | null): string {
+  return (codigo && RECHAZOS[codigo]) ?? 'Mercado Pago no pudo completar el pago.';
+}
+
+/** Si el pago no llegó a crearse, Mercado Pago vuelve con `payment_id=null` literal. */
+function numeroDeOperacion(valor: string | null): string | null {
+  return valor && valor !== 'null' ? valor : null;
 }

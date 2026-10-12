@@ -43,9 +43,20 @@ export interface Gasto {
   cuotaTotal: number | null;
 }
 
-/** GET /expensas/liquidaciones/:id: la liquidación con sus gastos. */
+/** Los números del paso de prorrateo. */
+export interface ResumenProrrateo {
+  unidadesActivas: number;
+  /** Las que tienen boleta: 0 hasta que se previsualiza. */
+  unidadesAlcanzadas: number;
+  /** De las unidades activas; por coeficiente tiene que dar 100. */
+  sumaCoeficientes: number;
+  ajustesManuales: number;
+}
+
+/** GET /expensas/liquidaciones/:id: la liquidación con sus gastos y el resumen del prorrateo. */
 export interface LiquidacionDetalle extends Liquidacion {
   gastos: Gasto[];
+  prorrateo: ResumenProrrateo;
 }
 
 /** POST /expensas/liquidaciones */

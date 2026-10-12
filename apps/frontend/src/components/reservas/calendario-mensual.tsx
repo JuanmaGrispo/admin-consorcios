@@ -71,11 +71,13 @@ export function CalendarioMensual({ mes, onCambiarMes, dias, elegido, onElegir }
               disabled={!elegible}
               onClick={() => onElegir(fecha)}
               aria-pressed={esElegido}
-              aria-label={`${fechaLarga(fecha)}${elegible ? '' : ', sin lugar'}`}
+              aria-label={`${fechaLarga(fecha)}${elegible ? '' : estado === 'CERRADO' ? ', cerrado' : ', sin lugar'}`}
               className={cn(
                 'flex aspect-square items-center justify-center rounded-lg border text-sm tabular-nums transition-colors',
                 !delMes && 'border-transparent text-muted-foreground/50',
                 delMes && !elegible && 'border-transparent bg-muted text-muted-foreground',
+                // Cerrado no es "sin lugar": ese día el amenity no abre.
+                delMes && estado === 'CERRADO' && 'bg-transparent line-through',
                 elegible && 'hover:border-primary',
                 esElegido && 'border-primary bg-primary font-semibold text-primary-foreground hover:border-primary',
               )}
@@ -95,6 +97,7 @@ export function CalendarioMensual({ mes, onCambiarMes, dias, elegido, onElegir }
           <span className="size-2.5 rounded-sm bg-muted ring-1 ring-border" />
           Sin lugar
         </span>
+        <span className="flex items-center gap-1.5 line-through">Cerrado</span>
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-sm ring-1 ring-border" />
           Disponible

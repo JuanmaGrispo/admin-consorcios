@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, DataSource, IsNull, Like, Repository, SelectQueryBuilder } from 'typeorm';
+import { Brackets, DataSource, Repository, SelectQueryBuilder } from 'typeorm';
 import {
   Boleta,
   BoletaDetalle,
@@ -14,7 +14,7 @@ import {
   Votacion,
 } from '../../database/entities';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
-import { PREFIJO_AJUSTE, type BoletaCalculada } from './prorrateo';
+import type { BoletaCalculada } from './prorrateo';
 
 /** Las liquidaciones que ya salieron: sus boletas son deuda real y el vecino las ve. */
 const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
@@ -345,6 +345,10 @@ export class ExpensasRepository {
     return filas.map((f) => ({ ...f, saldo: Number(f.saldo) }));
   }
 
+  contarBoletas(liquidacionId: string): Promise<number> {
+    return this.boletas.countBy({ liquidacionId });
+  }
+
   /** Los ajustes manuales vigentes, para conservarlos al recalcular. */
   async ajustesDe(
     liquidacionId: string,
@@ -621,23 +625,10 @@ export class ExpensasRepository {
     return boleta;
   }
 
-  /** Cambia el ajuste de una boleta y su línea en el detalle, juntos. */
-  async aplicarAjuste(
-    boletaId: string,
-    datos: { ajusteManual: number; motivoAjuste: string | null; total: number },
-    linea: { concepto: string; monto: number } | null,
-  ): Promise<void> {
-    await this.dataSource.transaction(async (m) => {
-      await m.update(Boleta, { id: boletaId }, datos);
-      await m.delete(BoletaDetalle, {
-        boletaId,
-        gastoId: IsNull(),
-        concepto: Like(`${PREFIJO_AJUSTE}%`),
-      });
-      if (linea) {
-        await m.save(m.create(BoletaDetalle, { boletaId, gastoId: null, ...linea }));
-      }
-    });
+  /** La boleta de una unidad en una liquidación: hay una sola (`uq_boleta_unidad`). */
+  async findBoletaDeUnidad(liquidacionId: string, unidadId: string): Promise<Boleta | null> {
+    const boleta = await this.boletas.findOne({ where: { liquidacionId, unidadId }, select: { id: true } });
+    return boleta ? this.findBoleta(boleta.id) : null;
   }
 
   // ── Estado de las boletas ──────────────────────────────────────────────────
@@ -660,6 +651,18 @@ export class ExpensasRepository {
 
   async contarVencidasDeUnidad(unidadId: string): Promise<number> {
     return this.boletas.countBy({ unidadId, estado: EstadoBoleta.VENCIDA });
+  }
+
+  /** De estas unidades, las que tienen alguna boleta vencida: una sola consulta. */
+  async unidadesConVencidas(unidadIds: string[]): Promise<string[]> {
+    if (unidadIds.length === 0) return [];
+    const filas = await this.boletas
+      .createQueryBuilder('b')
+      .select('DISTINCT b.unidad_id', 'unidadId')
+      .where('b.unidad_id IN (:...unidadIds)', { unidadIds })
+      .andWhere('b.estado = :vencida', { vencida: EstadoBoleta.VENCIDA })
+      .getRawMany<{ unidadId: string }>();
+    return filas.map((f) => f.unidadId);
   }
 
   /** Suma de los pagos APROBADO de la boleta: el mismo criterio que la deuda. */

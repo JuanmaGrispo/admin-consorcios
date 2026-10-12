@@ -52,20 +52,28 @@ export function armarPadron(
 /**
  * Lo que el formulario de una votación muestra antes de crearla: cuántas
  * unidades votan y cuáles quedan afuera ("6 unidades sin voto porque no tienen
- * propietario registrado").
+ * propietario registrado"). Con `conDeuda` (la votación bloquea a los
+ * morosos) suma las habilitadas que no van a poder votar por expensas
+ * vencidas: siguen en el padrón y en el peso total, como al votar.
  */
 export function vistaDelPadron(
   unidades: UnidadParaPadron[],
   padron: PadronVotacion,
   forma: FormaConteo,
+  conDeuda?: ReadonlySet<string>,
 ) {
   const habilitadas = armarPadron(unidades, padron, forma);
+  const etiquetaDe = (u: { unidadId: string; etiqueta: string }) => ({
+    unidadId: u.unidadId,
+    etiqueta: u.etiqueta,
+  });
   return {
     habilitadas: habilitadas.size,
     pesoTotal: pesoTotal(habilitadas),
-    sinVotante: unidades
-      .filter((u) => !habilitadas.has(u.unidadId))
-      .map((u) => ({ unidadId: u.unidadId, etiqueta: u.etiqueta })),
+    sinVotante: unidades.filter((u) => !habilitadas.has(u.unidadId)).map(etiquetaDe),
+    ...(conDeuda && {
+      conDeuda: [...habilitadas.values()].filter((u) => conDeuda.has(u.unidadId)).map(etiquetaDe),
+    }),
   };
 }
 

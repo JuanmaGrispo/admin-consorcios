@@ -69,4 +69,7 @@ export const reservasService = {
     api<Reserva>(`/reservas/${id}/rechazar`, json('PATCH', { motivoRechazo })),
 
   cancelar: (id: string) => api<Reserva>(`/reservas/${id}/cancelar`, json('PATCH')),
+
+  /** El administrador registra que devolvió la seña de una reserva terminada; le avisa al vecino. */
+  marcarSenaDevuelta: (id: string) => api<Reserva>(`/reservas/${id}/sena-devuelta`, json('PATCH')),
 };

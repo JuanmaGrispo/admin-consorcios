@@ -2,7 +2,7 @@
 
 import { CalendarClock, Link2, MapPin, Pencil, Play, Plus, Send, Square, Trash2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useConsorcioActivo } from '@/components/admin/consorcio-activo';
 import { AsambleaDialog, type ValoresAsamblea } from '@/components/asambleas/asamblea-dialog';
@@ -11,6 +11,7 @@ import { OrdenDelDia } from '@/components/asambleas/orden-del-dia';
 import { TablaAsistencia } from '@/components/asambleas/tabla-asistencia';
 import { TarjetaActa } from '@/components/asambleas/tarjeta-acta';
 import { TarjetaQuorum } from '@/components/asambleas/tarjeta-quorum';
+import { UltimasConfirmaciones } from '@/components/asambleas/ultimas-confirmaciones';
 import { ConfirmarAccion } from '@/components/confirmar-accion';
 import { EstadoBadge } from '@/components/estado-badge';
 import { PageHeader } from '@/components/page-header';
@@ -18,6 +19,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { crearVotacion } from '@/components/votaciones/crear-votacion';
 import { DetalleVotacionAdmin } from '@/components/votaciones/detalle-votacion-admin';
 import { VotacionDialog, type ValoresVotacion } from '@/components/votaciones/votacion-dialog';
 import { usePedido } from '@/hooks/use-pedido';
@@ -63,6 +65,9 @@ const CONFIRMACIONES: Record<Accion, { titulo: string; descripcion: string; boto
   },
 };
 
+/** Cada cuánto se refresca el quórum mientras los vecinos confirman o la asamblea está en curso. */
+const REFRESCO_EN_VIVO_MS = 20_000;
+
 export default function AdminAsambleaDetallePage() {
   const { consorcio } = useConsorcioActivo();
   const { id } = useParams<{ id: string }>();
@@ -93,12 +98,31 @@ function DetalleAsamblea({ id }: { id: string }) {
     },
     'No se pudo cargar la asamblea.',
   );
-  const asamblea = pedido.datos?.asamblea ?? null;
-  const asistencias = pedido.datos?.asistencias ?? null;
-  const votaciones = pedido.datos?.votaciones ?? [];
+  // Con el refresco en vivo, si un pedido falla se sigue mostrando lo último que llegó.
+  const datos = pedido.datos ?? pedido.ultimo;
+  const asamblea = datos?.asamblea ?? null;
+  const asistencias = datos?.asistencias ?? null;
+  const votaciones = datos?.votaciones ?? [];
   const error = pedido.error ?? null;
   const seleccionada = votaciones.find((v) => v.id === seleccionadaId) ?? null;
   const recargar = pedido.recargar;
+
+  // Quórum en vivo: mientras se puede confirmar asistencia, se vuelve a pedir
+  // cada tanto sin vaciar la pantalla. Con la pestaña oculta no se pide, y al
+  // volver a ella se refresca enseguida.
+  const enVivo = asamblea?.estado === 'CONVOCADA' || asamblea?.estado === 'EN_CURSO';
+  useEffect(() => {
+    if (!enVivo) return;
+    const refrescarSiSeVe = () => {
+      if (document.visibilityState === 'visible') recargar();
+    };
+    const intervalo = window.setInterval(refrescarSiSeVe, REFRESCO_EN_VIVO_MS);
+    document.addEventListener('visibilitychange', refrescarSiSeVe);
+    return () => {
+      window.clearInterval(intervalo);
+      document.removeEventListener('visibilitychange', refrescarSiSeVe);
+    };
+  }, [enVivo, recargar]);
 
   async function editar(valores: ValoresAsamblea) {
     if (!asamblea) return;
@@ -146,7 +170,7 @@ function DetalleAsamblea({ id }: { id: string }) {
     }
   }
 
-  async function guardarVotacion(valores: ValoresVotacion) {
+  async function guardarVotacion(valores: ValoresVotacion, publicar: boolean) {
     const { opciones, ...resto } = valores;
     if (votacion.modo === 'edicion') {
       const { id: votacionId } = votacion.votacion;
@@ -156,19 +180,22 @@ function DetalleAsamblea({ id }: { id: string }) {
     } else if (votacion.modo === 'alta') {
       if (!asamblea) return;
       // El de la asamblea, no el activo: se puede llegar por link desde otro edificio.
-      await votacionesService.crear({
-        consorcioId: asamblea.consorcioId,
-        ...(votacion.nueva.punto ? { puntoOrdenDiaId: votacion.nueva.punto.id } : { asambleaId: id }),
-        ...resto,
-        opciones,
-      });
-      toast.success('Votación creada en borrador');
+      await crearVotacion(
+        {
+          consorcioId: asamblea.consorcioId,
+          ...resto,
+          opciones,
+          // Después de `resto`: la votación es de esta asamblea, sea por un punto o como uno nuevo.
+          ...(votacion.nueva.punto ? { puntoOrdenDiaId: votacion.nueva.punto.id } : { asambleaId: id }),
+        },
+        publicar,
+      );
     }
     setVotacion({ modo: 'cerrado' });
     recargar();
   }
 
-  if (error) {
+  if (error && !asamblea) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader titulo="Asamblea" volverA="/admin/asambleas" />
@@ -183,6 +210,23 @@ function DetalleAsamblea({ id }: { id: string }) {
   const estado = asamblea.estado;
   const sinCerrar = estado === 'BORRADOR' || estado === 'CONVOCADA' || estado === 'EN_CURSO';
   const confirmacion = accion ? CONFIRMACIONES[accion] : null;
+  // Las confirmaciones existen desde que se convoca: antes, el orden del día va solo a lo ancho.
+  const confirmaciones = estado === 'BORRADOR' ? undefined : asamblea.ultimasConfirmaciones;
+  const ordenDelDia = (
+    <OrdenDelDia
+      puntos={asamblea.puntoOrdenDias}
+      votaciones={votaciones}
+      editable={estado === 'BORRADOR'}
+      puedeCrearVotacion={sinCerrar}
+      onGuardar={async (puntos) => {
+        await asambleasService.reemplazarOrdenDia(id, puntos);
+        toast.success('Orden del día actualizado');
+        recargar();
+      }}
+      onCrearVotacion={(punto) => setVotacion({ modo: 'alta', nueva: { punto } })}
+      onVerVotacion={(v) => setSeleccionadaId(v.id)}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -249,6 +293,12 @@ function DetalleAsamblea({ id }: { id: string }) {
         }
       />
 
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error} Se muestra lo último que se cargó; se vuelve a intentar solo.</AlertDescription>
+        </Alert>
+      )}
+
       {estado === 'BORRADOR' && asamblea.puntoOrdenDias.length === 0 && (
         <Alert>
           <AlertDescription>Armá el orden del día para poder convocar.</AlertDescription>
@@ -257,19 +307,14 @@ function DetalleAsamblea({ id }: { id: string }) {
 
       {asamblea.quorum && <TarjetaQuorum quorum={asamblea.quorum} />}
 
-      <OrdenDelDia
-        puntos={asamblea.puntoOrdenDias}
-        votaciones={votaciones}
-        editable={estado === 'BORRADOR'}
-        puedeCrearVotacion={sinCerrar}
-        onGuardar={async (puntos) => {
-          await asambleasService.reemplazarOrdenDia(id, puntos);
-          toast.success('Orden del día actualizado');
-          recargar();
-        }}
-        onCrearVotacion={(punto) => setVotacion({ modo: 'alta', nueva: { punto } })}
-        onVerVotacion={(v) => setSeleccionadaId(v.id)}
-      />
+      {confirmaciones ? (
+        <div className="grid items-start gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">{ordenDelDia}</div>
+          <UltimasConfirmaciones confirmaciones={confirmaciones} />
+        </div>
+      ) : (
+        ordenDelDia
+      )}
 
       <Card>
         <CardHeader>
@@ -342,7 +387,7 @@ function DetalleAsamblea({ id }: { id: string }) {
           onOpenChange={(abierto) => !abierto && setVotacion({ modo: 'cerrado' })}
           consorcioId={asamblea.consorcioId}
           subtitulo={consorcio.nombre}
-          asamblea={{ id, titulo: asamblea.titulo }}
+          asamblea={{ id, titulo: asamblea.titulo, estado: asamblea.estado }}
           votacion={votacion.modo === 'edicion' ? votacion.votacion : undefined}
           tituloInicial={votacion.modo === 'alta' ? votacion.nueva.punto?.titulo : undefined}
           onGuardar={guardarVotacion}

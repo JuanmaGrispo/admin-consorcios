@@ -130,7 +130,9 @@ function TarjetaReclamo({ reclamo }: { reclamo: Reclamo }) {
             </span>
             <EstadoBadge dominio="reclamo" estado={reclamo.estado} />
           </div>
-          <p className="line-clamp-2 text-sm font-semibold">{reclamo.descripcion}</p>
+          {/* Los reclamos anteriores al título se encabezan con la descripción. */}
+          <p className="line-clamp-2 text-sm font-semibold">{reclamo.titulo ?? reclamo.descripcion}</p>
+          {reclamo.titulo && <p className="line-clamp-2 text-sm text-muted-foreground">{reclamo.descripcion}</p>}
           <p className="text-xs text-muted-foreground">
             {pie} · {reclamo.codigo}
           </p>

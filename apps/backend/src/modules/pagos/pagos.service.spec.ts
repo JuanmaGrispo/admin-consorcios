@@ -261,6 +261,22 @@ describe('PagosService', () => {
       assert.equal(pago.mpPreferenceId, 'pref1');
     });
 
+    it('guarda con qué tarjeta se pagó, y descarta dígitos que no son 4', async () => {
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
+      entorno.mp.pagos.set('100', {
+        ...pagoMp(100, 'approved'),
+        payment_method_id: 'visa',
+        card: { last_four_digits: '4417' },
+      });
+      await webhook('100');
+      assert.equal(entorno.db.pagos[0].mpMedioPago, 'visa');
+      assert.equal(entorno.db.pagos[0].mpUltimosDigitos, '4417');
+
+      entorno.mp.pagos.set('100', { ...pagoMp(100, 'approved'), card: { last_four_digits: 'xx17' } });
+      await webhook('100');
+      assert.equal(entorno.db.pagos[0].mpUltimosDigitos, null);
+    });
+
     it('un segundo "Pagar" vuelve al mismo checkout en vez de abrir otro', async () => {
       const primero = await service.crearPreferencia(admin, { boletaId: 'b1' });
       const segundo = await service.crearPreferencia(admin, { boletaId: 'b1' });

@@ -78,4 +78,10 @@ export class Pago {
 
   @Column({ type: 'timestamptz', name: 'updated_at', default: () => 'now()' })
   updatedAt: Date;
+
+  @Column({ type: 'varchar', name: 'mp_medio_pago', length: 40, nullable: true })
+  mpMedioPago: string | null;
+
+  @Column({ type: 'varchar', name: 'mp_ultimos_digitos', length: 4, nullable: true })
+  mpUltimosDigitos: string | null;
 }
