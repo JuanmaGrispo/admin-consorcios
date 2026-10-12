@@ -2,13 +2,23 @@
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Fragment } from 'react';
+import { EstadoBadge } from '@/components/estado-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { pesos } from '@/lib/formato';
 import { cn } from '@/lib/utils';
 import type { Amenity, Bloqueo, Reserva } from '@/types/reserva';
-import { diaCorto, fechaCorta, instante, sumarDias } from './tiempo';
+import { diaCorto, fechaCorta, fechaDe, horaDe, instante, sumarDias } from './tiempo';
 
 /** Sin turnos fijos, la grilla igual se dibuja en bloques de 4 horas, como el prototipo. */
 const BLOQUE_POR_DEFECTO = 240;
@@ -58,6 +68,9 @@ interface CalendarioSemanalProps {
   onCambiarSemana: (lunes: string) => void;
   /** Tocar un bloqueo ofrece quitarlo. */
   onBloqueo: (bloqueo: Bloqueo) => void;
+  /** Tocar una reserva pendiente deja aprobarla o rechazarla ahí mismo. */
+  onAprobar: (reserva: Reserva) => void;
+  onRechazar: (reserva: Reserva) => void;
 }
 
 /**
@@ -71,6 +84,8 @@ export function CalendarioSemanal({
   bloqueos,
   onCambiarSemana,
   onBloqueo,
+  onAprobar,
+  onRechazar,
 }: CalendarioSemanalProps) {
   const dias = Array.from({ length: 7 }, (_, i) => sumarDias(lunes, i));
   const domingo = dias[6];
@@ -131,7 +146,15 @@ export function CalendarioSemanal({
                 const desde = new Date(instante(d, '00:00').getTime() + f.desde * 60_000);
                 const hasta = new Date(instante(d, '00:00').getTime() + f.hasta * 60_000);
                 if (!reservas || !bloqueos) return <Skeleton key={d} className="h-11 rounded-lg" />;
-                return <CeldaSemana key={d} celda={celda(desde, hasta, reservas, bloqueos, ahora)} onBloqueo={onBloqueo} />;
+                return (
+                  <CeldaSemana
+                    key={d}
+                    celda={celda(desde, hasta, reservas, bloqueos, ahora)}
+                    onBloqueo={onBloqueo}
+                    onAprobar={onAprobar}
+                    onRechazar={onRechazar}
+                  />
+                );
               })}
             </Fragment>
           ))}
@@ -143,7 +166,14 @@ export function CalendarioSemanal({
 
 const BASE = 'flex h-11 items-center justify-center rounded-lg border px-1.5 text-center text-xs leading-tight';
 
-function CeldaSemana({ celda: c, onBloqueo }: { celda: Celda; onBloqueo: (b: Bloqueo) => void }) {
+interface CeldaSemanaProps {
+  celda: Celda;
+  onBloqueo: (b: Bloqueo) => void;
+  onAprobar: (r: Reserva) => void;
+  onRechazar: (r: Reserva) => void;
+}
+
+function CeldaSemana({ celda: c, onBloqueo, onAprobar, onRechazar }: CeldaSemanaProps) {
   if (c.tipo === 'libre') {
     return <div className={cn(BASE, 'text-muted-foreground', c.pasada && 'opacity-50')}>Libre</div>;
   }
@@ -168,13 +198,13 @@ function CeldaSemana({ celda: c, onBloqueo }: { celda: Celda; onBloqueo: (b: Blo
   const r = c.reserva;
   const pendiente = r.estado === 'PENDIENTE';
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          tabIndex={0}
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
           className={cn(
             BASE,
-            'font-medium',
+            'font-medium hover:border-foreground/30',
             pendiente
               ? 'border-warning/50 bg-warning/10 text-warning'
               : 'border-primary/50 bg-accent text-accent-foreground',
@@ -185,13 +215,42 @@ function CeldaSemana({ celda: c, onBloqueo }: { celda: Celda; onBloqueo: (b: Blo
             {r.motivo ? ` · ${r.motivo}` : ''}
             {c.mas > 0 ? ` +${c.mas}` : ''}
           </span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>
-        {r.unidad.etiqueta} · {r.solicitadaPor.nombre} {r.solicitadaPor.apellido} ·{' '}
-        {pendiente ? 'esperando aprobación' : r.estado === 'FINALIZADA' ? 'finalizada' : 'aprobada'}
-      </TooltipContent>
-    </Tooltip>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72">
+        <PopoverHeader>
+          <PopoverTitle className="flex items-center justify-between gap-2">
+            {r.unidad.etiqueta}
+            <EstadoBadge dominio="reserva" estado={r.estado} />
+          </PopoverTitle>
+          <PopoverDescription>
+            {r.solicitadaPor.nombre} {r.solicitadaPor.apellido} · {fechaCorta(fechaDe(r.inicio))}, {horaDe(r.inicio)}{' '}
+            a {horaDe(r.fin)}
+            {r.motivo ? ` · ${r.motivo}` : ''}
+          </PopoverDescription>
+        </PopoverHeader>
+        {r.sena && (
+          <p className="text-xs text-muted-foreground">
+            Seña de {pesos(r.sena.monto)} {r.sena.pagada ? 'pagada' : 'pendiente de pago'}
+          </p>
+        )}
+        {c.mas > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Y {c.mas} {c.mas === 1 ? 'reserva más' : 'reservas más'} en esta franja.
+          </p>
+        )}
+        {pendiente && (
+          <div className="grid grid-cols-2 gap-2">
+            <Button size="sm" onClick={() => onAprobar(r)}>
+              Aprobar
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onRechazar(r)}>
+              Rechazar
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 

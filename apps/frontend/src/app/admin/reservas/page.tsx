@@ -12,12 +12,14 @@ import { DialogoAmenity, type ValoresAmenity } from '@/components/reservas/dialo
 import { DialogoBloqueo } from '@/components/reservas/dialogo-bloqueo';
 import { DialogoRechazo } from '@/components/reservas/dialogo-rechazo';
 import { ListaAmenities, PendientesAprobacion, ReglasAmenity } from '@/components/reservas/panel-amenity';
+import { debeSena, SENA_DEVOLVIBLE, SenasADevolver } from '@/components/reservas/senas-a-devolver';
 import { fechaCorta, fechaDe, hoy, lunesDe, sumarDias } from '@/components/reservas/tiempo';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
+import { pesos } from '@/lib/formato';
 import { reservasService } from '@/services/reservas';
 import type { Consorcio } from '@/types/consorcio';
 import type { Bloqueo, Reserva } from '@/types/reserva';
@@ -40,6 +42,7 @@ function Reservas({ consorcio }: { consorcio: Consorcio }) {
   const [dialogo, setDialogo] = useState<'amenity' | 'nuevo' | 'bloqueo' | null>(null);
   const [aRechazar, setARechazar] = useState<Reserva | null>(null);
   const [aQuitar, setAQuitar] = useState<Bloqueo | null>(null);
+  const [aDevolver, setADevolver] = useState<Reserva | null>(null);
 
   // Los amenities, incluidos los dados de baja: quien administra los puede reactivar.
   const amenitiesPedido = usePedido(
@@ -54,17 +57,24 @@ function Reservas({ consorcio }: { consorcio: Consorcio }) {
   // Si falla, el panel queda vacío y el resto de la pantalla anda igual.
   const resumenPedido = usePedido('resumen', async () => {
     const lunesHoy = lunesDe(hoy());
-    const [pend, semanaActual] = await Promise.all([
+    const [pend, semanaActual, ...terminadas] = await Promise.all([
       reservasService.listar({ consorcioId: consorcio.id, estado: 'PENDIENTE', situacion: 'proximas', limite: 50 }),
       reservasService.listar({ consorcioId: consorcio.id, desde: lunesHoy, hasta: sumarDias(lunesHoy, 6), limite: 100 }),
+      // Las señas a devolver salen de las reservas que ya terminaron, por estado.
+      ...SENA_DEVOLVIBLE.map((estado) => reservasService.listar({ consorcioId: consorcio.id, estado, limite: 100 })),
     ]);
     return {
       pendientes: [...pend.items].sort((a, b) => a.inicio.localeCompare(b.inicio)),
       estaSemana: semanaActual.items.filter((r) => VIGENTES.includes(r.estado)).length,
+      senas: terminadas
+        .flatMap((t) => t.items)
+        .filter(debeSena)
+        .sort((a, b) => a.inicio.localeCompare(b.inicio)),
     };
   });
   const pendientes = resumenPedido.datos?.pendientes ?? (resumenPedido.error ? [] : null);
   const estaSemana = resumenPedido.datos?.estaSemana ?? null;
+  const senas = resumenPedido.datos?.senas ?? (resumenPedido.error ? [] : null);
 
   // La semana del amenity elegido: sus reservas y sus bloqueos. Con otra semana
   // u otro amenity, la clave cambia y no se muestra la anterior como si fuera esta.
@@ -190,6 +200,7 @@ function Reservas({ consorcio }: { consorcio: Consorcio }) {
             />
             <ReglasAmenity amenity={elegido} />
             <PendientesAprobacion reservas={pendientes} onAprobar={aprobar} onRechazar={setARechazar} />
+            <SenasADevolver reservas={senas} onDevuelta={setADevolver} />
           </div>
           <CalendarioSemanal
             amenity={elegido}
@@ -198,6 +209,8 @@ function Reservas({ consorcio }: { consorcio: Consorcio }) {
             bloqueos={semanaVista?.bloqueos ?? null}
             onCambiarSemana={setLunes}
             onBloqueo={setAQuitar}
+            onAprobar={aprobar}
+            onRechazar={setARechazar}
           />
         </div>
       )}
@@ -222,6 +235,24 @@ function Reservas({ consorcio }: { consorcio: Consorcio }) {
           }}
         />
       )}
+      <ConfirmarAccion
+        abierto={aDevolver !== null}
+        titulo="¿Ya devolviste la seña?"
+        descripcion={
+          aDevolver
+            ? `${aDevolver.unidad.etiqueta} · ${pesos(aDevolver.sena?.monto ?? 0)}. Queda registrada la devolución y se le avisa al vecino. No se puede deshacer.`
+            : ''
+        }
+        boton="Marcar devuelta"
+        destructiva={false}
+        onConfirmar={async () => {
+          if (!aDevolver) return;
+          await reservasService.marcarSenaDevuelta(aDevolver.id);
+          toast.success(`Seña de ${aDevolver.unidad.etiqueta} devuelta`);
+          recargar();
+        }}
+        onCerrar={() => setADevolver(null)}
+      />
       <DialogoRechazo reserva={aRechazar} onCerrar={() => setARechazar(null)} onRechazar={rechazar} />
       <ConfirmarAccion
         abierto={aQuitar !== null}
