@@ -225,7 +225,7 @@ function TarjetaResultado({
               <Dato nombre="Unidad" valor={[pago.unidad.etiqueta, direccion].filter(Boolean).join(' · ')} />
             )}
             {pago.boleta?.liquidacion && <Dato nombre="Período" valor={periodo(pago.boleta.liquidacion.periodo)} />}
-            <Dato nombre="Medio" valor={MEDIOS[pago.medio]} />
+            <Dato nombre="Medio" valor={medioDe(pago)} />
             {pago.reciboNumero && <Dato nombre="N° de recibo" valor={pago.reciboNumero} />}
           </dl>
         )}
@@ -306,6 +306,29 @@ function Linea({ concepto, monto }: { concepto: string; monto: number }) {
       <span className="tabular-nums">{pesos(monto)}</span>
     </li>
   );
+}
+
+/** Los `payment_method_id` de Mercado Pago más comunes, como los ve el vecino. */
+const MEDIOS_MP: Record<string, string> = {
+  visa: 'Visa',
+  debvisa: 'Visa débito',
+  master: 'Mastercard',
+  debmaster: 'Mastercard débito',
+  amex: 'American Express',
+  naranja: 'Naranja',
+  cabal: 'Cabal',
+  debcabal: 'Cabal débito',
+  maestro: 'Maestro',
+  account_money: 'Dinero en cuenta de Mercado Pago',
+  rapipago: 'Rapipago',
+  pagofacil: 'Pago Fácil',
+};
+
+/** "Visa ···· 4417", "Dinero en cuenta de Mercado Pago" o, si no se sabe, el medio del pago. */
+function medioDe(pago: Pago): string {
+  if (!pago.mpMedioPago) return MEDIOS[pago.medio];
+  const nombre = MEDIOS_MP[pago.mpMedioPago] ?? pago.mpMedioPago;
+  return pago.mpUltimosDigitos ? `${nombre} ···· ${pago.mpUltimosDigitos}` : nombre;
 }
 
 function Dato({ nombre, valor }: { nombre: string; valor: string }) {

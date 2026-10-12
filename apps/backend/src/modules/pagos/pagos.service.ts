@@ -42,6 +42,11 @@ export function estadoSegunMercadoPago(status: string): EstadoPago {
  * Los pagos de expensas. La boleta es de expensas: acá sólo se registra el
  * pago y se le pide a expensas que recalcule el estado.
  */
+/** Los últimos 4 de la tarjeta, sólo si son 4 dígitos: la base no acepta otra cosa. */
+function ultimosDigitos(valor: string | null | undefined): string | null {
+  return valor && /^[0-9]{4}$/.test(valor) ? valor : null;
+}
+
 @Injectable()
 export class PagosService {
   private readonly logger = new Logger(PagosService.name);
@@ -245,6 +250,9 @@ export class PagosService {
       estado: estadoSegunMercadoPago(mp.status),
       mpPaymentId,
       mpStatusDetail: mp.status_detail,
+      // Con qué pagó, para el comprobante ("Visa ···· 4417").
+      mpMedioPago: mp.payment_method_id ?? null,
+      mpUltimosDigitos: ultimosDigitos(mp.card?.last_four_digits),
       monto: mp.transaction_amount,
       fechaPago: mp.date_approved ? new Date(mp.date_approved) : null,
     };

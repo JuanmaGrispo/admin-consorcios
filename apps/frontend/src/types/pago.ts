@@ -22,6 +22,10 @@ export interface Pago {
   mpPaymentId: string | null;
   /** Por qué Mercado Pago lo rechazó ("cc_rejected_insufficient_amount"). */
   mpStatusDetail: string | null;
+  /** Con qué se pagó por Mercado Pago: "visa", "master", "account_money"… */
+  mpMedioPago: string | null;
+  /** Los últimos 4 de la tarjeta, si se pagó con una. */
+  mpUltimosDigitos: string | null;
   reciboNumero: string | null;
   createdAt: string;
 }
