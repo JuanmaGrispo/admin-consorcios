@@ -2,8 +2,7 @@
 
 import { Bell, Check, ChevronDown, LogOut } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useNoLeidas } from '@/components/notificaciones/use-no-leidas';
 import { Badge } from '@/components/ui/badge';
 import { useSesion } from '@/components/session';
 import { Button } from '@/components/ui/button';
@@ -16,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { domicilio } from '@/lib/formato';
-import { notificacionesService } from '@/services/notificaciones';
 import { useUnidadActiva } from './unidad-activa';
 
 /**
@@ -77,23 +75,4 @@ export function BarraVecino() {
       </div>
     </header>
   );
-}
-
-/** Los avisos sin leer. Se vuelven a pedir al cambiar de pantalla, que es cuando el vecino puede haber leído alguno. */
-function useNoLeidas(): number {
-  const pathname = usePathname();
-  const [noLeidas, setNoLeidas] = useState(0);
-
-  useEffect(() => {
-    let cancelado = false;
-    notificacionesService
-      .noLeidas()
-      .then((n) => !cancelado && setNoLeidas(n))
-      .catch(() => undefined);
-    return () => {
-      cancelado = true;
-    };
-  }, [pathname]);
-
-  return noLeidas;
 }

@@ -6,8 +6,35 @@ import { fechaDeInstante, haceCuanto } from '@/lib/formato';
 import { cn } from '@/lib/utils';
 import type { Notificacion } from '@/types/notificacion';
 
-/** A qué pantalla del vecino lleva cada aviso, según `entidadTipo`. */
-export function destinoDe(n: Notificacion): string | null {
+export type Portal = 'vecino' | 'admin';
+
+/** A qué pantalla lleva cada aviso, según `entidadTipo` y el portal de quien lo abre. */
+export function destinoDe(n: Notificacion, portal: Portal = 'vecino'): string | null {
+  return portal === 'admin' ? destinoAdmin(n) : destinoVecino(n);
+}
+
+function destinoAdmin(n: Notificacion): string | null {
+  switch (n.entidadTipo) {
+    case 'reclamo':
+      return '/admin/reclamos';
+    case 'boleta':
+    case 'liquidacion':
+    case 'pago':
+      return '/admin/cobranzas';
+    case 'reserva':
+      return '/admin/reservas';
+    case 'asamblea':
+      return n.entidadId ? `/admin/asambleas/${n.entidadId}` : '/admin/asambleas';
+    case 'votacion':
+      return '/admin/votaciones';
+    case 'novedad':
+      return '/admin/novedades';
+    default:
+      return null;
+  }
+}
+
+function destinoVecino(n: Notificacion): string | null {
   switch (n.entidadTipo) {
     case 'reclamo':
       return n.entidadId ? `/vecino/reclamos/${n.entidadId}` : '/vecino/reclamos';

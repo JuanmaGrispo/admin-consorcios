@@ -4,6 +4,7 @@ import { Check, ChevronsUpDown, Globe, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useNoLeidas } from '@/components/notificaciones/use-no-leidas';
 import { useSesion } from '@/components/session';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -47,7 +48,10 @@ export function AdminSidebar() {
   const { usuario, cerrarSesion } = useSesion();
   const { consorcios, consorcio, cambiar } = useConsorcioActivo();
   const { setOpenMobile } = useSidebar();
-  const contadores = useContadores(consorcio.id);
+  const contadores: Record<string, number> = {
+    ...useContadores(consorcio.id),
+    '/admin/notificaciones': useNoLeidas(),
+  };
 
   const item = ({ href, etiqueta, icono: Icono }: ItemNavegacion) => (
     <SidebarMenuItem key={href}>

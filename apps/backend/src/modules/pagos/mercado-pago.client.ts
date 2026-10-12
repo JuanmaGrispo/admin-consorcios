@@ -70,15 +70,17 @@ export class MercadoPagoClient {
     /** Nuestro id de pago: vuelve en el webhook como `external_reference`. */
     referencia: string;
   }): Promise<PreferenciaCreada> {
-    const frontend = this.config.get<string>('FRONTEND_URL', 'http://localhost:3000');
-    const vuelta = `${frontend}${this.config.get<string>('MP_RETURN_PATH', '/vecino/expensas/pago')}`;
+    const frontend = this.opcional('FRONTEND_URL') ?? 'http://localhost:3000';
+    const vuelta = `${frontend.replace(/\/$/, '')}${this.opcional('MP_RETURN_PATH') ?? '/vecino/expensas/pago'}`;
+    const notificacion = this.opcional('MP_NOTIFICATION_URL');
     const respuesta = await this.llamar<{ id: string; init_point: string }>(
       'POST',
       '/checkout/preferences',
       {
         items: [{ title: datos.titulo, quantity: 1, unit_price: datos.monto, currency_id: 'ARS' }],
         external_reference: datos.referencia,
-        notification_url: this.config.get<string>('MP_NOTIFICATION_URL'),
+        // Sin URL pública no hay webhook: el pago se confirma al volver del checkout.
+        ...(notificacion ? { notification_url: notificacion } : {}),
         back_urls: {
           success: `${vuelta}?pago=aprobado`,
           pending: `${vuelta}?pago=pendiente`,
@@ -134,6 +136,11 @@ export class MercadoPagoClient {
       throw new BadGatewayException('Mercado Pago no respondió bien. Probá de nuevo en un rato.');
     }
     return (await respuesta.json()) as T;
+  }
+
+  /** Una variable vacía en el .env cuenta como no configurada: `get` devolvería `""`. */
+  private opcional(variable: string): string | undefined {
+    return this.config.get<string>(variable)?.trim() || undefined;
   }
 
   private exigir(variable: string): string {

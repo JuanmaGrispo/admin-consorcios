@@ -1,4 +1,5 @@
 import {
+  Bell,
   Building2,
   CalendarDays,
   Landmark,
@@ -32,7 +33,10 @@ export interface GrupoNavegacion {
 export const NAVEGACION_ADMIN: GrupoNavegacion[] = [
   {
     titulo: 'General',
-    items: [{ href: '/admin', etiqueta: 'Panel general', icono: LayoutDashboard }],
+    items: [
+      { href: '/admin', etiqueta: 'Panel general', icono: LayoutDashboard },
+      { href: '/admin/notificaciones', etiqueta: 'Notificaciones', icono: Bell },
+    ],
   },
   {
     titulo: 'Edificio',
