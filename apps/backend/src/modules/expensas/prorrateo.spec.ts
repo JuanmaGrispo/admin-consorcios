@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { CriterioProrrateo, NaturalezaGasto, PeriodicidadMora } from '../../database/entities';
-import { calcularBoletas, calcularMora, repartir, type ParametrosProrrateo } from './prorrateo';
+import {
+  calcularBoletas,
+  calcularMora,
+  CONCEPTO_REDISTRIBUCION,
+  repartir,
+  type ParametrosProrrateo,
+} from './prorrateo';
 
 const PARAMETROS: ParametrosProrrateo = {
   criterio: CriterioProrrateo.COEFICIENTE,
@@ -139,6 +145,69 @@ describe('calcularBoletas', () => {
     assert.equal(u1.motivoAjuste, 'Bonificación por obra');
     assert.equal(u1.total, 350);
     assert.ok(u1.detalle.some((l) => l.concepto === 'Ajuste: Bonificación por obra'));
+  });
+
+  describe('redistribución de los ajustes', () => {
+    const tres = [
+      { id: 'u1', coeficiente: 20 },
+      { id: 'u2', coeficiente: 30 },
+      { id: 'u3', coeficiente: 50 },
+    ];
+    const bonificacion = new Map([['u1', { monto: -100, motivo: 'Bonificación' }]]);
+
+    it('las demás absorben el ajuste por coeficiente y el total no cambia', () => {
+      const [u1, u2, u3] = calcularBoletas([gasto(1_000)], tres, PARAMETROS, new Map(), bonificacion);
+      assert.equal(u1.total, 100);
+      // Los 100 se reparten 30 a 50 entre u2 y u3.
+      assert.equal(u2.total, 300 + 37.5);
+      assert.equal(u3.total, 500 + 62.5);
+      assert.equal(u1.total + u2.total + u3.total, 1_000);
+    });
+
+    it('va sumado a las ordinarias y con su línea en el detalle', () => {
+      const [, u2] = calcularBoletas([gasto(1_000)], tres, PARAMETROS, new Map(), bonificacion);
+      assert.equal(u2.importeOrdinarias, 337.5);
+      assert.ok(u2.detalle.some((l) => l.concepto === CONCEPTO_REDISTRIBUCION && l.monto === 37.5));
+      assert.equal(u2.ajusteManual, 0);
+    });
+
+    it('un cargo se descuenta de las demás', () => {
+      const [u1, u2, u3] = calcularBoletas(
+        [gasto(1_000)],
+        tres,
+        PARAMETROS,
+        new Map(),
+        new Map([['u1', { monto: 80, motivo: 'Cargo por llave' }]]),
+      );
+      assert.equal(u2.total, 300 - 30);
+      assert.equal(u3.total, 500 - 50);
+      assert.equal(u1.total + u2.total + u3.total, 1_000);
+    });
+
+    it('con partes iguales reparte en partes iguales y no pierde centavos', () => {
+      const boletas = calcularBoletas(
+        [gasto(900)],
+        tres,
+        { ...PARAMETROS, criterio: CriterioProrrateo.PARTES_IGUALES },
+        new Map(),
+        new Map([['u1', { monto: -0.01, motivo: 'Redondeo' }]]),
+      );
+      assert.equal(Math.round(suma(boletas.map((b) => b.total)) * 100), 90_000);
+    });
+
+    it('si todas tienen ajuste no hay quién lo absorba y cambia el total', () => {
+      const boletas = calcularBoletas(
+        [gasto(1_000)],
+        unidades,
+        PARAMETROS,
+        new Map(),
+        new Map([
+          ['u1', { monto: -50, motivo: 'a' }],
+          ['u2', { monto: -50, motivo: 'b' }],
+        ]),
+      );
+      assert.equal(suma(boletas.map((b) => b.total)), 900);
+    });
   });
 
   it('una línea por gasto, con su id', () => {

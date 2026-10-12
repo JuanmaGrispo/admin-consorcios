@@ -53,9 +53,20 @@ import {
   aCentavos,
   aPesos,
   calcularBoletas,
-  conceptoAjuste,
+  type AjusteUnidad,
   type DeudaUnidad,
 } from './prorrateo';
+
+export interface ResumenProrrateo {
+  unidadesActivas: number;
+  /** Las que tienen boleta: 0 hasta que se previsualiza. */
+  unidadesAlcanzadas: number;
+  /** De las unidades activas; por coeficiente tiene que dar 100. */
+  sumaCoeficientes: number;
+  ajustesManuales: number;
+}
+
+export type LiquidacionConProrrateo = Liquidacion & { prorrateo: ResumenProrrateo };
 
 /**
  * Mientras la liquidación está en uno de estos estados, se puede tocar: cargar
@@ -140,12 +151,29 @@ export class ExpensasService {
     return this.expensas.listar(query, consorciosGestionados(usuario));
   }
 
-  async findOne(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
+  async findOne(usuario: UsuarioActual, id: string): Promise<LiquidacionConProrrateo> {
     const liquidacion = await this.expensas.findConGastos(id);
     if (!liquidacion || !gestiona(usuario, liquidacion.consorcioId)) {
       throw new NotFoundException(`La liquidación ${id} no existe`);
     }
-    return liquidacion;
+    return { ...liquidacion, prorrateo: await this.resumenProrrateo(liquidacion) };
+  }
+
+  /** Los números del paso de prorrateo: a cuántas unidades llega, si cierran los coeficientes y cuántos ajustes hay. */
+  private async resumenProrrateo(liquidacion: Liquidacion): Promise<ResumenProrrateo> {
+    const [unidades, ajustes, boletas] = await Promise.all([
+      this.expensas.unidadesActivas(liquidacion.consorcioId),
+      this.expensas.ajustesDe(liquidacion.id),
+      this.expensas.contarBoletas(liquidacion.id),
+    ]);
+    // En diezmilésimos, la precisión del coeficiente: sumar decimales de JS no da 100 exacto.
+    const suma = unidades.reduce((total, u) => total + Math.round(u.coeficiente * 10_000), 0);
+    return {
+      unidadesActivas: unidades.length,
+      unidadesAlcanzadas: boletas,
+      sumaCoeficientes: suma / 10_000,
+      ajustesManuales: ajustes.size,
+    };
   }
 
   async create(usuario: UsuarioActual, dto: CreateLiquidacionDto): Promise<Liquidacion> {
@@ -520,7 +548,9 @@ export class ExpensasService {
 
   /**
    * Ajuste manual sobre una boleta en previsualización (una bonificación, un
-   * cargo puntual). Se conserva si después se recalcula la liquidación.
+   * cargo puntual). La diferencia la absorben las demás unidades según el
+   * prorrateo, así que se recalcula toda la liquidación; el ajuste se conserva
+   * en los recálculos siguientes.
    */
   async ajustarBoleta(usuario: UsuarioActual, id: string, dto: AjustarBoletaDto): Promise<Boleta> {
     const boleta = await this.findBoleta(usuario, id);
@@ -533,24 +563,24 @@ export class ExpensasService {
       throw new BadRequestException('Indicá el motivo del ajuste: el vecino lo ve en su boleta');
     }
 
-    const total =
-      aCentavos(boleta.total) - aCentavos(boleta.ajusteManual) + aCentavos(dto.ajusteManual);
-    if (total < 0) {
-      throw new BadRequestException('El ajuste dejaría la boleta con total negativo');
+    const ajustes = await this.expensas.ajustesDe(boleta.liquidacionId);
+    if (dto.ajusteManual === 0) ajustes.delete(boleta.unidadId);
+    else ajustes.set(boleta.unidadId, { monto: dto.ajusteManual, motivo });
+
+    const liquidacion = (await this.expensas.findById(boleta.liquidacionId))!;
+    const boletas = await this.calcular(liquidacion, ajustes);
+    const negativa = boletas.find((b) => b.total < 0);
+    if (negativa) {
+      throw new BadRequestException(
+        negativa.unidadId === boleta.unidadId
+          ? 'El ajuste dejaría la boleta con total negativo'
+          : 'Repartido entre las demás unidades, el ajuste dejaría alguna boleta con total negativo',
+      );
     }
 
-    await this.expensas.aplicarAjuste(
-      id,
-      {
-        ajusteManual: dto.ajusteManual,
-        motivoAjuste: dto.ajusteManual === 0 ? null : motivo,
-        total: aPesos(total),
-      },
-      dto.ajusteManual === 0
-        ? null
-        : { concepto: conceptoAjuste(motivo), monto: dto.ajusteManual },
-    );
-    return (await this.expensas.findBoleta(id))!;
+    await this.expensas.reemplazarBoletas(liquidacion.id, boletas, EstadoLiquidacion.PREVISUALIZACION);
+    // Recalcular reemplaza las boletas: la de esta unidad tiene otro id.
+    return (await this.expensas.findBoletaDeUnidad(liquidacion.id, boleta.unidadId))!;
   }
 
   // ── Para pagos ─────────────────────────────────────────────────────────────
@@ -653,6 +683,13 @@ export class ExpensasService {
     return (await this.expensas.contarVencidasDeUnidad(unidadId)) > 0;
   }
 
+  /** `tieneDeudaVencida` para muchas unidades a la vez: la vista previa del padrón. */
+  async unidadesConDeudaVencida(unidadIds: string[]): Promise<Set<string>> {
+    if (unidadIds.length === 0) return new Set();
+    await this.expensas.marcarVencidas();
+    return new Set(await this.expensas.unidadesConVencidas(unidadIds));
+  }
+
   // ── Auxiliares ─────────────────────────────────────────────────────────────
 
   /**
@@ -735,6 +772,17 @@ export class ExpensasService {
    * boletas. Devuelve lo calculado para que emitir no tenga que releerlo.
    */
   private async recalcular(liquidacion: Liquidacion) {
+    const boletas = await this.calcular(liquidacion, await this.expensas.ajustesDe(liquidacion.id));
+    await this.expensas.reemplazarBoletas(
+      liquidacion.id,
+      boletas,
+      EstadoLiquidacion.PREVISUALIZACION,
+    );
+    return boletas;
+  }
+
+  /** Calcula las boletas sin guardarlas, con los ajustes que se le pasen. */
+  private async calcular(liquidacion: Liquidacion, ajustes: Map<string, AjusteUnidad>) {
     const gastos = await this.expensas.gastosDe(liquidacion.id);
     if (gastos.length === 0) {
       throw new BadRequestException('Cargá al menos un gasto antes de calcular las boletas');
@@ -772,7 +820,7 @@ export class ExpensasService {
       ]),
     );
 
-    const boletas = calcularBoletas(
+    return calcularBoletas(
       gastos,
       unidades,
       {
@@ -782,15 +830,8 @@ export class ExpensasService {
         periodicidadMora: consorcio.periodicidadMora,
       },
       deudas,
-      await this.expensas.ajustesDe(liquidacion.id),
+      ajustes,
     );
-
-    await this.expensas.reemplazarBoletas(
-      liquidacion.id,
-      boletas,
-      EstadoLiquidacion.PREVISUALIZACION,
-    );
-    return boletas;
   }
 
   /**

@@ -69,8 +69,8 @@ export const aCentavos = (pesos: number) => Math.round(pesos * 100);
 export const aPesos = (centavos: number) => centavos / 100;
 const concepto = (texto: string) => texto.slice(0, LARGO_CONCEPTO);
 
-/** Prefijo de la línea de ajuste: el repositorio la busca por él para reemplazarla. */
-export const PREFIJO_AJUSTE = 'Ajuste: ';
+/** Prefijo de la línea de ajuste en el detalle de la boleta. */
+const PREFIJO_AJUSTE = 'Ajuste: ';
 export const conceptoAjuste = (motivo: string | null) =>
   concepto(`${PREFIJO_AJUSTE}${motivo ?? 'sin motivo'}`);
 
@@ -118,6 +118,9 @@ export function calcularMora(
   return aPesos(Math.round(aCentavos(saldo) * (tasa / 100) * periodos));
 }
 
+/** La línea que reparte entre las demás unidades lo que se ajustó a mano en otras. */
+export const CONCEPTO_REDISTRIBUCION = 'Redistribución de ajustes de otras unidades';
+
 export function calcularBoletas(
   gastos: GastoAProrratear[],
   unidades: UnidadAProrratear[],
@@ -149,7 +152,7 @@ export function calcularBoletas(
     });
   }
 
-  return unidades.map((unidad, i) => {
+  const boletas = unidades.map((unidad, i) => {
     const a = acumulado[i];
     const detalle = a.detalle;
 
@@ -217,5 +220,36 @@ export function calcularBoletas(
       total: aPesos(total),
       detalle,
     };
+  });
+
+  redistribuirAjustes(boletas, pesos);
+  return boletas;
+}
+
+/**
+ * "Podés ajustar una unidad y el resto se recalcula": lo que se bonificó o
+ * se cargó a mano en unas unidades lo absorben las demás, en proporción a su
+ * peso en el prorrateo, y el total de la liquidación no cambia. Va sumado a
+ * las ordinarias (el resumen de la boleta y el PDF se arman con ellas) y como
+ * una línea propia del detalle, para que el vecino vea de dónde sale.
+ *
+ * Si todas las unidades tienen ajuste no hay quién lo absorba: queda como
+ * está y cambia el total.
+ */
+function redistribuirAjustes(boletas: BoletaCalculada[], pesos: number[]): void {
+  const ajustado = aCentavos(boletas.reduce((suma, b) => suma + b.ajusteManual, 0));
+  const libres = boletas.map((b, i) => i).filter((i) => boletas[i].ajusteManual === 0);
+  if (ajustado === 0 || libres.length === 0) return;
+
+  // `repartir` trabaja con montos positivos: se reparte el valor absoluto y se le pone el signo.
+  const signo = ajustado > 0 ? -1 : 1;
+  const partes = repartir(Math.abs(ajustado), libres.map((i) => pesos[i]));
+  libres.forEach((i, j) => {
+    const centavos = signo * partes[j];
+    if (centavos === 0) return;
+    const b = boletas[i];
+    b.importeOrdinarias = aPesos(aCentavos(b.importeOrdinarias) + centavos);
+    b.total = aPesos(aCentavos(b.total) + centavos);
+    b.detalle.push({ gastoId: null, concepto: CONCEPTO_REDISTRIBUCION, monto: aPesos(centavos) });
   });
 }

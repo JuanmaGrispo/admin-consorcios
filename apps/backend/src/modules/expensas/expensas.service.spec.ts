@@ -51,7 +51,6 @@ function crearEntorno() {
     deudas: [] as { unidadId: string; saldo: number; fechaVencimiento: string }[],
     boletas: new Map<string, BoletaCalculada[]>(),
     boletaGuardada: null as Boleta | null,
-    ajusteAplicado: null as unknown,
     vecinos: new Map([['u1', ['v1']], ['u2', ['v2', 'v3']]]),
     unidadesDelVecino: ['u1'],
     hoy: '2026-11-09',
@@ -114,16 +113,22 @@ function crearEntorno() {
     recalcularTotalGastos: async () => undefined,
     unidadesActivas: async () => db.unidades.filter((u) => u.activa),
     deudasAnteriores: async () => db.deudas,
-    ajustesDe: async () => new Map(),
+    // Los ajustes vigentes salen de las boletas guardadas, como en la base.
+    ajustesDe: async (id: string) =>
+      new Map(
+        (db.boletas.get(id) ?? [])
+          .filter((b) => b.ajusteManual !== 0)
+          .map((b) => [b.unidadId, { monto: b.ajusteManual, motivo: b.motivoAjuste }]),
+      ),
     hoy: async () => db.hoy,
+    contarBoletas: async (id: string) => db.boletas.get(id)?.length ?? 0,
     reemplazarBoletas: async (id: string, b: BoletaCalculada[], estado: EstadoLiquidacion) => {
       db.boletas.set(id, b);
       liq(id)!.estado = estado;
     },
     findBoleta: async () => db.boletaGuardada,
-    aplicarAjuste: async (...args: unknown[]) => {
-      db.ajusteAplicado = args;
-    },
+    findBoletaDeUnidad: async (liquidacionId: string, unidadId: string) =>
+      ({ id: `${liquidacionId}-${unidadId}`, unidadId }) as Boleta,
     marcarVencidas: async () => undefined,
     pagadoDe: async () => db.pagado,
     ultimaBoletaEmitida: async () => db.ultimaBoleta,
@@ -498,21 +503,62 @@ describe('ExpensasService', () => {
       await assert.rejects(service.ajustarBoleta(admin, 'b1', { ajusteManual: -50 }), /motivo/);
     });
 
+    /** Una liquidación previsualizada (u1 paga 400 y u2 600) con la boleta de u1 a mano. */
+    async function previsualizada() {
+      const l = await liquidacionConGasto();
+      await service.previsualizar(admin, l.id);
+      db.boletaGuardada = boleta(EstadoLiquidacion.PREVISUALIZACION, { liquidacionId: l.id });
+      const totales = () => (db.boletas.get(l.id) ?? []).map((b) => [b.unidadId, b.total]);
+      return { l, totales };
+    }
+
     it('un ajuste no puede dejar el total negativo', async () => {
-      db.boletaGuardada = boleta(EstadoLiquidacion.PREVISUALIZACION);
+      await previsualizada();
       await assert.rejects(
         service.ajustarBoleta(admin, 'b1', { ajusteManual: -401, motivoAjuste: 'x' }),
         /negativo/,
       );
     });
 
-    it('reemplaza el ajuste anterior al recalcular el total', async () => {
-      db.boletaGuardada = boleta(EstadoLiquidacion.PREVISUALIZACION, { total: 350, ajusteManual: -50 });
-      await service.ajustarBoleta(admin, 'b1', { ajusteManual: 25.5, motivoAjuste: 'Cargo por llave' });
-      const [id, datos, linea] = db.ajusteAplicado as [string, { total: number }, { monto: number }];
-      assert.equal(id, 'b1');
-      assert.equal(datos.total, 425.5);
-      assert.deepEqual(linea, { concepto: 'Ajuste: Cargo por llave', monto: 25.5 });
+    it('las demás unidades absorben el ajuste y el total de la liquidación no cambia', async () => {
+      const { totales } = await previsualizada();
+      await service.ajustarBoleta(admin, 'b1', { ajusteManual: -100, motivoAjuste: 'Bonificación' });
+      assert.deepEqual(totales(), [
+        ['u1', 300],
+        ['u2', 700],
+      ]);
+    });
+
+    it('reemplaza el ajuste anterior y devuelve la boleta recalculada de la unidad', async () => {
+      const { l, totales } = await previsualizada();
+      await service.ajustarBoleta(admin, 'b1', { ajusteManual: -50, motivoAjuste: 'Bonificación' });
+      const nueva = await service.ajustarBoleta(admin, 'b1', { ajusteManual: 25.5, motivoAjuste: 'Cargo por llave' });
+      assert.equal(nueva.id, `${l.id}-u1`);
+      assert.deepEqual(totales(), [
+        ['u1', 425.5],
+        ['u2', 574.5],
+      ]);
+    });
+
+    it('el detalle trae el resumen del prorrateo', async () => {
+      const { l } = await previsualizada();
+      await service.ajustarBoleta(admin, 'b1', { ajusteManual: -100, motivoAjuste: 'Bonificación' });
+      assert.deepEqual((await service.findOne(admin, l.id)).prorrateo, {
+        unidadesActivas: 2,
+        unidadesAlcanzadas: 2,
+        sumaCoeficientes: 100,
+        ajustesManuales: 1,
+      });
+    });
+
+    it('sacar el ajuste vuelve al prorrateo original', async () => {
+      const { totales } = await previsualizada();
+      await service.ajustarBoleta(admin, 'b1', { ajusteManual: -100, motivoAjuste: 'Bonificación' });
+      await service.ajustarBoleta(admin, 'b1', { ajusteManual: 0 });
+      assert.deepEqual(totales(), [
+        ['u1', 400],
+        ['u2', 600],
+      ]);
     });
 
     it('no se ajusta una boleta emitida', async () => {
