@@ -7,7 +7,7 @@ import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ApiError } from '@/lib/api';
-import { fecha, pesos } from '@/lib/formato';
+import { fecha, pesos, porcentaje } from '@/lib/formato';
 import type { CriterioProrrateo, LiquidacionCambios, LiquidacionDetalle } from '@/types/expensa';
 import { CRITERIOS } from './etiquetas';
 
@@ -39,7 +39,10 @@ export function TarjetaProrrateo({ liquidacion, editable, onCambiar }: TarjetaPr
     <Card>
       <CardHeader>
         <CardTitle>Prorrateo</CardTitle>
-        <CardDescription>{CRITERIOS[liquidacion.criterioProrrateo].ayuda}</CardDescription>
+        <CardDescription>
+          {CRITERIOS[liquidacion.criterioProrrateo].ayuda}
+          {editable && ' Podés ajustar una unidad y la diferencia se reparte entre las demás.'}
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <RadioGroup
@@ -81,6 +84,8 @@ export function TarjetaProrrateo({ liquidacion, editable, onCambiar }: TarjetaPr
           {editable && <FieldDescription>Se guarda al salir del campo.</FieldDescription>}
         </Field>
 
+        <Indicadores liquidacion={liquidacion} />
+
         <dl className="grid grid-cols-2 gap-3 border-t pt-4 text-sm">
           <div>
             <dt className="text-muted-foreground">Total de gastos</dt>
@@ -95,5 +100,42 @@ export function TarjetaProrrateo({ liquidacion, editable, onCambiar }: TarjetaPr
         </dl>
       </CardContent>
     </Card>
+  );
+}
+
+/** Unidades alcanzadas, suma de coeficientes y ajustes: lo que hay que mirar antes de emitir. */
+function Indicadores({ liquidacion }: { liquidacion: LiquidacionDetalle }) {
+  const { prorrateo } = liquidacion;
+  const calculada = liquidacion.estado !== 'BORRADOR';
+  const porCoeficiente = liquidacion.criterioProrrateo === 'COEFICIENTE';
+  // Por coeficiente tienen que cerrar en 100%; si no, el backend no deja calcular.
+  const cierra = Math.abs(prorrateo.sumaCoeficientes - 100) < 0.00005;
+  const faltan = calculada && prorrateo.unidadesAlcanzadas < prorrateo.unidadesActivas;
+
+  return (
+    <dl className="flex flex-col gap-2 border-t pt-4 text-sm">
+      <Fila
+        etiqueta="Unidades alcanzadas"
+        valor={calculada ? `${prorrateo.unidadesAlcanzadas} de ${prorrateo.unidadesActivas}` : `${prorrateo.unidadesActivas} activas`}
+        alerta={faltan}
+      />
+      {porCoeficiente && (
+        <Fila
+          etiqueta="Suma de coeficientes"
+          valor={porcentaje(prorrateo.sumaCoeficientes, 2)}
+          alerta={!cierra}
+        />
+      )}
+      <Fila etiqueta="Ajustes manuales" valor={String(prorrateo.ajustesManuales)} />
+    </dl>
+  );
+}
+
+function Fila({ etiqueta, valor, alerta = false }: { etiqueta: string; valor: string; alerta?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-muted-foreground">{etiqueta}</dt>
+      <dd className={`font-semibold tabular-nums ${alerta ? 'text-warning' : ''}`}>{valor}</dd>
+    </div>
   );
 }
