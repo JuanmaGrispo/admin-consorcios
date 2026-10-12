@@ -19,7 +19,7 @@ export class EnvioNotificacion {
   plantilla: string;
 
   @Column({ type: 'jsonb', name: 'payload', default: '{}' })
-  payload: Record<string, unknown>;
+  payload: object;
 
   @Column({ type: 'enum', enum: EstadoEnvio, enumName: 'estado_envio', name: 'estado', default: 'PENDIENTE' })
   estado: EstadoEnvio;

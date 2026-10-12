@@ -3,6 +3,7 @@
 
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { EstadoReclamo, TipoEventoReclamo } from './enums';
+import { Proveedor } from './proveedor.entity';
 import { Reclamo } from './reclamo.entity';
 import { Usuario } from './usuario.entity';
 
@@ -42,4 +43,11 @@ export class ReclamoEvento {
 
   @Column({ type: 'timestamptz', name: 'created_at', default: () => 'now()' })
   createdAt: Date;
+
+  @Column({ type: 'uuid', name: 'proveedor_id', nullable: true })
+  proveedorId: string | null;
+
+  @ManyToOne(() => Proveedor, undefined, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'proveedor_id' })
+  proveedor?: Proveedor | null;
 }

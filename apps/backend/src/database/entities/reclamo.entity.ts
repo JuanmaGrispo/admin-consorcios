@@ -74,6 +74,9 @@ export class Reclamo {
   @Column({ type: 'timestamptz', name: 'updated_at', default: () => 'now()' })
   updatedAt: Date;
 
+  @Column({ type: 'varchar', name: 'titulo', length: 80, nullable: true })
+  titulo: string | null;
+
   @OneToMany(() => Gasto, (row) => row.reclamo)
   gastos?: Gasto[];
 

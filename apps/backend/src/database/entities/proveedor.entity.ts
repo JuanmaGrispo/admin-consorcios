@@ -5,6 +5,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColum
 import { Consorcio } from './consorcio.entity';
 import { Gasto } from './gasto.entity';
 import { Reclamo } from './reclamo.entity';
+import { ReclamoEvento } from './reclamo_evento.entity';
 
 @Entity('proveedor')
 export class Proveedor {
@@ -47,4 +48,7 @@ export class Proveedor {
 
   @OneToMany(() => Reclamo, (row) => row.proveedor)
   reclamos?: Reclamo[];
+
+  @OneToMany(() => ReclamoEvento, (row) => row.proveedor)
+  reclamoEventos?: ReclamoEvento[];
 }

@@ -97,9 +97,13 @@ function tipoTs(col: Col, enums: Set<string>): string {
     case 'time':
     case 'timetz':
       return 'string';
+    // `object` y no `Record<string, unknown>`: con una columna json nullable,
+    // el tipo de `update()` de TypeORM (_QueryDeepPartialEntity) no acepta el
+    // Record, y eso rompe los update de toda entidad que llegue a ella por una
+    // relación. Quien la lee la valida y la tipa (ver reservas/horario.ts).
     case 'jsonb':
     case 'json':
-      return 'Record<string, unknown>';
+      return 'object';
     default:
       return 'string';
   }
