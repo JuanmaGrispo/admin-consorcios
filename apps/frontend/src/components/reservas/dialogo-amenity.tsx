@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError } from '@/lib/api';
 import type { Amenity, AmenityCambios } from '@/types/reserva';
+import { EditorHorarioSemanal, horarioParaEnviar, semanaEditable } from './editor-horario-semanal';
 import { ICONOS_AMENITY, iconoSugerido } from './icono-amenity';
 import { hhmm } from './tiempo';
 
@@ -69,6 +70,10 @@ function inicial(a?: Amenity) {
     lugares: String(a?.lugares ?? 1),
     horaApertura: a ? hhmm(a.horaApertura) : '10:00',
     horaCierre: a ? hhmm(a.horaCierre) : '22:00',
+    semana: semanaEditable(a?.horarioSemanal, {
+      apertura: a ? hhmm(a.horaApertura) : '10:00',
+      cierre: a ? hhmm(a.horaCierre) : '22:00',
+    }),
     franja: a?.duracionFranjaMinutos ? String(a.duracionFranjaMinutos) : 'libre',
     duracionMaximaHoras: a?.duracionMaximaHoras ? String(a.duracionMaximaHoras) : '',
     anticipacionMinimaHoras: String(a?.anticipacionMinimaHoras ?? 0),
@@ -109,6 +114,7 @@ function Formulario({
         lugares: Number(c.lugares),
         horaApertura: c.horaApertura,
         horaCierre: c.horaCierre,
+        horarioSemanal: horarioParaEnviar(c.semana),
         duracionFranjaMinutos: c.franja === 'libre' ? null : Number(c.franja),
         duracionMaximaHoras: numero(c.duracionMaximaHoras),
         anticipacionMinimaHoras: Number(c.anticipacionMinimaHoras),
@@ -193,6 +199,14 @@ function Formulario({
             onChange={(e) => set('horaCierre', e.target.value)}
           />
           <FieldDescription>Si cierra antes de abrir, es de madrugada: 10:00 a 02:00.</FieldDescription>
+        </Field>
+
+        <Field className="sm:col-span-2">
+          <FieldLabel>Horario por día</FieldLabel>
+          <FieldDescription>
+            Los días con el horario general abren y cierran como arriba. Cambiá los que abren distinto o no abren.
+          </FieldDescription>
+          <EditorHorarioSemanal semana={c.semana} onCambiar={(semana) => set('semana', semana)} />
         </Field>
 
         <Field>

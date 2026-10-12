@@ -1,3 +1,5 @@
+import type { HorarioSemanal } from '@/types/reserva';
+
 /**
  * Fechas de las reservas. El backend recibe fecha y hora "de pared" del
  * edificio y devuelve instantes; acá se pasa de una cosa a la otra. Los
@@ -82,4 +84,24 @@ export function nombreDelMes(mes: string): string {
 /** Una reserva como la dice el prototipo: "Domingo 13/09/2026 · 20:00 a 02:00". */
 export function cuando(inicio: string, fin: string): string {
   return `${fechaLarga(fechaDe(inicio))} · ${horaDe(inicio)} a ${horaDe(fin)}`;
+}
+
+/** "1" lunes … "7" domingo, en el orden de la semana: las claves de `horarioSemanal`. */
+export const DIAS_ISO = ['1', '2', '3', '4', '5', '6', '7'] as const;
+
+/** "1" → "Lunes". */
+export const nombreDiaIso = (dia: string) => mayuscula(DIAS[Number(dia) % 7]);
+
+/**
+ * El horario de una fecha: el general, el del día si tiene uno propio, o null
+ * si ese día está cerrado. La misma regla que `horasDelDia` del backend.
+ */
+export function horasDelDia(
+  amenity: { horaApertura: string; horaCierre: string; horarioSemanal: HorarioSemanal | null },
+  fecha: string,
+): { horaApertura: string; horaCierre: string } | null {
+  const propio = amenity.horarioSemanal?.[String(diaDeLaSemana(fecha) || 7)];
+  if (propio === undefined) return { horaApertura: amenity.horaApertura, horaCierre: amenity.horaCierre };
+  if (propio === null) return null;
+  return { horaApertura: propio.apertura, horaCierre: propio.cierre };
 }

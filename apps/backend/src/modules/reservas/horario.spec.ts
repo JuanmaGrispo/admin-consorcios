@@ -11,6 +11,10 @@ import {
   largoDeVentana,
   tramosLlenos,
   validarFranja,
+  horasDelDia,
+  diaAnterior,
+  diaDeLaSemana,
+  leerHorarioSemanal,
 } from './horario';
 
 const PARRILLA = { horaApertura: '10:00', horaCierre: '22:00', duracionMaximaHoras: 4 };
@@ -230,5 +234,48 @@ describe('varios lugares', () => {
     assert.equal(estadoDelDia(ventana, una, h('08:00'), tramosLlenos(una, 2)), 'PARCIAL');
     const dos = [...una, { inicio: h('10:00'), fin: h('22:00') }];
     assert.equal(estadoDelDia(ventana, dos, h('08:00'), tramosLlenos(dos, 2)), 'SIN_LUGAR');
+  });
+});
+
+describe('horario por día', () => {
+  // El SUM abre de 10 a 22, salvo el viernes (5) hasta las 02 y el domingo (7) cerrado.
+  const SUM_SEMANAL = {
+    horaApertura: '10:00',
+    horaCierre: '22:00',
+    horarioSemanal: { '5': { apertura: '10:00', cierre: '02:00' }, '7': null },
+  };
+  // 2026-09-11 es viernes; 2026-09-12, sábado; 2026-09-13, domingo.
+  const dias = (fecha: string) => ({
+    hoy: horasDelDia(SUM_SEMANAL, fecha),
+    ayer: horasDelDia(SUM_SEMANAL, diaAnterior(fecha)),
+  });
+  const ventana = { ...SUM_SEMANAL, duracionMaximaHoras: null };
+
+  it('cada día usa el suyo, el general o ninguno', () => {
+    assert.equal(diaDeLaSemana('2026-09-11'), 5);
+    assert.deepEqual(horasDelDia(SUM_SEMANAL, '2026-09-11'), { horaApertura: '10:00', horaCierre: '02:00' });
+    assert.deepEqual(horasDelDia(SUM_SEMANAL, '2026-09-12'), { horaApertura: '10:00', horaCierre: '22:00' });
+    assert.equal(horasDelDia(SUM_SEMANAL, '2026-09-13'), null);
+  });
+
+  it('el viernes se reserva hasta las 02 y el sábado no', () => {
+    assert.equal(validarFranja('22:00', '02:00', ventana, dias('2026-09-11')), null);
+    assert.equal(validarFranja('22:00', '02:00', ventana, dias('2026-09-12')), 'FUERA_DE_HORARIO');
+  });
+
+  it('la madrugada del sábado es la noche del viernes', () => {
+    assert.equal(validarFranja('00:30', '01:30', ventana, dias('2026-09-12')), null);
+    assert.equal(validarFranja('00:30', '01:30', ventana, dias('2026-09-13')), 'FUERA_DE_HORARIO');
+  });
+
+  it('el día cerrado no se reserva', () => {
+    assert.equal(validarFranja('12:00', '14:00', ventana, dias('2026-09-13')), 'FUERA_DE_HORARIO');
+  });
+
+  it('valida el formato del horario semanal', () => {
+    assert.equal(leerHorarioSemanal(null).horario, null);
+    assert.ok(leerHorarioSemanal({ '8': null }).error);
+    assert.ok(leerHorarioSemanal({ '1': { apertura: '25:00', cierre: '02:00' } }).error);
+    assert.deepEqual(leerHorarioSemanal({ '7': null }).horario, { '7': null });
   });
 });

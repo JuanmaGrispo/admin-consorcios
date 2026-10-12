@@ -120,6 +120,7 @@ function crearEntorno(amenityExtra: Partial<Amenity> = {}, ahora = new Date('202
     findAmenityById: async () => amenity,
     findUnidad: async () => ({ id: 'u1', consorcioId: 'c1', activa: true }),
     unidadesDelUsuario: async () => ['u1'],
+    consorciosDelUsuario: async () => ['c1'],
     // Argentina es UTC-3 todo el año: alcanza para armar instantes en el test.
     instantes: async (fecha: string, hi: string, hf: string) => {
       const inicio = new Date(`${fecha}T${hi.slice(0, 5)}:00-03:00`);
@@ -217,5 +218,41 @@ describe('ReservasService — lugares', () => {
     const b = await reservar(service, '12:00', '16:00');
     assert.equal((await service.aprobar(admin, a.id)).estado, EstadoReserva.APROBADA);
     assert.equal((await service.aprobar(admin, b.id)).estado, EstadoReserva.APROBADA);
+  });
+});
+
+describe('ReservasService — horario por día', () => {
+  // De 10 a 22, el viernes 11/09 hasta las 02 y el domingo 13/09 cerrado.
+  const semanal = { horarioSemanal: { '5': { apertura: '10:00', cierre: '02:00' }, '7': null } };
+  const reservar = (service: ReservasService, fecha: string, horaInicio: string, horaFin: string) =>
+    service.crear(vecino, { amenityId: 'am1', fecha, horaInicio, horaFin });
+
+  it('cada día se reserva con su horario', async () => {
+    const { service } = crearEntorno(semanal);
+    assert.ok(await reservar(service, '2026-09-11', '22:00', '02:00'));
+    await assert.rejects(reservar(service, '2026-09-12', '22:00', '23:00'), /abre ese día de 10:00 a 22:00/);
+    await assert.rejects(reservar(service, '2026-09-13', '12:00', '14:00'), /no abre ese día/);
+  });
+
+  it('la disponibilidad de un día cerrado no ofrece nada', async () => {
+    const { service } = crearEntorno({ ...semanal, duracionFranjaMinutos: 240 });
+    const cerrado = await service.disponibilidad(vecino, 'am1', { fecha: '2026-09-13' });
+    assert.equal(cerrado.cerrado, true);
+    assert.deepEqual(cerrado.franjas, []);
+    const viernes = await service.disponibilidad(vecino, 'am1', { fecha: '2026-09-11' });
+    assert.equal(viernes.horaCierre, '02:00');
+    assert.equal(viernes.franjas?.length, 4);
+  });
+
+  it('rechaza un horario por día mal armado o que no entra la franja', async () => {
+    const { service } = crearEntorno({ duracionFranjaMinutos: 240 });
+    await assert.rejects(
+      service.actualizarAmenity(admin, 'am1', { horarioSemanal: { '9': null } as never }),
+      /no es un día de la semana/,
+    );
+    await assert.rejects(
+      service.actualizarAmenity(admin, 'am1', { horarioSemanal: { '1': { apertura: '10:00', cierre: '12:00' } } }),
+      /franja no puede ser más larga/,
+    );
   });
 });

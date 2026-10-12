@@ -1,8 +1,17 @@
 import type { Amenity } from '@/types/reserva';
-import { hhmm } from './tiempo';
+import { DIAS_ISO, hhmm, nombreDiaIso } from './tiempo';
 
 /** "10:00 a 02:00". */
 export const horario = (a: Amenity) => `${hhmm(a.horaApertura)} a ${hhmm(a.horaCierre)}`;
+
+/** Los días que abren distinto del general: "Viernes 10:00 a 02:00", "Domingo cerrado". */
+export function excepcionesDeHorario(a: Amenity): string[] {
+  return DIAS_ISO.flatMap((dia) => {
+    const propio = a.horarioSemanal?.[dia];
+    if (propio === undefined) return [];
+    return [`${nombreDiaIso(dia)} ${propio === null ? 'cerrado' : `${propio.apertura} a ${propio.cierre}`}`];
+  });
+}
 
 /**
  * La línea gris debajo del nombre (pantallas 05 y 14): "Cupo 30 · requiere

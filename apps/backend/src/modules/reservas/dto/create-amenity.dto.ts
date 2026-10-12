@@ -5,6 +5,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -13,6 +14,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import type { HorarioSemanal } from '../horario';
 
 const recortar = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -75,6 +77,15 @@ export class CreateAmenityDto {
   @IsOptional()
   @Matches(HORA, { message: 'horaCierre tiene que tener el formato HH:MM' })
   horaCierre?: string;
+
+  @ApiPropertyOptional({
+    example: { '5': { apertura: '10:00', cierre: '02:00' }, '7': null },
+    description:
+      'Excepciones al horario general por día de la semana (1 lunes … 7 domingo): otro horario, o null si ese día está cerrado. Los días que no figuran usan horaApertura y horaCierre. El servicio valida cada día.',
+  })
+  @IsOptional()
+  @IsObject({ message: 'horarioSemanal tiene que ser un objeto por día de la semana' })
+  horarioSemanal?: HorarioSemanal | null;
 
   @ApiPropertyOptional({ example: 24, default: 0, maximum: 720 })
   @IsOptional()

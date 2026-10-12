@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { pesos } from '@/lib/formato';
 import { cn } from '@/lib/utils';
 import type { Amenity, Bloqueo, Reserva } from '@/types/reserva';
-import { diaCorto, fechaCorta, fechaDe, horaDe, instante, sumarDias } from './tiempo';
+import { diaCorto, fechaCorta, fechaDe, horaDe, horasDelDia, instante, sumarDias } from './tiempo';
 
 /** Sin turnos fijos, la grilla igual se dibuja en bloques de 4 horas, como el prototipo. */
 const BLOQUE_POR_DEFECTO = 240;
@@ -31,11 +31,26 @@ function etiquetaHora(m: number): string {
   return mm ? `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}` : String(h).padStart(2, '0');
 }
 
-/** Las filas de la grilla: las franjas del amenity, de la apertura al cierre (que puede ser de madrugada). */
-function filas(amenity: Amenity): { desde: number; hasta: number }[] {
-  const apertura = minutos(amenity.horaApertura);
-  let cierre = minutos(amenity.horaCierre);
-  if (cierre <= apertura) cierre += 1440;
+/** La ventana de un día en minutos desde sus 00:00; el cierre de madrugada pasa de 1440. */
+function enMinutos(horas: { horaApertura: string; horaCierre: string }): { desde: number; hasta: number } {
+  const desde = minutos(horas.horaApertura);
+  const cierre = minutos(horas.horaCierre);
+  return { desde, hasta: cierre > desde ? cierre : cierre + 1440 };
+}
+
+/**
+ * Las filas de la grilla: las franjas del amenity, de la apertura más
+ * temprana al cierre más tarde de la semana (que puede ser de madrugada). Un
+ * día que abre menos muestra "Cerrado" en las franjas que no le tocan.
+ */
+function filas(amenity: Amenity, dias: string[]): { desde: number; hasta: number }[] {
+  const ventanas = dias.flatMap((d) => {
+    const horas = horasDelDia(amenity, d);
+    return horas ? [enMinutos(horas)] : [];
+  });
+  if (ventanas.length === 0) ventanas.push(enMinutos(amenity));
+  const apertura = Math.min(...ventanas.map((v) => v.desde));
+  const cierre = Math.max(...ventanas.map((v) => v.hasta));
   const paso = amenity.duracionFranjaMinutos ?? BLOQUE_POR_DEFECTO;
   const resultado = [];
   for (let m = apertura; m < cierre; m += paso) resultado.push({ desde: m, hasta: Math.min(m + paso, cierre) });
@@ -44,17 +59,27 @@ function filas(amenity: Amenity): { desde: number; hasta: number }[] {
 
 type Celda =
   | { tipo: 'libre'; pasada: boolean }
+  | { tipo: 'cerrado' }
   | { tipo: 'reserva'; reserva: Reserva; mas: number }
   | { tipo: 'bloqueo'; bloqueo: Bloqueo };
 
 const VIGENTES = ['PENDIENTE', 'APROBADA', 'FINALIZADA'];
 
-function celda(desde: Date, hasta: Date, reservas: Reserva[], bloqueos: Bloqueo[], ahora: Date): Celda {
+function celda(
+  desde: Date,
+  hasta: Date,
+  reservas: Reserva[],
+  bloqueos: Bloqueo[],
+  ahora: Date,
+  abierto: boolean,
+): Celda {
   const pisa = (i: string, f: string) => new Date(i) < hasta && new Date(f) > desde;
   const bloqueo = bloqueos.find((b) => pisa(b.desde, b.hasta));
   if (bloqueo) return { tipo: 'bloqueo', bloqueo };
+  // Una reserva hecha antes de cambiar el horario se sigue viendo aunque ese rato ya no abra.
   const tomadas = reservas.filter((r) => VIGENTES.includes(r.estado) && pisa(r.inicio, r.fin));
   if (tomadas.length) return { tipo: 'reserva', reserva: tomadas[0], mas: tomadas.length - 1 };
+  if (!abierto) return { tipo: 'cerrado' };
   return { tipo: 'libre', pasada: hasta <= ahora };
 }
 
@@ -137,7 +162,7 @@ export function CalendarioSemanal({
             </div>
           ))}
 
-          {filas(amenity).map((f) => (
+          {filas(amenity, dias).map((f) => (
             <Fragment key={f.desde}>
               <div className="flex items-center font-mono text-xs text-muted-foreground">
                 {etiquetaHora(f.desde)} a {etiquetaHora(f.hasta)}
@@ -146,10 +171,13 @@ export function CalendarioSemanal({
                 const desde = new Date(instante(d, '00:00').getTime() + f.desde * 60_000);
                 const hasta = new Date(instante(d, '00:00').getTime() + f.hasta * 60_000);
                 if (!reservas || !bloqueos) return <Skeleton key={d} className="h-11 rounded-lg" />;
+                const horas = horasDelDia(amenity, d);
+                const ventana = horas && enMinutos(horas);
+                const abierto = !!ventana && f.desde >= ventana.desde && f.hasta <= ventana.hasta;
                 return (
                   <CeldaSemana
                     key={d}
-                    celda={celda(desde, hasta, reservas, bloqueos, ahora)}
+                    celda={celda(desde, hasta, reservas, bloqueos, ahora, abierto)}
                     onBloqueo={onBloqueo}
                     onAprobar={onAprobar}
                     onRechazar={onRechazar}
@@ -174,6 +202,10 @@ interface CeldaSemanaProps {
 }
 
 function CeldaSemana({ celda: c, onBloqueo, onAprobar, onRechazar }: CeldaSemanaProps) {
+  if (c.tipo === 'cerrado') {
+    return <div className={cn(BASE, 'border-transparent bg-muted text-muted-foreground')}>Cerrado</div>;
+  }
+
   if (c.tipo === 'libre') {
     return <div className={cn(BASE, 'text-muted-foreground', c.pasada && 'opacity-50')}>Libre</div>;
   }

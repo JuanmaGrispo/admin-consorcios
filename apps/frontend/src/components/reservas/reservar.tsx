@@ -166,6 +166,8 @@ export function Reservar({ amenities, unidadId, onReservada }: ReservarProps) {
           </h2>
           {!dia ? (
             <Skeleton className="h-24 rounded-lg" />
+          ) : dia.cerrado ? (
+            <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">Ese día no abre.</p>
           ) : dia.franjas ? (
             dia.franjas.map((f) => {
               const elegida = franja?.desde === hhmm(f.horaInicio);
