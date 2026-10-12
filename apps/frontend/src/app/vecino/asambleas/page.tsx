@@ -1,7 +1,8 @@
 'use client';
 
 import { Landmark, Vote } from 'lucide-react';
-import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   TarjetaAsambleaVecino,
@@ -10,6 +11,7 @@ import {
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnidadActiva } from '@/components/vecino/unidad-activa';
 import { DialogoVotar } from '@/components/votaciones/dialogo-votar';
@@ -32,13 +34,23 @@ function porId<T extends { id: string }>(resultados: PromiseSettledResult<T>[]):
 
 export default function VecinoAsambleasPage() {
   const { unidad } = useUnidadActiva();
+  // useSearchParams necesita un Suspense para que la página se pueda prerenderizar.
   // Otra unidad es otra respuesta y otros votos: arranca de cero.
-  return <AsambleasYVotaciones key={unidad.id} />;
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <AsambleasYVotaciones key={unidad.id} />
+    </Suspense>
+  );
 }
 
-/** Asambleas y votaciones del edificio de la unidad activa (pantalla 15). */
+/**
+ * Asambleas y votaciones del edificio de la unidad activa (pantalla 15). El
+ * inicio linkea a una en particular: `?solapa=votaciones#votacion-<id>` abre la
+ * solapa y, cuando la tarjeta aparece, la trae a la vista.
+ */
 function AsambleasYVotaciones() {
   const { unidad, consorcio } = useUnidadActiva();
+  const params = useSearchParams();
   const [votando, setVotando] = useState<VotacionDetalle | null>(null);
 
   const listas = usePedido(
@@ -94,6 +106,15 @@ function AsambleasYVotaciones() {
   const anteriores = (asambleas ?? []).filter((a) => CERRADAS.includes(a.estado));
   const abiertas = (votaciones ?? []).filter((v) => v.estado === 'ABIERTA');
   const cerradas = (votaciones ?? []).filter((v) => v.estado === 'CERRADA');
+  const cargadas = asambleas !== null && votaciones !== null;
+  useEffect(() => {
+    if (!cargadas || !window.location.hash) return;
+    document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: 'start' });
+  }, [cargadas]);
+
+  /** "En asamblea · Asamblea ordinaria": el título sale del listado de asambleas. */
+  const tituloDe = (asambleaId: string | null) => asambleas?.find((a) => a.id === asambleaId)?.titulo;
+
   const porVotar = abiertas.filter((v) => detallesVotacion[v.id]?.misUnidades?.some((u) => !u.voto)).length;
 
   return (
@@ -107,7 +128,7 @@ function AsambleasYVotaciones() {
       )}
 
       {!error && (
-        <Tabs defaultValue="asambleas">
+        <Tabs defaultValue={params.get('solapa') === 'votaciones' ? 'votaciones' : 'asambleas'}>
           <TabsList className="w-full">
             <TabsTrigger value="asambleas">Asambleas</TabsTrigger>
             <TabsTrigger value="votaciones">
@@ -178,7 +199,13 @@ function AsambleasYVotaciones() {
             ) : (
               <>
                 {abiertas.map((v) => (
-                  <TarjetaVotacionVecino key={v.id} votacion={v} detalle={detallesVotacion[v.id]} onVotar={setVotando} />
+                  <TarjetaVotacionVecino
+                    key={v.id}
+                    votacion={v}
+                    tituloAsamblea={tituloDe(v.asambleaId)}
+                    detalle={detallesVotacion[v.id]}
+                    onVotar={setVotando}
+                  />
                 ))}
                 {cerradas.length > 0 && (
                   <>
@@ -189,6 +216,7 @@ function AsambleasYVotaciones() {
                       <TarjetaVotacionVecino
                         key={v.id}
                         votacion={v}
+                        tituloAsamblea={tituloDe(v.asambleaId)}
                         detalle={detallesVotacion[v.id]}
                         onVotar={setVotando}
                       />

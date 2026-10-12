@@ -2,7 +2,7 @@
 
 import { Megaphone, Pin, Wrench } from 'lucide-react';
 import Link from 'next/link';
-import { ProximosEventos } from '@/components/inicio/proximos-eventos';
+import { ProximosEventos, verTodoDe } from '@/components/inicio/proximos-eventos';
 import { TarjetaExpensas } from '@/components/inicio/tarjeta-expensas';
 import { IconoAmenity } from '@/components/reservas/icono-amenity';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -54,9 +54,10 @@ export default function VecinoInicioPage() {
   if (!inicio) return <EsqueletoInicio />;
 
   const mia = inicio.unidades.find((u) => u.id === unidad.id);
-  const eventos = inicio.proximosEventos
-    .filter((e) => (e.tipo === 'RESERVA' ? e.unidadId === unidad.id : e.consorcioId === consorcio.id))
-    .slice(0, EVENTOS);
+  const todosLosEventos = inicio.proximosEventos.filter((e) =>
+    e.tipo === 'RESERVA' ? e.unidadId === unidad.id : e.consorcioId === consorcio.id,
+  );
+  const eventos = todosLosEventos.slice(0, EVENTOS);
   const amenity = inicio.amenities.find((a) => a.consorcioId === consorcio.id);
   const novedades = inicio.novedades.filter((n) => n.consorcioId === consorcio.id).slice(0, NOVEDADES);
   const reclamos = mia?.reclamosAbiertos ?? 0;
@@ -96,7 +97,7 @@ export default function VecinoInicioPage() {
         )}
       </section>
 
-      <Seccion titulo="Próximos eventos" href="/vecino/asambleas" enlace="Ver todo">
+      <Seccion titulo="Próximos eventos" href={verTodoDe(todosLosEventos)} enlace="Ver todo">
         <ProximosEventos eventos={eventos} />
       </Seccion>
 

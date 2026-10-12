@@ -28,7 +28,7 @@ function renglonDe(e: EventoProximo): Renglon {
           e.miAsistencia === 'SIN_RESPONDER'
             ? `Confirmá tu asistencia${quorum}`
             : `${(e.miAsistencia && ASISTENCIA[e.miAsistencia]) ?? e.lugar ?? 'Asamblea del edificio'}${quorum}`,
-        href: '/vecino/asambleas',
+        href: `/vecino/asambleas#asamblea-${e.id}`,
       };
     }
     case 'RESERVA':
@@ -41,9 +41,19 @@ function renglonDe(e: EventoProximo): Renglon {
       return {
         titulo: `Votación: ${e.titulo}`,
         detalle: `Cierra el ${fechaDeInstante(e.fecha).slice(0, 5)} a las ${hora(e.fecha)}`,
-        href: '/vecino/asambleas',
+        href: `/vecino/asambleas?solapa=votaciones#votacion-${e.id}`,
       };
   }
+}
+
+/**
+ * A dónde lleva "Ver todo": si la lista es sólo de reservas, a las reservas; si
+ * es sólo de votaciones, a esa solapa; si no, a asambleas y votaciones.
+ */
+export function verTodoDe(eventos: EventoProximo[]): string {
+  if (eventos.length > 0 && eventos.every((e) => e.tipo === 'RESERVA')) return '/vecino/reservas';
+  if (eventos.length > 0 && eventos.every((e) => e.tipo === 'VOTACION')) return '/vecino/asambleas?solapa=votaciones';
+  return '/vecino/asambleas';
 }
 
 /** "Próximos eventos" del inicio (pantalla 10): asambleas, reservas y votaciones, el más cercano primero. */
