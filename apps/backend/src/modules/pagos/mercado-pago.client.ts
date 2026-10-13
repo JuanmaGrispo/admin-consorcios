@@ -73,6 +73,10 @@ export class MercadoPagoClient {
     const frontend = this.opcional('FRONTEND_URL') ?? 'http://localhost:3000';
     const vuelta = `${frontend.replace(/\/$/, '')}${this.opcional('MP_RETURN_PATH') ?? '/vecino/expensas/pago'}`;
     const notificacion = this.opcional('MP_NOTIFICATION_URL');
+    // Mercado Pago rechaza la preferencia entera ("invalid_auto_return") si la
+    // vuelta automática apunta a localhost. En local el vecino vuelve con el
+    // botón "Volver al sitio" y el front confirma el pago igual.
+    const vueltaLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(vuelta);
     const respuesta = await this.llamar<{ id: string; init_point: string }>(
       'POST',
       '/checkout/preferences',
@@ -86,7 +90,7 @@ export class MercadoPagoClient {
           pending: `${vuelta}?pago=pendiente`,
           failure: `${vuelta}?pago=rechazado`,
         },
-        auto_return: 'approved',
+        ...(vueltaLocal ? {} : { auto_return: 'approved' }),
       },
     );
     return { id: respuesta.id, initPoint: respuesta.init_point };
