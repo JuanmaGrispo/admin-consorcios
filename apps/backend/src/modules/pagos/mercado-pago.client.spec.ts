@@ -52,4 +52,16 @@ describe('MercadoPagoClient.crearPreferencia', () => {
       'https://domus.app/vecino/expensas/pago?pago=rechazado',
     );
   });
+
+  // Mercado Pago rechaza la preferencia entera ("invalid_auto_return") si la
+  // vuelta automática apunta a localhost.
+  it('con la vuelta en localhost no pide auto_return', async () => {
+    await crear({ FRONTEND_URL: 'http://localhost:3000' });
+    assert.equal('auto_return' in cuerpo, false);
+  });
+
+  it('con una vuelta pública pide auto_return', async () => {
+    await crear({ FRONTEND_URL: 'https://domus.app' });
+    assert.equal(cuerpo.auto_return, 'approved');
+  });
 });
