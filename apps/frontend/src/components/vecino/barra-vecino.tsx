@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell, Check, ChevronDown, LogOut } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useNoLeidas } from '@/components/notificaciones/use-no-leidas';
 import { Badge } from '@/components/ui/badge';
@@ -37,7 +38,7 @@ export function BarraVecino() {
   return (
     <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-md items-center gap-2 px-4">
-        <div className="size-6 shrink-0 rounded-md bg-primary" />
+        <Image src="/logo-domus.png" alt="" width={24} height={24} className="shrink-0" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="min-w-0 flex-1 justify-start px-2">

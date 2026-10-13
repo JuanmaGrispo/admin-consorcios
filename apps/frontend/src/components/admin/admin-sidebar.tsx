@@ -1,6 +1,7 @@
 'use client';
 
 import { Check, ChevronsUpDown, Globe, LogOut } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -74,7 +75,7 @@ export function AdminSidebar() {
     <Sidebar>
       <SidebarHeader className="gap-3 px-3 pt-4 pb-2">
         <div className="flex items-center gap-2.5 px-1">
-          <div className="size-7 rounded-lg bg-primary" />
+          <Image src="/logo-domus.png" alt="" width={28} height={28} />
           <div className="leading-tight">
             <div className="text-[15px] font-semibold tracking-tight">Domus</div>
             <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">

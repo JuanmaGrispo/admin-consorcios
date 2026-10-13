@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -44,11 +45,23 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <main className="relative flex min-h-screen items-center justify-center px-4 py-12">
+      {/* Foto de fondo a todo el ancho. El scrim y el texto en blanco son fijos
+          porque van sobre la imagen, no sobre una superficie del design system. */}
+      <Image
+        src="/login-paisaje.jpg"
+        alt=""
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover"
+      />
+      <div className="absolute inset-0 bg-black/50" />
+
+      <div className="relative w-full max-w-sm">
         <div className="mb-6 flex items-center gap-2.5">
-          <div className="size-8 rounded-lg bg-primary" />
-          <span className="text-xl font-semibold tracking-tight">Domus</span>
+          <Image src="/logo-domus.png" alt="" width={32} height={32} priority />
+          <span className="text-xl font-semibold tracking-tight text-white">Domus</span>
         </div>
 
         <Card>

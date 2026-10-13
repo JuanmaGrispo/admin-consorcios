@@ -1,6 +1,7 @@
 'use client';
 
 import { Building2, LayoutDashboard, LogOut } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="px-4 pt-4 pb-2">
         <div className="flex items-center gap-2.5">
-          <div className="size-7 rounded-lg bg-primary" />
+          <Image src="/logo-domus.png" alt="" width={28} height={28} />
           <div className="leading-tight">
             <div className="text-[15px] font-semibold tracking-tight">Domus</div>
             <div className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
