@@ -112,3 +112,17 @@ describe('aCsv', () => {
     assert.ok(csv.includes('"Alquilada · L. Paz"'));
   });
 });
+
+describe('aCsv — inyección de fórmulas', () => {
+  it('un nombre que empieza con = + - @ sale como texto', () => {
+    for (const peligroso of ['=HYPERLINK("http://x")', '+1+1', '-2+3', '@SUM(A1)']) {
+      const csv = aCsv([fila({ propietario: { ...vecino('Juan', 'X'), nombre: peligroso } })]);
+      assert.ok(csv.includes(`"'${peligroso.replace(/"/g, '""')}`), peligroso);
+    }
+  });
+
+  it('un importe negativo sigue siendo número', () => {
+    const [, datos] = aCsv([fila({ saldo: -500 })]).split('\r\n');
+    assert.ok(datos.includes('"-500,00"'));
+  });
+});
