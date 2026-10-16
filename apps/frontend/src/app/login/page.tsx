@@ -38,7 +38,9 @@ export default function LoginPage() {
       setError(
         err instanceof ApiError && err.status === 401
           ? 'Email o contraseña incorrectos'
-          : 'No se pudo iniciar sesión. Probá de nuevo.',
+          : err instanceof ApiError && err.status === 429
+            ? err.message
+            : 'No se pudo iniciar sesión. Probá de nuevo.',
       );
       setEnviando(false);
     }

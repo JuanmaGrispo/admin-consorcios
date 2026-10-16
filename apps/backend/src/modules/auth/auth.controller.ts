@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Ip,
   Post,
   Res,
 } from '@nestjs/common';
@@ -37,12 +38,14 @@ export class AuthController {
   @ApiOperation({ summary: 'Inicia sesión: deja el JWT en una cookie httpOnly' })
   @ApiResponse({ status: 200, description: 'Cookie de sesión y datos del usuario' })
   @ApiResponse({ status: 401, description: 'Email o contraseña incorrectos' })
+  @ApiResponse({ status: 429, description: '5 fallos en 15 minutos por cuenta (20 por IP): bloqueo de 15 minutos' })
   async login(
     @Body() dto: LoginDto,
+    @Ip() ip: string,
     // passthrough: Nest sigue serializando el return; res es solo para la cookie.
     @Res({ passthrough: true }) res: Response,
   ): Promise<SesionIniciada> {
-    const sesion = await this.auth.login(dto);
+    const sesion = await this.auth.login(dto, ip);
 
     res.cookie(COOKIE_SESION, sesion.accessToken, {
       httpOnly: true,

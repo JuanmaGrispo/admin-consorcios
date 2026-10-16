@@ -5,6 +5,7 @@ import { RolUsuario, Usuario } from '../../database/entities';
 import { AuthRepository } from './auth.repository';
 import type { JwtPayload, UsuarioActual } from './auth.types';
 import { LoginDto } from './dto/login.dto';
+import { LimitadorLogin } from './limitador-login';
 import { BCRYPT_ROUNDS } from './password';
 
 /**
@@ -26,9 +27,11 @@ export class AuthService {
   constructor(
     private readonly usuarios: AuthRepository,
     private readonly jwt: JwtService,
+    private readonly limitador: LimitadorLogin,
   ) {}
 
-  async login(dto: LoginDto): Promise<SesionIniciada> {
+  async login(dto: LoginDto, ip?: string): Promise<SesionIniciada> {
+    this.limitador.exigirHabilitado(dto.email, ip);
     const usuario = await this.usuarios.findByEmail(dto.email);
 
     // Siempre se corre un bcrypt, exista el usuario o no (ver HASH_DUMMY).
@@ -40,8 +43,10 @@ export class AuthService {
     // Un solo mensaje para credenciales malas, usuario inexistente y usuario
     // dado de baja: decir cuál de los tres es sirve para enumerar cuentas.
     if (!usuario || !coincide || !usuario.activo) {
+      this.limitador.registrarFallo(dto.email, ip);
       throw new UnauthorizedException('Email o contraseña incorrectos');
     }
+    this.limitador.registrarExito(dto.email);
 
     return {
       accessToken: await this.firmarToken(usuario),

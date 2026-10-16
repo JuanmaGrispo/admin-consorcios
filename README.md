@@ -159,6 +159,14 @@ el login la setea, el logout la borra y el JS del frontend nunca la ve — eso
 neutraliza el robo de token por XSS. El header `Authorization: Bearer` sigue
 funcionando en paralelo para Swagger, scripts y clientes sin cookies.
 
+**Límite de intentos.** 5 logins fallidos en 15 minutos bloquean esa cuenta
+15 minutos, y 20 desde una misma IP bloquean esa IP (frena probar una
+contraseña contra muchas cuentas). Mientras dura el bloqueo, `/auth/login`
+responde 429 sin mirar la contraseña. Cuenta igual para emails que no existen:
+si no, el 429 revelaría cuáles sí. Un login correcto perdona los fallos de la
+cuenta. Vive en memoria (`limitador-login.ts`): cada instancia del backend
+cuenta por su lado y un reinicio lo pone en cero.
+
 ### Roles
 
 | Rol | Qué es |

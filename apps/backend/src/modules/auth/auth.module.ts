@@ -8,6 +8,7 @@ import { AuthController } from './auth.controller';
 import { AuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { LimitadorLogin } from './limitador-login';
 
 @Module({
   imports: [
@@ -28,7 +29,12 @@ import { JwtStrategy } from './jwt.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthRepository, JwtStrategy],
+  providers: [
+    AuthService,
+    AuthRepository,
+    JwtStrategy,
+    { provide: LimitadorLogin, useValue: new LimitadorLogin() },
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}
