@@ -105,11 +105,21 @@ export function ocupacionDe(fila: Pick<FilaCobranza, 'inquilino'>): string {
 }
 
 /**
+ * Excel ejecuta como fórmula un texto que empieza con =, +, - o @ (o con un
+ * tab/retorno). El nombre de un vecino lo escribe el vecino: se le antepone
+ * una comilla simple para que se lea como texto. Los importes (que pueden ser
+ * negativos) son números y se dejan como están.
+ */
+const neutralizarFormula = (texto: string) =>
+  /^[=+\-@\t\r]/.test(texto) && !/^-?\d+(,\d+)?$/.test(texto) ? `'${texto}` : texto;
+
+/**
  * Una celda de CSV. Se entrecomilla siempre: los nombres traen comas y los
  * importes, la coma decimal de es-AR. Las comillas internas se duplican, que
  * es como las escapa el formato.
  */
-const celda = (valor: string | number) => `"${String(valor).replace(/"/g, '""')}"`;
+const celda = (valor: string | number) =>
+  `"${neutralizarFormula(String(valor)).replace(/"/g, '""')}"`;
 
 /** Importe con coma decimal, para que Excel en es-AR lo lea como número. */
 const importe = (n: number) => n.toFixed(2).replace('.', ',');
