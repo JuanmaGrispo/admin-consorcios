@@ -1,4 +1,5 @@
 import { EstadoBoleta, MedioPago, VinculoUnidad } from '../../database/entities';
+import { archivoCsv, importe, linea } from '../../core/csv';
 import type { SituacionBoleta } from './dto/listar-boletas.query';
 
 /**
@@ -104,51 +105,31 @@ export function ocupacionDe(fila: Pick<FilaCobranza, 'inquilino'>): string {
   return `Alquilada · ${fila.inquilino.nombre.charAt(0)}. ${fila.inquilino.apellido}`;
 }
 
-/**
- * Excel ejecuta como fórmula un texto que empieza con =, +, - o @ (o con un
- * tab/retorno). El nombre de un vecino lo escribe el vecino: se le antepone
- * una comilla simple para que se lea como texto. Los importes (que pueden ser
- * negativos) son números y se dejan como están.
- */
-const neutralizarFormula = (texto: string) =>
-  /^[=+\-@\t\r]/.test(texto) && !/^-?\d+(,\d+)?$/.test(texto) ? `'${texto}` : texto;
-
-/**
- * Una celda de CSV. Se entrecomilla siempre: los nombres traen comas y los
- * importes, la coma decimal de es-AR. Las comillas internas se duplican, que
- * es como las escapa el formato.
- */
-const celda = (valor: string | number) =>
-  `"${neutralizarFormula(String(valor)).replace(/"/g, '""')}"`;
-
-/** Importe con coma decimal, para que Excel en es-AR lo lea como número. */
-const importe = (n: number) => n.toFixed(2).replace('.', ',');
-
-/**
- * La grilla como CSV con `;` de separador y BOM: así Excel en español lo abre
- * en columnas de una, sin pasar por el asistente de importación. Es CSV y no
- * .xlsx a propósito: un xlsx real pide una dependencia nueva y Excel abre este
- * archivo igual.
- */
-export function aCsv(filas: FilaCobranza[]): string {
-  const lineas = [
-    COLUMNAS.map(celda).join(';'),
+/** Las filas de la grilla como líneas de CSV. Las reusa la exportación de la liquidación. */
+export function lineasCobranza(filas: FilaCobranza[]): string[] {
+  return [
+    linea([...COLUMNAS]),
     ...filas.map((f) =>
-      [
-        celda(f.unidad.etiqueta),
-        celda(nombreDe(f.propietario)),
-        celda(ocupacionDe(f)),
-        celda(importe(f.coeficienteAplicado)),
-        celda(f.periodo),
-        celda(f.fechaVencimiento.split('-').reverse().join('/')),
-        celda(importe(f.emitido)),
-        celda(importe(f.pagado)),
-        celda(importe(f.saldo)),
-        celda(importe(f.interesesMora)),
-        celda(f.medio ?? ''),
-        celda(f.estado),
-      ].join(';'),
+      linea([
+        f.unidad.etiqueta,
+        nombreDe(f.propietario),
+        ocupacionDe(f),
+        importe(f.coeficienteAplicado),
+        f.periodo,
+        f.fechaVencimiento.split('-').reverse().join('/'),
+        importe(f.emitido),
+        importe(f.pagado),
+        importe(f.saldo),
+        importe(f.interesesMora),
+        f.medio ?? '',
+        f.estado,
+      ]),
     ),
   ];
-  return `﻿${lineas.join('\r\n')}\r\n`;
+}
+
+/** La grilla como CSV para Excel (`;`, coma decimal y BOM: ver core/csv.ts). */
+export function aCsv(filas: FilaCobranza[]): string {
+  const lineas = lineasCobranza(filas);
+  return archivoCsv(lineas);
 }
