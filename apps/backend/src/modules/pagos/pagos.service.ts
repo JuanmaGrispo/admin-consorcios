@@ -12,6 +12,7 @@ import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { ExpensasService } from '../expensas/expensas.service';
 import { ZONA_POR_DEFECTO } from '../reservas/horario';
+import { NumerosEnLetrasService } from '../numeros-en-letras/numeros-en-letras.service';
 import { ReservasService } from '../reservas/reservas.service';
 import { DestinoPagoDto } from './dto/destino-pago';
 import { aCentavos } from '../expensas/prorrateo';
@@ -58,6 +59,7 @@ export class PagosService {
     private readonly mercadoPago: MercadoPagoClient,
     private readonly notificador: Notificador,
     private readonly reservas: ReservasService,
+    private readonly letras: NumerosEnLetrasService,
   ) {}
 
   async listar(usuario: UsuarioActual, query: ListarPagosQuery): Promise<Pago[]> {
@@ -111,6 +113,7 @@ export class PagosService {
         ? `Seña ${reserva.amenity.nombre} · reserva del ${reserva.inicio.toLocaleDateString('es-AR', { timeZone: ZONA_POR_DEFECTO })}`
         : null,
       consorcio,
+      montoEnLetras: await this.letras.importe(pago.monto),
     });
     const numero = (pago.reciboNumero ?? pago.id).replace(/[^\w-]+/g, '');
     return { buffer, nombre: `recibo-${numero}.pdf` };

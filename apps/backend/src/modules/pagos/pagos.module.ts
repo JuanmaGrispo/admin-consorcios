@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Pago } from '../../database/entities';
 import { ConsorciosModule } from '../consorcios/consorcios.module';
 import { ExpensasModule } from '../expensas/expensas.module';
+import { NumerosEnLetrasModule } from '../numeros-en-letras/numeros-en-letras.module';
 import { ReservasModule } from '../reservas/reservas.module';
 import { MercadoPagoClient } from './mercado-pago.client';
 import { PagosController } from './pagos.controller';
@@ -18,6 +19,8 @@ import { PagosService } from './pagos.service';
     ConsorciosModule,
     // La seña de una reserva: si se puede cobrar y a quién avisarle.
     ReservasModule,
+    // El importe en letras del recibo, por SOAP.
+    NumerosEnLetrasModule,
   ],
   controllers: [PagosController],
   providers: [PagosService, PagosRepository, MercadoPagoClient],

@@ -33,6 +33,8 @@ export interface DatosRecibo {
   /** Qué se pagó si no es una boleta: "Seña SUM · reserva del 13/09/2026". */
   concepto?: string | null;
   consorcio: DatosConsorcio;
+  /** El importe en letras ("SON PESOS … CON 50/100"). */
+  montoEnLetras?: string;
 }
 
 const MARGEN = 50;
@@ -50,6 +52,7 @@ export function generarReciboPdf({
   periodo,
   concepto,
   consorcio,
+  montoEnLetras,
 }: DatosRecibo): Promise<Buffer> {
   const doc = new PDFDocument({ size: 'A4', margin: MARGEN });
   const partes: Buffer[] = [];
@@ -76,6 +79,9 @@ export function generarReciboPdf({
   // ── Importe ──
   doc.font('Helvetica').fontSize(9).fillColor('#555').text('Recibimos');
   doc.font('Helvetica-Bold').fontSize(22).fillColor('#000').text(pesos.format(pago.monto));
+  if (montoEnLetras) {
+    doc.font('Helvetica-Oblique').fontSize(9).fillColor('#555').text(montoEnLetras, { width: ANCHO });
+  }
   doc.moveDown();
 
   // ── Datos ──

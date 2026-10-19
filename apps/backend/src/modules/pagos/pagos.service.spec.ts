@@ -1,3 +1,4 @@
+import { NumerosEnLetrasService } from '../numeros-en-letras/numeros-en-letras.service';
 import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
@@ -179,6 +180,8 @@ describe('PagosService', () => {
       entorno.mercadoPago,
       entorno.notificador,
       entorno.reservas,
+      // El SOAP no se llama en los tests: las letras son cosméticas.
+      { importe: async () => 'SON PESOS CERO CON 00/100' } as unknown as NumerosEnLetrasService,
     );
   });
 
