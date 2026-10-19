@@ -1,4 +1,4 @@
-import { api, query } from '@/lib/api';
+import { api, descargar, query } from '@/lib/api';
 import type { Unidad, UnidadCambios, UnidadInput, Vinculo, VinculoInput } from '@/types/unidad';
 
 /** Una función por endpoint de /unidades. Los dos portales usan el mismo. */
@@ -8,6 +8,10 @@ export const unidadesService = {
     api<Unidad[]>(`/unidades${query(filtros)}`),
 
   obtener: (id: string) => api<Unidad>(`/unidades/${id}`),
+
+  /** El padrón del consorcio en CSV para Excel: unidades con propietarios e inquilinos vigentes. */
+  exportarPadron: (consorcioId: string) =>
+    descargar(`/unidades/exportar${query({ consorcioId })}`, 'padron.csv'),
 
   /** La etiqueta es única en el consorcio y los coeficientes activos no pueden pasar el 100%. */
   crear: (input: UnidadInput) =>
