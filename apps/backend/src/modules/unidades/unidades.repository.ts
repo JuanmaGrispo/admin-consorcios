@@ -127,6 +127,22 @@ export class UnidadesRepository {
       .getMany();
   }
 
+  /**
+   * Los vínculos vigentes de todas las unidades de un consorcio, con el
+   * vecino: el padrón sale en una sola consulta y no en una por unidad.
+   */
+  vinculosVigentesDeConsorcio(consorcioId: string): Promise<UnidadUsuario[]> {
+    return this.vinculos
+      .createQueryBuilder('v')
+      .innerJoin('v.unidad', 'unidad')
+      .leftJoinAndSelect('v.usuario', 'usuario')
+      .where('unidad.consorcioId = :consorcioId', { consorcioId })
+      .andWhere(VIGENTE)
+      .orderBy('v.esTitular', 'DESC')
+      .addOrderBy('v.desde', 'ASC')
+      .getMany();
+  }
+
   listarVinculos(unidadId: string, incluirTerminados: boolean): Promise<UnidadUsuario[]> {
     const qb = this.vinculos
       .createQueryBuilder('v')
