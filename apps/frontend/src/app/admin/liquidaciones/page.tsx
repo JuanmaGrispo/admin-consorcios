@@ -1,6 +1,16 @@
 'use client';
 
-import { ArrowRight, Calculator, Lock, Plus, RefreshCw, Send, Trash2, TriangleAlert } from 'lucide-react';
+import {
+  ArrowRight,
+  Calculator,
+  FileSpreadsheet,
+  Lock,
+  Plus,
+  RefreshCw,
+  Send,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -292,6 +302,17 @@ function DetalleLiquidacion({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <EstadoBadge dominio="liquidacion" estado={liquidacion.estado} />
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() =>
+              expensasService
+                .exportarLiquidacion(liquidacion.id)
+                .catch((err) => toast.error(err instanceof ApiError ? err.message : 'No se pudo exportar la liquidación.'))
+            }
+          >
+            <FileSpreadsheet data-icon="inline-start" />
+            Exportar a Excel
+          </Button>
           {editable && (
             <Button variant="ghost" className="text-destructive" onClick={() => setAccion('eliminar')}>
               <Trash2 data-icon="inline-start" />
