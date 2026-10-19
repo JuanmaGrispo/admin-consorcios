@@ -10,10 +10,12 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiProduces,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -23,6 +25,7 @@ import type { UsuarioActual as Usuario } from '../auth/auth.types';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import { CreateUnidadDto } from './dto/create-unidad.dto';
+import { ExportarPadronQuery } from './dto/exportar-padron.query';
 import { ListarUnidadesQuery } from './dto/listar-unidades.query';
 import { UpdateUnidadDto } from './dto/update-unidad.dto';
 import { VincularUsuarioDto } from './dto/vincular-usuario.dto';
@@ -46,6 +49,23 @@ export class UnidadesController {
   })
   listar(@UsuarioActual() usuario: Usuario, @Query() query: ListarUnidadesQuery) {
     return this.unidades.listar(usuario, query);
+  }
+
+  // Antes de `:id`: si no, "exportar" se tomaría como un id y fallaría el ParseUUIDPipe.
+  @Roles(RolUsuario.ADMINISTRADOR)
+  @Get('exportar')
+  @ApiOperation({
+    summary: 'El padrón en CSV',
+    description:
+      'Unidades del consorcio con propietarios e inquilinos vigentes y su contacto. CSV con `;` y BOM: Excel en español lo abre en columnas.',
+  })
+  @ApiProduces('text/csv')
+  async exportarPadron(@UsuarioActual() usuario: Usuario, @Query() query: ExportarPadronQuery) {
+    const { csv, nombre } = await this.unidades.exportarPadron(usuario, query);
+    return new StreamableFile(Buffer.from(csv, 'utf8'), {
+      type: 'text/csv; charset=utf-8',
+      disposition: `attachment; filename="${nombre}"`,
+    });
   }
 
   @Get(':id')

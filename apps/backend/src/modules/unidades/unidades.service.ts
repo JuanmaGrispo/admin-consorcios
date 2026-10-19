@@ -10,9 +10,11 @@ import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
 import { CreateUnidadDto } from './dto/create-unidad.dto';
+import { ExportarPadronQuery } from './dto/exportar-padron.query';
 import { ListarUnidadesQuery } from './dto/listar-unidades.query';
 import { UpdateUnidadDto } from './dto/update-unidad.dto';
 import { VincularUsuarioDto } from './dto/vincular-usuario.dto';
+import { aCsvPadron } from './padron';
 import { UnidadesRepository } from './unidades.repository';
 
 /** El vínculo como sale por la API: el usuario recortado, nunca con su hash. */
@@ -71,6 +73,36 @@ export class UnidadesService {
       const v = porUnidad.get(u.id);
       return { ...u, miVinculo: v ? { vinculo: v.vinculo, esTitular: v.esTitular } : null };
     });
+  }
+
+  /** El padrón del consorcio en CSV para Excel: unidades con propietarios e inquilinos vigentes. */
+  async exportarPadron(
+    usuario: UsuarioActual,
+    query: ExportarPadronQuery,
+  ): Promise<{ csv: string; nombre: string }> {
+    // 404 y no 403, como el resto del módulo: un 403 confirmaría que el consorcio existe.
+    if (!gestiona(usuario, query.consorcioId)) {
+      throw new NotFoundException(`Consorcio ${query.consorcioId} no existe`);
+    }
+    const consorcio = await this.consorcios.findOne(query.consorcioId);
+    const [unidades, vinculos] = await Promise.all([
+      this.unidades.listar({
+        consorcioId: query.consorcioId,
+        incluirInactivas: query.incluirInactivas ?? false,
+      }),
+      this.unidades.vinculosVigentesDeConsorcio(query.consorcioId),
+    ]);
+    // "Av. Rivadavia 4820" → "av-rivadavia-4820": sin tildes ni espacios, que el nombre de archivo los rompe.
+    const edificio = consorcio.nombre
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^\w]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .toLowerCase();
+    return {
+      csv: aCsvPadron(unidades, vinculos),
+      nombre: `padron-${edificio}-${new Date().toISOString().slice(0, 10)}.csv`,
+    };
   }
 
   async findOne(usuario: UsuarioActual, id: string): Promise<Unidad> {
