@@ -744,6 +744,31 @@ se numera y el aviso sale una sola vez aunque lleguen juntos. En local, el webho
 `http://localhost:4000/api/pagos/webhook/mercadopago`. Sin token, la
 preferencia responde 503 y el resto de la app anda igual.
 
+### Importe en letras (SOAP)
+
+La boleta y el recibo en PDF llevan el importe escrito como en un comprobante
+argentino: `SON PESOS CIENTO CUARENTA Y CINCO MIL TRESCIENTOS VEINTE CON 50/100`.
+En la boleta va lo que queda por pagar; en el recibo, lo que se pagó.
+
+Las letras salen del servicio SOAP público **NumberConversion** (operación
+`NumberToWords`), encapsulado en el módulo `numeros-en-letras`:
+
+- `NumberConversionClient` arma el sobre SOAP a mano —es una sola operación con
+  un parámetro: un cliente con WSDL sería una dependencia entera para esto— y
+  corta a los 3 segundos.
+- El servicio sólo contesta en inglés. `NumerosEnLetrasService` lee esa
+  respuesta como número, verifica que sea el importe pedido y la escribe en
+  español. Los centavos van como fracción (`CON 50/100`).
+- **Es cosmético y nunca corta el PDF**: si el servicio no contesta, contesta
+  un error o un número distinto, las letras se escriben localmente (el
+  respaldo que prevé `docs/producto.md`) y queda un aviso en el log.
+- Lo que el servicio ya verificó se recuerda en memoria (hasta 500 importes):
+  las expensas de un edificio repiten montos todo el mes. Una caída no se
+  recuerda, así que el pedido siguiente vuelve a preguntar.
+
+`NUMBER_CONVERSION_URL` es opcional: por defecto apunta al servicio de
+DataAccess.
+
 ## Reservas de amenities
 
 El vecino reserva el SUM desde su portal y el administrador gestiona esas
