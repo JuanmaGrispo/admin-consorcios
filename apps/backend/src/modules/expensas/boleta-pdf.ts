@@ -29,6 +29,8 @@ export function generarBoletaPdf(
   boleta: Boleta,
   consorcio: DatosConsorcio,
   pagado: number,
+  /** Lo que queda por pagar, en letras ("SON PESOS … CON 50/100"). */
+  enLetras?: string,
 ): Promise<Buffer> {
   const doc = new PDFDocument({ size: 'A4', margin: MARGEN });
   const partes: Buffer[] = [];
@@ -91,6 +93,10 @@ export function generarBoletaPdf(
   if (pagado > 0) {
     fila('Pagado', pagado);
     fila('Saldo', aPesos(Math.max(0, aCentavos(boleta.total) - aCentavos(pagado))), true);
+  }
+  if (enLetras) {
+    doc.moveDown(0.5).font('Helvetica-Oblique').fontSize(9).fillColor('#555');
+    doc.text(enLetras, MARGEN, doc.y, { width: ANCHO });
   }
 
   if (consorcio.cbu) {

@@ -34,6 +34,7 @@ import { ListarBoletasQuery } from './dto/listar-boletas.query';
 import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
 import { UpdateLiquidacionDto } from './dto/update-liquidacion.dto';
+import { NumerosEnLetrasService } from '../numeros-en-letras/numeros-en-letras.service';
 import { generarBoletaPdf } from './boleta-pdf';
 import {
   aCsv,
@@ -143,6 +144,7 @@ export class ExpensasService {
     private readonly notificador: Notificador,
     private readonly archivos: ArchivosService,
     private readonly eventos: PublicadorEventos,
+    private readonly letras: NumerosEnLetrasService,
   ) {}
 
   // ── Liquidaciones ──────────────────────────────────────────────────────────
@@ -541,7 +543,10 @@ export class ExpensasService {
   async pdfBoleta(usuario: UsuarioActual, id: string): Promise<{ buffer: Buffer; nombre: string }> {
     const boleta = await this.findBoleta(usuario, id);
     const consorcio = await this.consorcios.findOne(boleta.liquidacion.consorcioId);
-    const buffer = await generarBoletaPdf(boleta, consorcio, await this.expensas.pagadoDe(id));
+    const pagado = await this.expensas.pagadoDe(id);
+    // En letras va lo que queda por pagar: es lo que el vecino tiene que transferir.
+    const aPagar = aPesos(Math.max(0, aCentavos(boleta.total) - aCentavos(pagado)));
+    const buffer = await generarBoletaPdf(boleta, consorcio, pagado, await this.letras.importe(aPagar));
     const etiqueta = boleta.unidad.etiqueta.replace(/[^\w-]+/g, '');
     return { buffer, nombre: `expensas-${boleta.liquidacion.periodo.slice(0, 7)}-${etiqueta}.pdf` };
   }

@@ -11,6 +11,7 @@ import {
 } from '../../database/entities';
 import { ArchivosModule } from '../archivos/archivos.module';
 import { ConsorciosModule } from '../consorcios/consorcios.module';
+import { NumerosEnLetrasModule } from '../numeros-en-letras/numeros-en-letras.module';
 import { ProveedoresModule } from '../proveedores/proveedores.module';
 import { ReclamosModule } from '../reclamos/reclamos.module';
 import { RubrosGastoModule } from '../rubros-gasto/rubros-gasto.module';
@@ -37,6 +38,8 @@ import { ExpensasService } from './expensas.service';
     RubrosGastoModule,
     ProveedoresModule,
     ReclamosModule,
+    // El "SON PESOS … CON 50/100" de la boleta, por SOAP.
+    NumerosEnLetrasModule,
   ],
   controllers: [ExpensasController],
   providers: [ExpensasService, ExpensasRepository],
