@@ -39,7 +39,7 @@ pre { background: #f6f5f2; border: 1px solid #e6e3dd; padding: 8pt; font-size: 9
 code { font-family: Consolas, monospace; }
 a { color: #2f5aa8; text-decoration: none; }
 figure { margin: 6pt 0 10pt; break-inside: avoid; }
-figure img { max-width: 100%; border: 1px solid #e6e3dd; }
+figure img { max-width: 100%; max-height: 120mm; border: 1px solid #e6e3dd; }
 figcaption { font-size: 9pt; color: #7a746b; margin-top: 2pt; }
 .pendiente { border: 1.5px dashed #c9c6bf; background: #fbfaf8; color: #7a746b; padding: 22pt 10pt; text-align: center; font-size: 9.5pt; }
 """
