@@ -70,8 +70,9 @@ Sólo se puede pagar la boleta más reciente de tu unidad: incluye la deuda de l
 
 1. Andá a **Reclamos** y tocá **Nuevo reclamo**.
 2. Completá **Título**, **Categoría** y **Descripción**, y sumá hasta 5 fotos.
-3. Envialo. Te llega un mail con el número de reclamo.
+3. Tocá **Enviar reclamo**. Te llega un mail con el número de reclamo.
 4. En **Reclamos** seguís el estado y la conversación con la administración. Cada cambio te llega como aviso.
+5. Para responder, abrí el reclamo, escribí tu mensaje y tocá **Enviar**. Un reclamo resuelto no acepta mensajes hasta que la administración lo reabre.
 
 ![Nuevo reclamo](capturas/05-vecino-nuevo-reclamo.png)
 
@@ -103,6 +104,12 @@ Sólo se puede pagar la boleta más reciente de tu unidad: incluye la deuda de l
 
 La campana muestra cuántos avisos tenés sin leer. Tocá uno para ir a su pantalla; queda marcado como leído. **Marcar todas como leídas** deja la campana en cero.
 
+### 3.8 Cómo leer las novedades del edificio
+
+1. En **Inicio**, la sección **Novedades del edificio** muestra las últimas. Tocá **Ver muro** para ver todas; también se llega desde **Perfil**, en **Novedades del edificio**.
+2. Las novedades fijadas aparecen primero. Pueden traer adjuntos, como un PDF o una foto.
+3. Al abrir una novedad queda marcada como leída, y la administración ve cuántos vecinos la leyeron.
+
 ## 4. Tu primera liquidación (tutorial para el administrador)
 
 Vas a cargar los gastos del mes, revisar las boletas y emitirlas.
@@ -128,13 +135,21 @@ Una liquidación emitida no se puede editar ni borrar. Si hubo un error, se corr
 4. Indicá si es propietario o inquilino y si es el titular. Hay un solo titular por unidad.
 5. Cuando alguien se muda, terminá su vínculo: deja de ver la unidad en el momento.
 
-### 5.2 Cómo registrar un pago por transferencia
+### 5.2 Cómo corregir los datos de un vecino o darle una contraseña nueva
+
+1. Andá a **Usuarios y vecinos** y buscalo por nombre, apellido o email. Sólo ves a los vecinos de tus consorcios.
+2. En la fila del vecino, usá **Editar datos** para corregir nombre, teléfono o email. Con el email nuevo entra desde la próxima vez; no se puede usar uno que ya tiene otra cuenta.
+3. Usá **Nueva contraseña** para asignarle una, por ejemplo si se la olvidó. Conviene que después la cambie desde su Perfil.
+
+Dar de baja una cuenta le corresponde al superadministrador: si un vecino se muda, terminá su vínculo con la unidad (guía 5.1).
+
+### 5.3 Cómo registrar un pago por transferencia
 
 1. Andá a **Cobranzas** y buscá la unidad.
 2. Tocá **Registrar pago**, cargá el monto, el medio y la fecha.
 3. El pago se registra aprobado y genera su recibo. No se puede cargar más que el saldo de la boleta.
 
-### 5.3 Cómo seguir la cobranza y enviar recordatorios
+### 5.4 Cómo seguir la cobranza y enviar recordatorios
 
 1. En **Cobranzas** ves lo emitido, lo cobrado, el saldo pendiente y los intereses del período.
 2. Filtrá por pendientes, pagados o vencidos, o buscá por unidad o por propietario. Podés exportar la grilla a Excel.
@@ -142,7 +157,7 @@ Una liquidación emitida no se puede editar ni borrar. Si hubo un error, se corr
 
 ![Cobranzas](capturas/10-admin-cobranzas.png)
 
-### 5.4 Cómo atender un reclamo
+### 5.5 Cómo atender un reclamo
 
 1. Andá a **Reclamos**. La bandeja se ve como tablero o como lista.
 2. Abrí un reclamo y usá las acciones del detalle: **Asignar proveedor**, **Estado**, **Prioridad** y **Marcar resuelto**.
@@ -150,30 +165,53 @@ Una liquidación emitida no se puede editar ni borrar. Si hubo un error, se corr
 
 ![Detalle de un reclamo](capturas/11-admin-reclamo.png)
 
-### 5.5 Cómo administrar amenities y reservas
+### 5.6 Cómo administrar amenities y reservas
 
 1. Andá a **Amenities y reservas** y tocá **Nuevo amenity**: horario por día, turnos, capacidad, seña, aprobación y plazo de cancelación.
 2. En el calendario semanal aprobás o rechazás las reservas pendientes, y podés cancelar una aprobada que todavía no empezó.
 3. Para mantenimiento, tocá **Bloquear fechas**. Si hay reservas en esas fechas, marcá la opción para cancelarlas: se les avisa a los vecinos.
+4. Cuando una reserva con seña pagada termina, se cancela o se rechaza, aparece en **Señas a devolver**. Devolvé el dinero por fuera de la app y tocá **Marcar devuelta**: queda registrado y se le avisa al vecino.
 
-### 5.6 Cómo convocar una asamblea y cargar el acta
+### 5.7 Cómo convocar una asamblea y cargar el acta
 
 1. Andá a **Asambleas**, tocá **Nueva asamblea** y cargá fecha, modalidad y orden del día.
-2. Guardala como borrador y, cuando esté lista, tocá **Convocar**: los vecinos reciben la citación.
-3. El día de la asamblea, registrá la asistencia y los poderes; el quórum se actualiza en vivo.
-4. Al cerrar, descargá el borrador del acta y, una vez firmada, usá **Subir acta**.
+2. Guardala como borrador y, cuando esté lista, tocá **Convocar** (o **Crear y citar** para hacer las dos cosas juntas): los vecinos reciben la citación y aparece en el muro. Una asamblea convocada ya no se edita ni se borra.
+3. Si un propietario no puede ir, usá **Registrar poder** para que lo represente otra unidad del padrón.
+4. El día de la asamblea tocá **Iniciar** y registrá la asistencia de cada unidad; el quórum se actualiza en vivo.
+5. En las votaciones de la asamblea, usá **Cargar voto** para los votos presenciales de cada unidad.
+6. Cerrá las votaciones y tocá **Cerrar asamblea**: queda cerrada o cerrada sin quórum, según corresponda.
+7. Descargá el borrador del acta y, una vez firmada, usá **Subir acta**. Las asambleas cerradas con su acta forman el libro de actas.
 
-### 5.7 Cómo crear una votación
+### 5.8 Cómo crear una votación
 
 1. Andá a **Votaciones** y tocá **Nueva votación**: independiente o dentro de una asamblea.
 2. Definí opciones, mayoría, padrón y si bloquea a las unidades con deuda.
 3. Tocá **Publicar votación**. Al terminar, **Cerrar votación** calcula el resultado y avisa a los vecinos.
 
-### 5.8 Cómo publicar una novedad
+### 5.9 Cómo publicar una novedad
 
 1. Andá a **Novedades** y tocá **Nueva novedad**.
 2. Escribí el comunicado, sumá un adjunto si hace falta y elegí si queda fijado arriba.
 3. Tocá **Publicar**: los vecinos la ven en el muro y les llega por mail.
+4. Desde la lista podés editarla, fijarla o desfijarla, ver cuántos vecinos la leyeron y **Dar de baja** la que ya no corresponde.
+
+### 5.10 Cómo mantener los catálogos
+
+1. Andá a **Catálogos**. Tiene tres listas: categorías de reclamo, proveedores y rubros de gasto.
+2. Usá **Nueva categoría**, **Nuevo proveedor** o **Nuevo rubro** para cargar los de tu consorcio. Las marcadas como compartidas las administra el superadministrador y las ven todos los consorcios.
+3. Una categoría que ya usa algún reclamo, o un rubro que ya tiene gastos, no se puede borrar.
+4. Un proveedor que deja de trabajar con el edificio se da de baja: ya no se puede asignar a reclamos ni a gastos.
+
+### 5.11 Cómo leer el panel general
+
+1. Al ingresar entrás al **Panel general**, que resume todos tus consorcios.
+2. **Cobranza últimos 6 meses** compara lo emitido con lo cobrado.
+3. La lista de lo que requiere atención te lleva directo a cada pendiente: al tocar uno, la app se para en el consorcio que corresponde.
+4. **Actividad de hoy** muestra los reclamos abiertos, las reservas del día y las votaciones activas.
+5. **Mis consorcios** tiene el estado de cobranza del período de cada edificio y se puede exportar a Excel.
+6. La campana de **Notificaciones** muestra los avisos sin leer, por ejemplo una reserva que espera aprobación.
+
+![Panel general](capturas/12-admin-panel.png)
 
 ## 6. Guías del superadministrador
 

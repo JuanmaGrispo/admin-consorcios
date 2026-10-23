@@ -70,11 +70,17 @@ def item_con_imagenes(lineas: list[str]) -> str:
     return ' '.join(partes)
 
 
+def celda(contenido: str) -> str:
+    # Un código como "BR 01" o "RNF 10" no se parte en dos renglones.
+    estilo = ' style="white-space:nowrap"' if re.fullmatch(r'[A-Z]{2,3} \d\d', contenido) else ''
+    return f'<td{estilo}>{en_linea(contenido)}</td>'
+
+
 def tabla(filas: list[str]) -> str:
     celdas = [[c.strip() for c in f.strip().strip('|').split('|')] for f in filas]
     encabezado, cuerpo = celdas[0], celdas[2:]
     h = '<table><thead><tr>' + ''.join(f'<th>{en_linea(c)}</th>' for c in encabezado) + '</tr></thead><tbody>'
-    h += ''.join('<tr>' + ''.join(f'<td>{en_linea(c)}</td>' for c in fila) + '</tr>' for fila in cuerpo)
+    h += ''.join('<tr>' + ''.join(celda(c) for c in fila) + '</tr>' for fila in cuerpo)
     return h + '</tbody></table>'
 
 

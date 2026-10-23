@@ -24,7 +24,7 @@ Cada historia está trazada a un requisito de negocio (BR) y a los casos de prue
 ### HU 01. Pagar la boleta con Mercado Pago
 
 Como vecino, quiero pagar mi boleta con Mercado Pago, para no tener que transferir y después avisarle a la administración.
-**Traza:** BR 01. **Casos:** PAG01, PAG02, PAG05, PAG09.
+**Traza:** BR 01. **Casos:** PAG01 a PAG07, PAG09 a PAG11.
 
 ```gherkin
 Característica: Pago de expensas con Mercado Pago
@@ -50,7 +50,7 @@ Característica: Pago de expensas con Mercado Pago
 ### HU 02. Emitir la liquidación del mes
 
 Como administrador, quiero emitir la liquidación sólo después de revisar las boletas, para no generar deuda con errores.
-**Traza:** BR 02. **Casos:** LIQ01, LIQ08, LIQ11, LIQ13.
+**Traza:** BR 02. **Casos:** CON05, LIQ01 a LIQ08, LIQ11 a LIQ14.
 
 ```gherkin
 Característica: Emisión de la liquidación
@@ -92,7 +92,7 @@ Característica: Ajuste manual de una boleta
 ### HU 04. Abrir un reclamo con fotos
 
 Como vecino, quiero abrir un reclamo con fotos y seguir su estado, para no tener que reclamar varias veces.
-**Traza:** BR 03. **Casos:** REC01, REC02, REC09, SEG01.
+**Traza:** BR 03. **Casos:** REC01, REC02, REC09, SEG01, SEG02.
 
 ```gherkin
 Característica: Reclamos del vecino
@@ -111,7 +111,7 @@ Característica: Reclamos del vecino
 ### HU 05. Atender un reclamo
 
 Como administrador, quiero asignar un proveedor, cambiar la prioridad y el estado de un reclamo, para ordenar el trabajo y que el vecino sepa en qué está.
-**Traza:** BR 03. **Casos:** REC03, REC05, REC06, REC07.
+**Traza:** BR 03. **Casos:** REC03, REC05 a REC08.
 
 ```gherkin
 Característica: Gestión de reclamos
@@ -130,7 +130,7 @@ Característica: Gestión de reclamos
 ### HU 06. Enterarme de lo que pasa en el edificio
 
 Como vecino, quiero recibir un aviso cuando se emiten las expensas, se convoca una asamblea o se cierra una votación, para no depender de los carteles del ascensor.
-**Traza:** BR 04. **Casos:** LIQ09, ASA01, VOT12, NOV05, MSG02.
+**Traza:** BR 04. **Casos:** LIQ09, NOV05, NOV06, MSG01 a MSG03.
 
 ```gherkin
 Característica: Avisos a los vecinos
@@ -152,7 +152,7 @@ Característica: Avisos a los vecinos
 ### HU 07. Votar en una votación del consorcio
 
 Como vecino, quiero votar desde la app, para participar aunque no pueda ir a la asamblea.
-**Traza:** BR 05. **Casos:** VOT05, VOT06, VOT07, VOT09.
+**Traza:** BR 05. **Casos:** VOT05 a VOT07, VOT09.
 
 ```gherkin
 Característica: Votación
@@ -173,7 +173,7 @@ Característica: Votación
 ### HU 08. Reservar un amenity
 
 Como vecino, quiero reservar el SUM o la parrilla desde la app, para no coordinar por mensajes con el resto del edificio.
-**Traza:** BR 06. **Casos:** RES01, RES04, RES05, RES11.
+**Traza:** BR 06. **Casos:** RES02 a RES04, RES08, RES11.
 
 ```gherkin
 Característica: Reservas de amenities
@@ -189,6 +189,258 @@ Característica: Reservas de amenities
     Cuando intento cancelarla
     Entonces el sistema me pide que se lo pida a la administración
     Y el administrador sí puede cancelarla
+```
+
+### HU 09. Ingresar al portal de mi rol
+
+Como usuario, quiero ingresar con mi email y ver sólo lo que me corresponde, para que mis datos y los del edificio estén protegidos.
+**Traza:** BR 08. **Casos:** SES01 a SES05, USR08, SEG03.
+
+```gherkin
+Característica: Ingreso y alcance
+
+  Escenario: Cada rol entra a su portal
+    Dado un usuario con rol administrador
+    Cuando ingresa con su email y su contraseña
+    Entonces entra al panel general de sus consorcios
+
+  Escenario: Credenciales incorrectas
+    Cuando alguien ingresa con un email que no existe o una contraseña incorrecta
+    Entonces ve el mismo mensaje en los dos casos
+
+  Escenario: Recurso de otro consorcio
+    Dado un administrador del consorcio A
+    Cuando pide un reclamo del consorcio B
+    Entonces el sistema responde como si no existiera
+```
+
+### HU 10. Cargar unidades y vincular vecinos
+
+Como administrador, quiero cargar las unidades con su coeficiente y vincular a sus vecinos, para que cada uno vea sólo lo suyo.
+**Traza:** BR 07. **Casos:** UNI01 a UNI03, USR01 a USR03, USR09.
+
+```gherkin
+Característica: Unidades y vínculos
+
+  Escenario: Coeficientes por encima del 100 %
+    Dado un consorcio con 98 % de coeficientes asignados
+    Cuando cargo una unidad con coeficiente 5
+    Entonces el sistema la rechaza e indica cuánto queda disponible
+
+  Escenario: Vecino nuevo
+    Dado una unidad activa
+    Cuando sumo un vecino nuevo con una contraseña inicial
+    Entonces el vecino puede ingresar y ve esa unidad
+
+  Escenario: Fin del vínculo
+    Dado un inquilino vinculado a una unidad
+    Cuando termino su vínculo
+    Entonces deja de ver las expensas y los reclamos de esa unidad en el momento
+```
+
+### HU 11. Mantener los datos de los vecinos
+
+Como administrador, quiero buscar a los vecinos de mis consorcios, corregir sus datos y asignarles una contraseña nueva, para resolver pedidos sin intervención técnica.
+**Traza:** BR 07. **Casos:** USR04 a USR06.
+
+```gherkin
+Característica: Datos de los vecinos
+
+  Escenario: Email repetido
+    Dado un vecino de mi consorcio
+    Cuando le cambio el email por uno que ya usa otra cuenta
+    Entonces el sistema rechaza el cambio
+
+  Escenario: Contraseña nueva
+    Cuando le asigno una contraseña nueva a un vecino de mi consorcio
+    Entonces el vecino ingresa con esa contraseña
+```
+
+### HU 12. Mantener mi perfil y mis avisos
+
+Como usuario, quiero editar mis datos, cambiar mi contraseña y elegir qué avisos recibo por mail, para no recibir lo que no me interesa.
+**Traza:** BR 04. **Casos:** PER01 a PER04.
+
+```gherkin
+Característica: Perfil
+
+  Escenario: Cambio de contraseña con la actual equivocada
+    Cuando cambio mi contraseña escribiendo mal la actual
+    Entonces el cambio no se hace
+
+  Escenario: Apagar una categoría de avisos
+    Dado que apagué los mails de reclamos y reservas
+    Cuando se resuelve uno de mis reclamos
+    Entonces no recibo el mail
+    Y sigo recibiendo los mails de las demás categorías
+```
+
+### HU 13. Dar de alta consorcios y administradores
+
+Como superadministrador, quiero crear consorcios, asignarles un administrador y darlos de baja cuando corresponda, para operar la plataforma.
+**Traza:** BR 07. **Casos:** CON01 a CON04.
+
+```gherkin
+Característica: Consorcios
+
+  Escenario: Alta con administrador nuevo
+    Cuando creo un consorcio y, en el mismo formulario, un administrador nuevo
+    Entonces el administrador ve el consorcio en su selector
+
+  Escenario: Baja de un consorcio
+    Cuando apago el interruptor Activo de un consorcio
+    Entonces aparece como inactivo en el listado
+    Y puedo reactivarlo
+```
+
+### HU 14. Mantener los catálogos
+
+Como administrador, quiero administrar las categorías de reclamo, los proveedores y los rubros de gasto de mi consorcio, para clasificar reclamos y gastos.
+**Traza:** BR 03. **Casos:** CAT01 a CAT04.
+
+```gherkin
+Característica: Catálogos
+
+  Escenario: Categoría en uso
+    Dado una categoría de reclamo que usa algún reclamo
+    Cuando intento borrarla
+    Entonces el sistema lo rechaza
+
+  Escenario: Proveedor dado de baja
+    Dado un proveedor dado de baja
+    Cuando intento asignarlo a un reclamo o a un gasto
+    Entonces el sistema lo rechaza
+```
+
+### HU 15. Seguir la cobranza y registrar pagos manuales
+
+Como administrador, quiero ver quién pagó, registrar las transferencias y recordarles el vencimiento a los que deben, para cobrar a tiempo.
+**Traza:** BR 01. **Casos:** PAG08, PAG12 a PAG14.
+
+```gherkin
+Característica: Cobranzas
+
+  Escenario: Pago mayor al saldo
+    Dado una boleta con saldo de 400 pesos
+    Cuando registro un pago por transferencia de 500 pesos
+    Entonces el sistema lo rechaza porque supera el saldo
+
+  Escenario: Recordatorios
+    Cuando envío los recordatorios de vencimiento
+    Entonces les llegan sólo a los vecinos que todavía tienen saldo
+```
+
+### HU 16. Administrar los amenities
+
+Como administrador, quiero configurar los amenities, aprobar reservas, bloquear fechas por mantenimiento y registrar las señas devueltas, para ordenar el uso de los espacios comunes.
+**Traza:** BR 06. **Casos:** RES01, RES05 a RES07, RES09, RES10.
+
+```gherkin
+Característica: Administración de amenities
+
+  Escenario: Reserva con aprobación
+    Dado un amenity que requiere aprobación
+    Cuando un vecino reserva
+    Entonces la reserva queda pendiente y recibo la notificación
+    Y puedo aprobarla o rechazarla con un motivo
+
+  Escenario: Bloqueo que pisa reservas
+    Dado dos reservas aprobadas el sábado
+    Cuando bloqueo el sábado por mantenimiento
+    Entonces el sistema me avisa que hay reservas en esas fechas
+    Y sólo bloquea si confirmo cancelarlas
+```
+
+### HU 17. Convocar y realizar una asamblea
+
+Como administrador, quiero convocar una asamblea, registrar la asistencia y los poderes, y cargar el acta, para que las decisiones queden respaldadas.
+**Traza:** BR 05. **Casos:** ASA01 a ASA11.
+
+```gherkin
+Característica: Asambleas
+
+  Escenario: Convocatoria
+    Dado una asamblea en borrador con su orden del día
+    Cuando la convoco
+    Entonces los vecinos reciben la citación por mail y aparece en el muro
+    Y ya no se puede editar ni borrar
+
+  Escenario: Quórum
+    Dado una asamblea en curso
+    Cuando registro la asistencia de las unidades
+    Entonces el quórum se actualiza en vivo
+    Y al cerrarla queda cerrada o cerrada sin quórum según corresponda
+```
+
+### HU 18. Crear y cerrar una votación
+
+Como administrador, quiero crear votaciones, cargar los votos presenciales y cerrarlas, para que el resultado respete la mayoría elegida.
+**Traza:** BR 05. **Casos:** VOT01 a VOT04, VOT08, VOT10 a VOT12.
+
+```gherkin
+Característica: Administración de votaciones
+
+  Escenario: Publicar
+    Dado una votación independiente en borrador
+    Cuando la publico
+    Entonces los vecinos reciben el mail y aparece en el muro
+    Y ya no se puede editar
+
+  Escenario: Cierre por fecha
+    Dado una votación independiente que pasó su fecha de cierre
+    Cuando alguien la consulta
+    Entonces está cerrada y su resultado respeta la mayoría elegida
+```
+
+### HU 19. Publicar y leer novedades
+
+Como administrador, quiero publicar comunicados en el muro del edificio y saber cuántos vecinos los leyeron, para que la información llegue a todos.
+**Traza:** BR 04. **Casos:** NOV01 a NOV04.
+
+```gherkin
+Característica: Muro de novedades
+
+  Escenario: Comunicado con adjunto
+    Cuando publico un comunicado con un adjunto
+    Entonces los vecinos lo ven en el muro y les llega por mail
+
+  Escenario: Lecturas
+    Dado un comunicado publicado
+    Cuando un vecino lo lee
+    Entonces veo cuántos vecinos lo leyeron
+```
+
+### HU 20. Ver mi situación al entrar
+
+Como vecino, quiero ver al entrar mi boleta del mes, los próximos eventos y las últimas novedades, para saber qué tengo pendiente sin recorrer toda la app.
+**Traza:** BR 01. **Casos:** INI01 a INI04.
+
+```gherkin
+Característica: Inicio del vecino
+
+  Escenario: Resumen al entrar
+    Dado que tengo una boleta emitida y una asamblea convocada
+    Cuando entro a la app
+    Entonces veo el saldo de la boleta, la asamblea entre los próximos eventos y las últimas novedades
+
+  Escenario: Ir a un evento
+    Cuando toco un próximo evento
+    Entonces me lleva a su reserva, asamblea o votación
+```
+
+### HU 21. Ver el estado de todos mis consorcios
+
+Como administrador, quiero un panel con la cobranza y lo que requiere atención en todos mis consorcios, para decidir por dónde empezar el día.
+**Traza:** BR 01. **Casos:** PAN01, PAN02.
+
+```gherkin
+Característica: Panel general
+
+  Escenario: Resumen de la administración
+    Dado que administro dos consorcios
+    Cuando entro al panel general
+    Entonces veo la cobranza de los últimos seis meses, lo que requiere atención y la actividad de hoy
+    Y puedo exportar a Excel la tabla de mis consorcios
 ```
 
 ## 3. Reglas de negocio
@@ -239,20 +491,28 @@ En el repositorio, [docs/diseno-front.html](../diseno-front.html) tiene las pant
 
 ## 6. Matriz de trazabilidad
 
-| BR | HU | Criterio | Casos de prueba | Componente |
+Cada caso de prueba de la tabla de casos del proyecto aparece en una fila: los 117 quedan trazados a un requisito de negocio y a una historia de usuario.
+
+| BR | HU | Criterios | Casos de prueba | Componente |
 |---|---|---|---|---|
-| BR 01 | HU 01 | Pago aprobado | PAG01, PAG09 | MercadoPagoClient, PagosService |
-| BR 01 | HU 01 | Vuelvo antes que el aviso | PAG02 | PagosService (sincronizar) |
-| BR 01 | HU 01 | Aviso repetido | PAG05 | PagosService |
-| BR 02 | HU 02 | Emitir sin previsualizar | LIQ08 | Estados de la liquidación |
-| BR 02 | HU 02 | Emitir previsualizada | LIQ01, LIQ13 | ExpensasService, PublicadorEventos |
+| BR 01 | HU 01 | Pago aprobado, vuelta del checkout, aviso repetido, rechazo, reintegro, cobro de más, recibo, sólo la última boleta | PAG01, PAG02, PAG03, PAG04, PAG05, PAG06, PAG07, PAG09, PAG10, PAG11 | MercadoPagoClient, PagosService, EstadoCuentaService |
+| BR 01 | HU 15 | Pago manual, grilla, cabecera y recordatorios | PAG08, PAG12, PAG13, PAG14 | PagosService, ExpensasService |
+| BR 01 | HU 20 | Inicio y Mis expensas del vecino | INI01, INI02, INI03, INI04 | InicioService, EstadoCuentaService |
+| BR 01 | HU 21 | Panel general | PAN01, PAN02 | PanelService, EstadoCuentaService |
+| BR 02 | HU 02 | Vencimiento, gastos, cuotas, origen, coeficientes, fondo, comparación, emisión en orden, mora, cierre y PDF | CON05, LIQ01, LIQ02, LIQ03, LIQ04, LIQ05, LIQ06, LIQ07, LIQ08, LIQ11, LIQ12, LIQ13, LIQ14 | ExpensasService, estados de la liquidación, prorrateo |
 | BR 02 | HU 03 | Ajuste con y sin motivo | LIQ10 | ExpensasService, prorrateo |
-| BR 03 | HU 04 | Reclamo con fotos | REC01, REC02 | ReclamosService, ArchivosService |
-| BR 03 | HU 04 | Archivo que no es imagen | SEG01 | ArchivosService |
-| BR 03 | HU 05 | Asignar proveedor y nota interna | REC03, REC05 | ReclamosService |
-| BR 04 | HU 06 | Cierre de votación | VOT12, NOV05 | EmailNotificador, MuroNovedadesPublicador, BandejaNotificaciones |
-| BR 04 | HU 06 | Mail caído | MSG02 | Consumidor (reintentos y cola de fallidos) |
-| BR 05 | HU 07 | Un voto por unidad | VOT05, VOT06 | VotacionesService |
-| BR 05 | HU 07 | Bloqueo por deuda | VOT07 | VotacionesService, EstadoCuentaService |
-| BR 06 | HU 08 | Horario ocupado | RES04 | ReservasService |
-| BR 06 | HU 08 | Cancelar fuera de plazo | RES11 | ReservasService |
+| BR 03 | HU 04 | Reclamo con fotos, fotos descartadas, reclamos ajenos y archivos | REC01, REC02, REC09, SEG01, SEG02 | ReclamosService, ArchivosService |
+| BR 03 | HU 05 | Proveedor, nota interna, resolución, reapertura y bandeja | REC03, REC05, REC06, REC07, REC08 | ReclamosService |
+| BR 03 | HU 14 | Categorías, proveedores y rubros | CAT01, CAT02, CAT03, CAT04 | CategoriasReclamoService, ProveedoresService, RubrosGastoService |
+| BR 04 | HU 06 | Avisos por mail, campana y mensajería | LIQ09, NOV05, NOV06, MSG01, MSG02, MSG03 | PublicadorEventos, EmailNotificador, BandejaNotificaciones, Consumidor |
+| BR 04 | HU 12 | Perfil, contraseña y preferencias de aviso | PER01, PER02, PER03, PER04 | UsuariosService, EmailNotificador |
+| BR 04 | HU 19 | Comunicados, fijados, lecturas y bajas | NOV01, NOV02, NOV03, NOV04 | NovedadesService |
+| BR 05 | HU 07 | Un voto por unidad, padrón, deuda y voto anticipado | VOT05, VOT06, VOT07, VOT09 | VotacionesService, EstadoCuentaService |
+| BR 05 | HU 17 | Convocatoria, modalidad, borrador, recordatorio, asistencia, poderes, quórum, cierre y acta | ASA01, ASA02, ASA03, ASA04, ASA05, ASA06, ASA07, ASA08, ASA09, ASA10, ASA11 | AsambleasService, RecordatorioAsambleas |
+| BR 05 | HU 18 | Publicación, borrador, opciones, adjunto, conteo parcial, votos presenciales y cierre | VOT01, VOT02, VOT03, VOT04, VOT08, VOT10, VOT11, VOT12 | VotacionesService |
+| BR 06 | HU 08 | Horario del día, turnos, capacidad, deuda y cancelación | RES02, RES03, RES04, RES08, RES11 | ReservasService |
+| BR 06 | HU 16 | Configuración, aprobación, vencimiento de pendientes, calendario, señas y bloqueos | RES01, RES05, RES06, RES07, RES09, RES10 | ReservasService |
+| BR 07 | HU 10 | Unidades, coeficientes, vecinos y vínculos | UNI01, UNI02, UNI03, USR01, USR02, USR03, USR09 | UnidadesService, UsuariosService |
+| BR 07 | HU 11 | Búsqueda, datos y contraseña de los vecinos | USR04, USR05, USR06 | UsuariosService |
+| BR 07 | HU 13 | Alta y baja de consorcios | CON01, CON02, CON03, CON04 | ConsorciosService, UsuariosService |
+| BR 08 | HU 09 | Ingreso, sesión y alcance | SES01, SES02, SES03, SES04, SES05, USR08, SEG03 | AuthService, JwtAuthGuard, RolesGuard |

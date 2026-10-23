@@ -78,7 +78,9 @@ Priorizados con MoSCoW: **Must** es imprescindible para lanzar, **Should** es im
 | BR 04 | Los vecinos se enteran de cada hecho relevante del edificio sin mensajes manuales. | 95 % de los avisos entregados en menos de 5 minutos. | Should |
 | BR 05 | Las asambleas y votaciones tienen padrón, quórum y resultado verificables. | 100 % de los votos atados a una unidad, uno por unidad. | Should |
 | BR 06 | Los amenities se reservan sin superposiciones y con reglas claras de cancelación. | 0 reservas superpuestas sobre el mismo lugar. | Could |
-| BR 07 | Avisos por WhatsApp y notificaciones push. | Fuera de esta versión. | Won't |
+| BR 07 | La estructura de cada edificio (consorcios, administradores, unidades, vecinos y catálogos) se administra desde la app, sin intervención técnica. | 100 % de las altas, bajas y cambios hechos desde la app; sólo el primer superadministrador se crea por línea de comandos. | Must |
+| BR 08 | Cada persona accede sólo a lo que le corresponde: el administrador a sus consorcios y el vecino a sus unidades. | 0 accesos a datos de otro consorcio o de otra unidad en las pruebas de seguridad. | Must |
+| BR 09 | Avisos por WhatsApp y notificaciones push. | Fuera de esta versión. | Won't |
 
 ## 7. Supuestos, restricciones y dependencias
 

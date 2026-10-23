@@ -5,7 +5,7 @@ Fuente versionada de los tres documentos que se presentan junto con la demo en v
 | Documento | Qué pide la cátedra | Archivo |
 |---|---|---|
 | BRD | Objetivos medibles, alcance que incluye y excluye, stakeholders y al menos 5 BR priorizados con MoSCoW | [brd.md](brd.md) |
-| Documentación funcional | HU con criterios Gherkin, reglas de negocio y RNF, prototipo en Figma y matriz BR, HU y CP | [documentacion-funcional.md](documentacion-funcional.md) |
+| Documentación funcional | HU con criterios Gherkin, reglas de negocio y RNF, prototipo en Figma y matriz BR, HU y CP. Las 21 HU cubren todos los módulos y la matriz traza los 117 casos de prueba | [documentacion-funcional.md](documentacion-funcional.md) |
 | Manual de usuario | Al menos un tutorial y guías de las tareas principales por rol, capturas reales y errores frecuentes | [manual-usuario.md](manual-usuario.md) |
 
 ## Generar los PDF
@@ -33,6 +33,7 @@ Sólo usa Python y Chrome, sin dependencias. Los PDF quedan en `docs/checkpoint-
   | 09-admin-previsualizacion.png | Previsualización de boletas |
   | 10-admin-cobranzas.png | Cobranzas |
   | 11-admin-reclamo.png | Detalle de un reclamo en la bandeja del administrador |
+  | 12-admin-panel.png | Panel general del administrador |
 
 - **Enlace de Figma.** Completar en la sección 5 de la documentación funcional.
 - **Aprobaciones del BRD.** Completar la tabla de firmas de la sección 10.
