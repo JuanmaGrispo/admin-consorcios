@@ -25,7 +25,7 @@ import { calcularQuorum } from '../asambleas/quorum';
 import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
-import { ExpensasService } from '../expensas/expensas.service';
+import { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import { CreateVotacionDto } from './dto/create-votacion.dto';
 import { ListarVotacionesQuery } from './dto/listar-votaciones.query';
 import { ReemplazarOpcionesDto } from './dto/reemplazar-opciones.dto';
@@ -69,7 +69,7 @@ export class VotacionesService {
   constructor(
     private readonly votaciones: VotacionesRepository,
     private readonly consorcios: ConsorciosService,
-    private readonly expensas: ExpensasService,
+    private readonly estadoCuenta: EstadoCuentaService,
     private readonly archivos: ArchivosService,
     private readonly notificador: Notificador,
     private readonly eventos: PublicadorEventos,
@@ -134,7 +134,7 @@ export class VotacionesService {
     const unidades = await this.votaciones.unidadesParaPadron(query.consorcioId);
     // Una sola consulta por todo el consorcio, no `tieneDeudaVencida` por unidad.
     const conDeuda = query.bloqueaConDeuda
-      ? await this.expensas.unidadesConDeudaVencida(unidades.map((u) => u.unidadId))
+      ? await this.estadoCuenta.unidadesConDeudaVencida(unidades.map((u) => u.unidadId))
       : undefined;
     return vistaDelPadron(
       unidades,
@@ -338,7 +338,7 @@ export class VotacionesService {
     if (!votacion.opcionVotos?.some((o) => o.id === opcionId)) {
       throw new BadRequestException('Esa opción no es de esta votación');
     }
-    if (votacion.bloqueaConDeuda && (await this.expensas.tieneDeudaVencida(unidad.unidadId))) {
+    if (votacion.bloqueaConDeuda && (await this.estadoCuenta.tieneDeudaVencida(unidad.unidadId))) {
       throw new ForbiddenException('La unidad tiene expensas vencidas: no puede votar en esta votación');
     }
 

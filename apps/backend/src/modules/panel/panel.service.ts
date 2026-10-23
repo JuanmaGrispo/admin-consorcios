@@ -3,7 +3,7 @@ import { EstadoAsamblea, EstadoReserva, EstadoVotacion } from '../../database/en
 import { AsambleasService } from '../asambleas/asambleas.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
-import { ExpensasService } from '../expensas/expensas.service';
+import { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import type { CobranzaDeLiquidacion } from '../expensas/expensas.repository';
 import { ReclamosService } from '../reclamos/reclamos.service';
 import { ZONA_POR_DEFECTO } from '../reservas/horario';
@@ -83,7 +83,7 @@ export interface ConsorcioDelPanel {
 export class PanelService {
   constructor(
     private readonly consorcios: ConsorciosService,
-    private readonly expensas: ExpensasService,
+    private readonly estadoCuenta: EstadoCuentaService,
     private readonly reclamos: ReclamosService,
     private readonly reservas: ReservasService,
     private readonly votaciones: VotacionesService,
@@ -94,14 +94,14 @@ export class PanelService {
     const hoy = hoyEn(ZONA_POR_DEFECTO);
     // Sin período, el último emitido: a principios de mes el actual todavía no existe.
     const periodo =
-      periodoPedido ?? (await this.expensas.ultimoPeriodoEmitido(usuario)) ?? hoy.slice(0, 7);
+      periodoPedido ?? (await this.estadoCuenta.ultimoPeriodoEmitido(usuario)) ?? hoy.slice(0, 7);
     const serie = periodosHasta(periodo, MESES_DE_SERIE);
 
     const [consorcios, liquidaciones, deudas, resumenReclamos, sinAsignar, aprobadas, pendientes, votaciones, convocadas] =
       await Promise.all([
         this.consorcios.findAll(usuario),
-        this.expensas.cobranzasPorLiquidacion(usuario, serie[0], periodo),
-        this.expensas.deudaAntigua(usuario, DIAS_DEUDA_ANTIGUA),
+        this.estadoCuenta.cobranzasPorLiquidacion(usuario, serie[0], periodo),
+        this.estadoCuenta.deudaAntigua(usuario, DIAS_DEUDA_ANTIGUA),
         this.reclamos.resumen(usuario),
         this.reclamos.sinAsignar(usuario, DIAS_RECLAMO_SIN_ASIGNAR),
         this.reservasDeHoy(usuario, hoy, EstadoReserva.APROBADA),

@@ -677,6 +677,11 @@ Pagos registra el pago y le pide a expensas que recalcule la boleta: la boleta
 es de expensas y pagos no toca sus tablas. `VENCIDA` se marca con un `UPDATE`
 antes de cada lectura de boletas, sin cron.
 
+Lo que los demás módulos le preguntan a expensas (el saldo de una unidad, si
+tiene deuda vencida, la boleta a pagar, el estado después de un pago, las
+cifras del panel) vive en `EstadoCuentaService`, separado de `ExpensasService`,
+que es el ciclo de la liquidación. Es lo único que exporta `ExpensasModule`.
+
 ### Endpoints
 
 | Método | Ruta                              | Quién |

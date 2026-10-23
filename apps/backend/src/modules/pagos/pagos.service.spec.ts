@@ -15,7 +15,7 @@ import {
 } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ConsorciosService } from '../consorcios/consorcios.service';
-import type { ExpensasService } from '../expensas/expensas.service';
+import type { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import type { ReservasService } from '../reservas/reservas.service';
 import { firmaValida, type MercadoPagoClient, type PagoMercadoPago } from './mercado-pago.client';
 import type { PagosRepository } from './pagos.repository';
@@ -34,7 +34,7 @@ const adminAjeno: UsuarioActual = {
   consorcioIds: ['c2'],
 };
 
-/** Pagos en memoria y un ExpensasService de mentira con una boleta de $400. */
+/** Pagos en memoria y un EstadoCuentaService de mentira con una boleta de $400. */
 function crearEntorno() {
   const db = {
     pagos: [] as Pago[],
@@ -104,7 +104,7 @@ function crearEntorno() {
     findBoletaInterna: async () => boleta,
     vecinosDe: async () => ['v1', 'falla'],
     unidadesVisibles: async () => undefined,
-  } as unknown as ExpensasService;
+  } as unknown as EstadoCuentaService;
 
   const consorcios = {
     findOne: async () => ({

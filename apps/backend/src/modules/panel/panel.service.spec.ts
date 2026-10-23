@@ -5,7 +5,7 @@ import type { AsambleasService } from '../asambleas/asambleas.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { CobranzaDeLiquidacion } from '../expensas/expensas.repository';
-import type { ExpensasService } from '../expensas/expensas.service';
+import type { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import type { ReclamosService } from '../reclamos/reclamos.service';
 import type { ReservasService } from '../reservas/reservas.service';
 import type { VotacionesService } from '../votaciones/votaciones.service';
@@ -45,7 +45,7 @@ function crearPanel(liquidaciones: CobranzaDeLiquidacion[]) {
         return liquidaciones;
       },
       deudaAntigua: async () => [{ consorcioId: 'c1', unidades: 7, saldo: 2_184_900 }],
-    } as unknown as ExpensasService,
+    } as unknown as EstadoCuentaService,
     {
       resumen: async () => ({ abiertos: 12 }),
       sinAsignar: async () => [
