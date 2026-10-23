@@ -43,6 +43,7 @@ import {
   type VecinoDeFila,
 } from './cobranzas';
 import { estadoBoleta } from './estado-boleta';
+import { estadoDe } from './estado-liquidacion';
 import {
   ExpensasRepository,
   type AlcanceBoletas,
@@ -67,17 +68,6 @@ export interface ResumenProrrateo {
 }
 
 export type LiquidacionConProrrateo = Liquidacion & { prorrateo: ResumenProrrateo };
-
-/**
- * Mientras la liquidación está en uno de estos estados, se puede tocar: cargar
- * gastos, cambiar el criterio, ajustar boletas. Una vez emitida, las boletas
- * son deuda de los vecinos y no se reescriben.
- */
-const EDITABLES = [EstadoLiquidacion.BORRADOR, EstadoLiquidacion.PREVISUALIZACION];
-
-/** Ya salieron: sus boletas son deuda real, el vecino las ve y se pagan. */
-const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
-
 
 /**
  * Tope de filas para lo que no se pagina (exportación y recordatorios). Un
@@ -306,7 +296,8 @@ export class ExpensasService {
    * repetir: cada vez se recalcula todo, conservando los ajustes manuales.
    */
   async previsualizar(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
-    const liquidacion = await this.exigirEditable(usuario, id);
+    const liquidacion = await this.exigirLiquidacion(usuario, id);
+    estadoDe(liquidacion.estado).previsualizar();
     await this.recalcular(liquidacion);
     return this.findOne(usuario, id);
   }
@@ -318,13 +309,7 @@ export class ExpensasService {
    */
   async emitir(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
     const liquidacion = await this.exigirLiquidacion(usuario, id);
-    if (liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) {
-      throw new BadRequestException(
-        liquidacion.estado === EstadoLiquidacion.BORRADOR
-          ? 'Previsualizá las boletas antes de emitir'
-          : `La liquidación ya está ${liquidacion.estado}`,
-      );
-    }
+    const emitida = estadoDe(liquidacion.estado).emitir();
 
     // Emitir fuera de orden rompe el arrastre de deuda: este período tomaría
     // como "anterior" una boleta que todavía no existe.
@@ -338,7 +323,7 @@ export class ExpensasService {
     const totalEmitido = aPesos(boletas.reduce((suma, b) => suma + aCentavos(b.total), 0));
 
     await this.expensas.update(id, {
-      estado: EstadoLiquidacion.EMITIDA,
+      estado: emitida,
       fechaEmision: new Date(),
       totalEmitido,
     });
@@ -355,10 +340,7 @@ export class ExpensasService {
   /** Da el período por terminado. Sus boletas siguen vigentes como deuda. */
   async cerrar(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
     const liquidacion = await this.exigirLiquidacion(usuario, id);
-    if (liquidacion.estado !== EstadoLiquidacion.EMITIDA) {
-      throw new BadRequestException('Sólo se cierra una liquidación emitida');
-    }
-    await this.expensas.update(id, { estado: EstadoLiquidacion.CERRADA });
+    await this.expensas.update(id, { estado: estadoDe(liquidacion.estado).cerrar() });
     return this.findOne(usuario, id);
   }
 
@@ -530,7 +512,7 @@ export class ExpensasService {
       boleta &&
       (esGestor(usuario)
         ? gestiona(usuario, boleta.liquidacion.consorcioId)
-        : EMITIDAS.includes(boleta.liquidacion.estado) &&
+        : estadoDe(boleta.liquidacion.estado).esDeuda &&
           (await this.expensas.unidadesDelUsuario(usuario.id)).includes(boleta.unidadId));
     // Una boleta ajena o, al vecino, sin emitir da 404: un 403 confirmaría que existe.
     if (!visible) throw new NotFoundException(`La boleta ${id} no existe`);
@@ -554,9 +536,7 @@ export class ExpensasService {
    */
   async ajustarBoleta(usuario: UsuarioActual, id: string, dto: AjustarBoletaDto): Promise<Boleta> {
     const boleta = await this.findBoleta(usuario, id);
-    if (boleta.liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) {
-      throw new BadRequestException('Sólo se ajustan boletas de una liquidación en previsualización');
-    }
+    estadoDe(boleta.liquidacion.estado).exigirAjustable();
 
     const motivo = dto.motivoAjuste || null;
     if (dto.ajusteManual !== 0 && !motivo) {
@@ -596,7 +576,7 @@ export class ExpensasService {
   ): Promise<{ boleta: Boleta; saldo: number }> {
     // Mismos permisos que leerla: al vecino, una ajena le da 404.
     const boleta = await this.findBoleta(usuario, id);
-    if (!EMITIDAS.includes(boleta.liquidacion.estado)) {
+    if (!estadoDe(boleta.liquidacion.estado).esDeuda) {
       throw new BadRequestException('La boleta todavía no se emitió');
     }
     if ((await this.expensas.ultimaBoletaEmitida(boleta.unidadId)) !== boleta.id) {
@@ -845,11 +825,10 @@ export class ExpensasService {
 
   private async refrescarPrevisualizacion(liquidacionId: string): Promise<void> {
     const liquidacion = await this.expensas.findById(liquidacionId);
-    if (!liquidacion || liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) return;
+    if (!liquidacion || !estadoDe(liquidacion.estado).recalculaAlCambiar) return;
 
-    // Si se borró el último gasto no hay nada que previsualizar: vuelve a borrador.
     if ((await this.expensas.gastosDe(liquidacionId)).length === 0) {
-      await this.expensas.reemplazarBoletas(liquidacionId, [], EstadoLiquidacion.BORRADOR);
+      await this.expensas.reemplazarBoletas(liquidacionId, [], estadoDe(liquidacion.estado).sinGastos());
       return;
     }
     await this.recalcular(liquidacion);
@@ -866,11 +845,7 @@ export class ExpensasService {
 
   private async exigirEditable(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
     const liquidacion = await this.exigirLiquidacion(usuario, id);
-    if (!EDITABLES.includes(liquidacion.estado)) {
-      throw new BadRequestException(
-        `La liquidación está ${liquidacion.estado}: sus boletas ya son deuda y no se modifican`,
-      );
-    }
+    estadoDe(liquidacion.estado).exigirEditable();
     return liquidacion;
   }
 

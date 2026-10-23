@@ -489,6 +489,12 @@ BORRADOR ──previsualizar──▶ PREVISUALIZACION ──emitir──▶ EMI
 
 El estado `PRORRATEO` del enum no se usa.
 
+Las reglas del ciclo viven en `modules/expensas/estado-liquidacion.ts` (patrón
+State): una clase por estado decide qué acciones admite y a qué estado llevan,
+y `ExpensasService` sólo ejecuta los efectos (recalcular, publicar) y guarda el
+enum. Una acción que el estado no admite (emitir sin previsualizar, cerrar una
+que no se emitió, tocar gastos de una emitida) responde **409 Conflict**.
+
 ### Endpoints
 
 | Método | Ruta                                        | Quién |

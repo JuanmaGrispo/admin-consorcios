@@ -412,10 +412,10 @@ describe('ExpensasService', () => {
       const l = await liquidacionConGasto();
       await service.previsualizar(admin, l.id);
       await service.emitir(admin, l.id);
-      await assert.rejects(service.previsualizar(admin, l.id), BadRequestException);
+      await assert.rejects(service.previsualizar(admin, l.id), ConflictException);
       await assert.rejects(
         service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'X', monto: 1 }),
-        BadRequestException,
+        ConflictException,
       );
     });
   });
@@ -456,7 +456,7 @@ describe('ExpensasService', () => {
 
     it('sólo se cierra una emitida', async () => {
       const l = await liquidacionConGasto();
-      await assert.rejects(service.cerrar(admin, l.id), BadRequestException);
+      await assert.rejects(service.cerrar(admin, l.id), ConflictException);
       await service.previsualizar(admin, l.id);
       await service.emitir(admin, l.id);
       assert.equal((await service.cerrar(admin, l.id)).estado, EstadoLiquidacion.CERRADA);
@@ -565,7 +565,7 @@ describe('ExpensasService', () => {
       db.boletaGuardada = boleta(EstadoLiquidacion.EMITIDA);
       await assert.rejects(
         service.ajustarBoleta(admin, 'b1', { ajusteManual: 10, motivoAjuste: 'x' }),
-        BadRequestException,
+        ConflictException,
       );
     });
 
