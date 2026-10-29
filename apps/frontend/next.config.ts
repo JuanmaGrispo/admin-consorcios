@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 
 const produccion = process.env.NODE_ENV === 'production';
@@ -28,6 +29,11 @@ const csp = [
 ].join('; ');
 
 const nextConfig: NextConfig = {
+  // Build autocontenido (.next/standalone) para la imagen de Docker. No cambia
+  // nada en `pnpm dev`. La raíz del monorepo hace falta para que el tracing
+  // encuentre las dependencias que pnpm deja en node_modules de la raíz.
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   // No anunciar la tecnología del servidor (X-Powered-By: Next.js).
   poweredByHeader: false,
   async headers() {

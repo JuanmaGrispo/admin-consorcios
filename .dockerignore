@@ -1,0 +1,22 @@
+# Lo que NO entra al contexto de build de Docker.
+**/node_modules
+**/dist
+**/.next
+**/out
+**/coverage
+**/*.tsbuildinfo
+**/next-env.d.ts
+**/*.log
+
+# Secretos: el backend los recibe en runtime vía env_file (docker-compose.yml),
+# nunca quedan dentro de la imagen.
+**/.env
+**/.env.*
+!**/.env.example
+
+.git
+.idea
+.vscode
+docs
+**/Dockerfile
+docker-compose.yml
