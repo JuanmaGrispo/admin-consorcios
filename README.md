@@ -39,6 +39,39 @@ pnpm dev
 Atajos: `pnpm back <script>` y `pnpm front <script>` corren scripts de cada app
 (ej: `pnpm back dev`, `pnpm front build`).
 
+## Docker
+
+Todo el sistema (backend + frontend) levanta con un solo comando:
+
+```bash
+# Una vez: el .env del backend (DATABASE_URL de Supabase, JWT_SECRET, etc.)
+cp apps/backend/.env.example apps/backend/.env
+
+docker compose up --build      # o: pnpm docker
+```
+
+- Frontend → http://localhost:3000
+- Backend → http://localhost:4000/api (Swagger en http://localhost:4000/docs)
+
+Solo hace falta Docker Desktop: ni Node ni pnpm. `Ctrl+C` lo frena;
+`docker compose up -d --build` lo deja corriendo de fondo y
+`docker compose down` lo baja.
+
+Detalles:
+
+- El backend lee `apps/backend/.env` en runtime (`env_file`): los secretos
+  **no** quedan dentro de la imagen. La base sigue siendo la de Supabase.
+- `NEXT_PUBLIC_API_URL` se hornea en el build del front (la usa el navegador).
+  Por defecto es `http://localhost:4000/api`; para cambiarla:
+  `NEXT_PUBLIC_API_URL=https://... docker compose up --build`.
+- El backend corre con `NODE_ENV=development` (Swagger prendido, cookie sin
+  `Secure`). Para probarlo como en producción:
+  `NODE_ENV=production docker compose up --build`.
+- RabbitMQ local es opcional: `docker compose --profile rabbitmq up --build`
+  y en el `.env` `RABBITMQ_URL=amqp://domus:domus@rabbitmq:5672`.
+- Las migraciones **no** corren solas (la base es compartida). Se siguen
+  corriendo a mano con `pnpm back migration:run`.
+
 ## Arquitectura del backend
 
 Cada módulo de negocio vive en `src/modules/<nombre>/` y se compone de:

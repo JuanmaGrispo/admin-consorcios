@@ -1,13 +1,56 @@
-# RabbitMQ local, opcional. El grupo usa CloudAMQP (ver README → Mensajería);
-# esto es para quien prefiera un broker propio:
+# Levanta todo el sistema con un solo comando, desde la raíz del repo:
 #
-#   docker compose up -d rabbitmq
-#   RABBITMQ_URL=amqp://domus:domus@localhost:5672
+#   docker compose up --build
 #
-# Panel de administración en http://localhost:15672 (domus / domus).
+#   Frontend → http://localhost:3000
+#   Backend  → http://localhost:4000/api   (Swagger en http://localhost:4000/docs)
+#
+# Requisito: apps/backend/.env armado a partir de .env.example (la base sigue
+# siendo la de Supabase). Ver README → Docker.
+name: admin-consorcios
+
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    env_file: apps/backend/.env
+    environment:
+      PORT: 4000
+      # La imagen trae production; acá se pisa con development para tener
+      # /docs y la cookie sin Secure. `NODE_ENV=production docker compose up`
+      # para probarlo como en producción.
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - '4000:4000'
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        # La ve el NAVEGADOR, no el contenedor: por eso es localhost.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+    ports:
+      - '3000:3000'
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # RabbitMQ local, opcional. El grupo usa CloudAMQP (ver README → Mensajería).
+  # No arranca con `docker compose up` salvo que se pida:
+  #
+  #   docker compose --profile rabbitmq up --build
+  #
+  # y en apps/backend/.env:  RABBITMQ_URL=amqp://domus:domus@rabbitmq:5672
+  # (o, corriendo el backend fuera de Docker: amqp://domus:domus@localhost:5672)
+  #
+  # Panel de administración en http://localhost:15672 (domus / domus).
   rabbitmq:
     image: rabbitmq:3-management
+    profiles: ['rabbitmq']
     ports:
       - '5672:5672'
       - '15672:15672'
