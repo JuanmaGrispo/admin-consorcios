@@ -14,63 +14,100 @@ apps/
 Más documentación en [`docs/`](docs/): [visión del producto](docs/producto.md)
 y [diseño de mensajería](docs/mensajeria.md).
 
-## Requisitos
+## Cómo levantar el proyecto
 
-- Node >= 22
-- pnpm 9 (`corepack enable` lo activa)
-- Acceso a la base de Supabase (o un PostgreSQL local: ver abajo)
+Hay dos formas: con **Docker** (un solo comando, no hace falta instalar Node)
+o con **pnpm** (para desarrollar, con recarga en caliente). Las dos usan la
+misma base de Supabase.
 
-## Arranque
+### 1. Clonar y configurar (una sola vez)
 
 ```bash
-pnpm install
-
-# Variables de entorno (una vez)
+git clone https://github.com/JuanmaGrispo/admin-consorcios.git
+cd admin-consorcios
 cp apps/backend/.env.example apps/backend/.env
-cp apps/frontend/.env.example apps/frontend/.env
-
-# Pegar la DATABASE_URL de Supabase en apps/backend/.env y verificar
-pnpm back db:check
-
-# Levanta backend y frontend juntos
-pnpm dev
 ```
 
-Atajos: `pnpm back <script>` y `pnpm front <script>` corren scripts de cada app
-(ej: `pnpm back dev`, `pnpm front build`).
+En `apps/backend/.env` hay que completar dos variables, el resto es opcional:
 
-## Docker
+| Variable | Obligatoria | De dónde sale |
+|---|---|---|
+| `DATABASE_URL` | Sí | Supabase → Connect → URI del **Session pooler** (puerto 5432). Ver [Base de datos](#base-de-datos) |
+| `JWT_SECRET` | Sí | Uno propio: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` |
+| `SEED_PASSWORD` | Para el seed | La password de las cuentas de demo: pedírsela al grupo |
+| `RABBITMQ_URL`, `SMTP_*`, `MP_*`, `SUPABASE_*` | No | Sin ellas, mails, pagos online y archivos quedan apagados y el resto anda igual |
 
-Todo el sistema (backend + frontend) levanta con un solo comando:
+El `.env` está en el `.gitignore`: nunca se commitea.
+
+### 2a. Con Docker (recomendado)
+
+Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) abierto.
 
 ```bash
-# Una vez: el .env del backend (DATABASE_URL de Supabase, JWT_SECRET, etc.)
-cp apps/backend/.env.example apps/backend/.env
-
 docker compose up --build      # o: pnpm docker
 ```
+
+La primera vez tarda unos minutos en construir las imágenes. Cuando termina:
 
 - Frontend → http://localhost:3000
 - Backend → http://localhost:4000/api (Swagger en http://localhost:4000/docs)
 
-Solo hace falta Docker Desktop: ni Node ni pnpm. `Ctrl+C` lo frena;
-`docker compose up -d --build` lo deja corriendo de fondo y
-`docker compose down` lo baja.
+| Para… | Comando |
+|---|---|
+| Frenarlo | `Ctrl+C` |
+| Dejarlo corriendo de fondo | `docker compose up -d --build` |
+| Ver los logs | `docker compose logs -f backend` |
+| Bajarlo | `docker compose down` |
+
+Después de un `git pull` o de tocar código, volver a correr con `--build`: la
+imagen no se actualiza sola. Sin cambios alcanza con `docker compose up`.
 
 Detalles:
 
-- El backend lee `apps/backend/.env` en runtime (`env_file`): los secretos
-  **no** quedan dentro de la imagen. La base sigue siendo la de Supabase.
-- `NEXT_PUBLIC_API_URL` se hornea en el build del front (la usa el navegador).
-  Por defecto es `http://localhost:4000/api`; para cambiarla:
+- El backend lee `apps/backend/.env` al arrancar: los secretos **no** quedan
+  dentro de la imagen. `apps/frontend/.env` no se usa.
+- `NEXT_PUBLIC_API_URL` queda fija en el build del front (la usa el
+  navegador). Por defecto es `http://localhost:4000/api`; para cambiarla:
   `NEXT_PUBLIC_API_URL=https://... docker compose up --build`.
 - El backend corre con `NODE_ENV=development` (Swagger prendido, cookie sin
   `Secure`). Para probarlo como en producción:
   `NODE_ENV=production docker compose up --build`.
 - RabbitMQ local es opcional: `docker compose --profile rabbitmq up --build`
   y en el `.env` `RABBITMQ_URL=amqp://domus:domus@rabbitmq:5672`.
-- Las migraciones **no** corren solas (la base es compartida). Se siguen
-  corriendo a mano con `pnpm back migration:run`.
+- Las migraciones **no** corren solas (la base es compartida): se corren a
+  mano con `pnpm back migration:run`.
+
+### 2b. Con pnpm (desarrollo)
+
+Requisitos: Node >= 22 y pnpm 9 (`corepack enable` lo activa).
+
+```bash
+pnpm install
+cp apps/frontend/.env.example apps/frontend/.env
+
+pnpm back db:check   # verifica la conexión: imprime la base y las tablas que ve
+pnpm dev             # backend (:4000) y frontend (:3000) juntos, con recarga
+```
+
+Atajos: `pnpm back <script>` y `pnpm front <script>` corren scripts de cada app
+(ej: `pnpm back dev`, `pnpm front build`).
+
+### 3. Entrar
+
+Abrir http://localhost:3000 y loguearse con una de las
+[cuentas de demo](#datos-de-demo) (`admin@domus.test` como administrador,
+`vecino@domus.test` como vecino) y la password de `SEED_PASSWORD`. Para crear
+un usuario propio: `pnpm back usuario:crear` (ver
+[Crear el primer usuario](#crear-el-primer-usuario)).
+
+### Si algo falla
+
+| Síntoma | Causa probable |
+|---|---|
+| `Unable to connect to the database` | `DATABASE_URL` mal copiada, password sin url-encodear o puerto 6543 (usar el 5432 del Session pooler) |
+| El front carga pero el login no responde | El backend no levantó: `docker compose logs backend` |
+| `port is already allocated` / `EADDRINUSE` | Ya hay algo en el 3000 o el 4000 (¿un `pnpm dev` abierto?) |
+| Cambié código y en Docker no se ve | Falta `--build` |
 
 ## Arquitectura del backend
 
@@ -174,7 +211,10 @@ registro es infraestructura: el generador de entities la ignora.
 ### Postgres local
 
 Alternativa para trabajar sin tocar la base compartida: comentar `DATABASE_URL`
-y descomentar los `DB_*` del `.env`.
+y descomentar los `DB_*` del `.env`. Ojo: un Postgres recién creado está
+vacío y el esquema no está en el repo (vive en Supabase), así que antes hay
+que cargarle un volcado del esquema (`pg_dump --schema-only` de Supabase) o el
+backend no va a encontrar ninguna tabla.
 
 ```bash
 docker run -d --name pg-consorcios -e POSTGRES_PASSWORD=postgres \
@@ -1425,7 +1465,8 @@ dupliquen filas; sin `--aplicar` también revierte toda la prueba.
 | `vecina2@domus.test`| VECINO        | 6º B   |
 | `vecino3@domus.test`| VECINO        | 2º A   |
 
-La password de todos es `Domus.2026`.
+La password de todos es la de `SEED_PASSWORD` en `apps/backend/.env` (pedísela
+al grupo; no va en el repo). Sin esa variable el seed no corre.
 
 Además del seed existe `superadmin@domus.app` (rol `SUPER_ADMIN`, misma
 password), creado por CLI para el panel de la plataforma. También hay un
