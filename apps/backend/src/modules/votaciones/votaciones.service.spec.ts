@@ -27,7 +27,7 @@ import {
 import type { ArchivosService } from '../archivos/archivos.service';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ConsorciosService } from '../consorcios/consorcios.service';
-import type { ExpensasService } from '../expensas/expensas.service';
+import type { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import type { UnidadParaPadron } from './padron';
 import type { VotacionesRepository } from './votaciones.repository';
 import { VotacionesService } from './votaciones.service';
@@ -166,7 +166,7 @@ function crearService(
         escrito.consultasDeuda++;
         return new Set(opts.conDeuda ? ids.filter((id) => id === 'u2') : []);
       },
-    } as unknown as ExpensasService,
+    } as unknown as EstadoCuentaService,
     {
       exigirPropia: (url: string) => {
         if (!url.startsWith('https://storage/votaciones/')) throw new BadRequestException('ajena');

@@ -10,7 +10,7 @@ import { ConceptoPago, EstadoPago, MedioPago, Pago } from '../../database/entiti
 import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
-import { ExpensasService } from '../expensas/expensas.service';
+import { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import { ZONA_POR_DEFECTO } from '../reservas/horario';
 import { ReservasService } from '../reservas/reservas.service';
 import { DestinoPagoDto } from './dto/destino-pago';
@@ -53,7 +53,7 @@ export class PagosService {
 
   constructor(
     private readonly pagos: PagosRepository,
-    private readonly expensas: ExpensasService,
+    private readonly estadoCuenta: EstadoCuentaService,
     private readonly consorcios: ConsorciosService,
     private readonly mercadoPago: MercadoPagoClient,
     private readonly notificador: Notificador,
@@ -65,7 +65,7 @@ export class PagosService {
       query,
       esGestor(usuario)
         ? { consorcioIds: consorciosGestionados(usuario) }
-        : { unidadIds: await this.expensas.unidadesVisibles(usuario) },
+        : { unidadIds: await this.estadoCuenta.unidadesVisibles(usuario) },
     );
   }
 
@@ -79,7 +79,7 @@ export class PagosService {
       pago &&
       (esGestor(usuario)
         ? gestiona(usuario, pago.unidad.consorcioId)
-        : (await this.expensas.unidadesVisibles(usuario))!.includes(pago.unidadId));
+        : (await this.estadoCuenta.unidadesVisibles(usuario))!.includes(pago.unidadId));
     // Un pago ajeno da 404 y no 403: un 403 confirmaría que existe.
     if (!visible) {
       throw new NotFoundException(`El pago ${id} no existe`);
@@ -267,7 +267,7 @@ export class PagosService {
     if (actualizado.estado === EstadoPago.APROBADO) await this.alAprobarse(actualizado);
     // Un reintegro baja lo pagado: la boleta vuelve atrás. Una seña reintegrada
     // vuelve sola a "pendiente", porque se calcula desde los pagos aprobados.
-    else if (actualizado.boletaId) await this.expensas.sincronizarEstado(actualizado.boletaId);
+    else if (actualizado.boletaId) await this.estadoCuenta.sincronizarEstado(actualizado.boletaId);
   }
 
   /**
@@ -279,7 +279,7 @@ export class PagosService {
       throw new BadRequestException('Indicá la boleta o la reserva que se paga, una sola');
     }
     if (dto.boletaId) {
-      const { boleta, saldo } = await this.expensas.boletaPagable(usuario, dto.boletaId);
+      const { boleta, saldo } = await this.estadoCuenta.boletaPagable(usuario, dto.boletaId);
       return {
         destino: {
           concepto: ConceptoPago.EXPENSA,
@@ -311,14 +311,14 @@ export class PagosService {
   private async alAprobarse(pago: Pago): Promise<void> {
     if (!pago.boletaId) return this.alAprobarseSena(pago);
     const conRecibo = await this.numerarRecibo(pago);
-    const boleta = await this.expensas.sincronizarEstado(pago.boletaId);
+    const boleta = await this.estadoCuenta.sincronizarEstado(pago.boletaId);
 
     // Dos checkouts pagados (o uno abierto con un saldo viejo) cobran de más.
     // No se puede rechazar plata que ya entró: hay que devolverla a mano.
     const sobra = aCentavos(await this.pagos.aprobadoDe({ boletaId: boleta.id })) - aCentavos(boleta.total);
     if (sobra > 0) await this.avisarCobroDeMas(pago, sobra / 100, `recibo ${conRecibo.reciboNumero}`);
 
-    for (const destinatarioId of await this.expensas.vecinosDe(pago.unidadId)) {
+    for (const destinatarioId of await this.estadoCuenta.vecinosDe(pago.unidadId)) {
       try {
         await this.notificador.enviar({
           destinatarioId,
@@ -376,7 +376,7 @@ export class PagosService {
     const devolver = `Devolvé la diferencia desde Mercado Pago.`;
     try {
       if (pago.boletaId) {
-        const boleta = await this.expensas.findBoletaInterna(pago.boletaId);
+        const boleta = await this.estadoCuenta.findBoletaInterna(pago.boletaId);
         return await this.avisarAlAdministrador(
           boleta.liquidacion.consorcioId,
           `Cobro duplicado en la unidad ${boleta.unidad.etiqueta}`,

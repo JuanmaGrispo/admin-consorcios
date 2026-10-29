@@ -42,11 +42,11 @@ import {
   type FilaCobranza,
   type VecinoDeFila,
 } from './cobranzas';
-import { estadoBoleta } from './estado-boleta';
+import { buscarBoletaVisible, diasEntre } from './estado-cuenta.service';
+import { estadoDe } from './estado-liquidacion';
 import {
   ExpensasRepository,
   type AlcanceBoletas,
-  type CobranzaDeLiquidacion,
   type ResumenCobranzas,
 } from './expensas.repository';
 import {
@@ -69,17 +69,6 @@ export interface ResumenProrrateo {
 export type LiquidacionConProrrateo = Liquidacion & { prorrateo: ResumenProrrateo };
 
 /**
- * Mientras la liquidación está en uno de estos estados, se puede tocar: cargar
- * gastos, cambiar el criterio, ajustar boletas. Una vez emitida, las boletas
- * son deuda de los vecinos y no se reescriben.
- */
-const EDITABLES = [EstadoLiquidacion.BORRADOR, EstadoLiquidacion.PREVISUALIZACION];
-
-/** Ya salieron: sus boletas son deuda real, el vecino las ve y se pagan. */
-const EMITIDAS = [EstadoLiquidacion.EMITIDA, EstadoLiquidacion.CERRADA];
-
-
-/**
  * Tope de filas para lo que no se pagina (exportación y recordatorios). Un
  * consorcio grande con varios años de boletas no tiene por qué entrar entero
  * en memoria de una: con un alcance razonable —un período— nunca se llega.
@@ -94,27 +83,6 @@ const aVecinoDeFila = (usuario: Usuario): VecinoDeFila => ({
   email: usuario.email,
   telefono: usuario.telefono,
 });
-
-/** Lo que una unidad debe hoy: la cabecera de la pantalla del vecino. */
-export interface SaldoDeUnidad {
-  boletaId: string;
-  /** AAAA-MM. */
-  periodo: string;
-  fechaVencimiento: string;
-  total: number;
-  pagado: number;
-  saldo: number;
-  estado: EstadoBoleta;
-  /** Negativo si ya venció. */
-  diasParaVencer: number;
-  /** El último pago aprobado de esta boleta ("Pagaste … el 04/09" y "Ver recibo"). */
-  ultimoPago: { id: string; fecha: Date } | null;
-}
-
-const MS_POR_DIA = 86_400_000;
-/** Días entre dos fechas ISO (YYYY-MM-DD). */
-const diasEntre = (desde: string, hasta: string) =>
-  Math.round((Date.parse(hasta) - Date.parse(desde)) / MS_POR_DIA);
 
 /**
  * Vencimiento por defecto: el día de vencimiento del consorcio en el mes
@@ -306,7 +274,8 @@ export class ExpensasService {
    * repetir: cada vez se recalcula todo, conservando los ajustes manuales.
    */
   async previsualizar(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
-    const liquidacion = await this.exigirEditable(usuario, id);
+    const liquidacion = await this.exigirLiquidacion(usuario, id);
+    estadoDe(liquidacion.estado).previsualizar();
     await this.recalcular(liquidacion);
     return this.findOne(usuario, id);
   }
@@ -318,13 +287,7 @@ export class ExpensasService {
    */
   async emitir(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
     const liquidacion = await this.exigirLiquidacion(usuario, id);
-    if (liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) {
-      throw new BadRequestException(
-        liquidacion.estado === EstadoLiquidacion.BORRADOR
-          ? 'Previsualizá las boletas antes de emitir'
-          : `La liquidación ya está ${liquidacion.estado}`,
-      );
-    }
+    const emitida = estadoDe(liquidacion.estado).emitir();
 
     // Emitir fuera de orden rompe el arrastre de deuda: este período tomaría
     // como "anterior" una boleta que todavía no existe.
@@ -338,7 +301,7 @@ export class ExpensasService {
     const totalEmitido = aPesos(boletas.reduce((suma, b) => suma + aCentavos(b.total), 0));
 
     await this.expensas.update(id, {
-      estado: EstadoLiquidacion.EMITIDA,
+      estado: emitida,
       fechaEmision: new Date(),
       totalEmitido,
     });
@@ -355,10 +318,7 @@ export class ExpensasService {
   /** Da el período por terminado. Sus boletas siguen vigentes como deuda. */
   async cerrar(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
     const liquidacion = await this.exigirLiquidacion(usuario, id);
-    if (liquidacion.estado !== EstadoLiquidacion.EMITIDA) {
-      throw new BadRequestException('Sólo se cierra una liquidación emitida');
-    }
-    await this.expensas.update(id, { estado: EstadoLiquidacion.CERRADA });
+    await this.expensas.update(id, { estado: estadoDe(liquidacion.estado).cerrar() });
     return this.findOne(usuario, id);
   }
 
@@ -496,45 +456,8 @@ export class ExpensasService {
     return { boletas: boletas.length, avisos, sinDestinatario, fallidos };
   }
 
-  /**
-   * Lo que debe hoy una unidad: su boleta vigente (la última emitida) y el
-   * saldo que le queda. Es lo que el vecino ve arriba de todo al entrar.
-   */
-  async saldoDeUnidad(unidadId: string): Promise<SaldoDeUnidad | null> {
-    await this.expensas.marcarVencidas();
-    const boletaId = await this.expensas.ultimaBoletaEmitida(unidadId);
-    if (!boletaId) return null;
-
-    const boleta = (await this.expensas.findBoleta(boletaId))!;
-    const pago = (await this.expensas.pagosPorBoleta([boletaId])).get(boletaId);
-    const pagado = pago?.pagado ?? 0;
-    const saldo = aPesos(Math.max(0, aCentavos(boleta.total) - aCentavos(pagado)));
-
-    return {
-      boletaId: boleta.id,
-      periodo: boleta.liquidacion.periodo.slice(0, 7),
-      fechaVencimiento: boleta.liquidacion.fechaVencimiento,
-      total: boleta.total,
-      pagado,
-      saldo,
-      estado: boleta.estado,
-      diasParaVencer: diasEntre(await this.expensas.hoy(), boleta.liquidacion.fechaVencimiento),
-      ultimoPago: pago ? { id: pago.ultimoPagoId, fecha: pago.fechaUltimoPago } : null,
-    };
-  }
-
-  async findBoleta(usuario: UsuarioActual, id: string): Promise<Boleta> {
-    await this.expensas.marcarVencidas();
-    const boleta = await this.expensas.findBoleta(id);
-    const visible =
-      boleta &&
-      (esGestor(usuario)
-        ? gestiona(usuario, boleta.liquidacion.consorcioId)
-        : EMITIDAS.includes(boleta.liquidacion.estado) &&
-          (await this.expensas.unidadesDelUsuario(usuario.id)).includes(boleta.unidadId));
-    // Una boleta ajena o, al vecino, sin emitir da 404: un 403 confirmaría que existe.
-    if (!visible) throw new NotFoundException(`La boleta ${id} no existe`);
-    return boleta;
+  findBoleta(usuario: UsuarioActual, id: string): Promise<Boleta> {
+    return buscarBoletaVisible(this.expensas, usuario, id);
   }
 
   /** La boleta en PDF, con los mismos permisos que leerla. Se genera al vuelo. */
@@ -554,9 +477,7 @@ export class ExpensasService {
    */
   async ajustarBoleta(usuario: UsuarioActual, id: string, dto: AjustarBoletaDto): Promise<Boleta> {
     const boleta = await this.findBoleta(usuario, id);
-    if (boleta.liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) {
-      throw new BadRequestException('Sólo se ajustan boletas de una liquidación en previsualización');
-    }
+    estadoDe(boleta.liquidacion.estado).exigirAjustable();
 
     const motivo = dto.motivoAjuste || null;
     if (dto.ajusteManual !== 0 && !motivo) {
@@ -581,113 +502,6 @@ export class ExpensasService {
     await this.expensas.reemplazarBoletas(liquidacion.id, boletas, EstadoLiquidacion.PREVISUALIZACION);
     // Recalcular reemplaza las boletas: la de esta unidad tiene otro id.
     return (await this.expensas.findBoletaDeUnidad(liquidacion.id, boleta.unidadId))!;
-  }
-
-  // ── Para pagos ─────────────────────────────────────────────────────────────
-
-  /**
-   * La boleta a la que se le puede imputar un pago y cuánto le falta. Sólo la
-   * última emitida de la unidad: las anteriores ya viajaron como saldo
-   * anterior, y pagarlas cobraría dos veces la misma deuda.
-   */
-  async boletaPagable(
-    usuario: UsuarioActual,
-    id: string,
-  ): Promise<{ boleta: Boleta; saldo: number }> {
-    // Mismos permisos que leerla: al vecino, una ajena le da 404.
-    const boleta = await this.findBoleta(usuario, id);
-    if (!EMITIDAS.includes(boleta.liquidacion.estado)) {
-      throw new BadRequestException('La boleta todavía no se emitió');
-    }
-    if ((await this.expensas.ultimaBoletaEmitida(boleta.unidadId)) !== boleta.id) {
-      throw new BadRequestException(
-        'Esta deuda ya está incluida en la boleta más reciente de la unidad: pagá esa',
-      );
-    }
-
-    const saldo = aCentavos(boleta.total) - aCentavos(await this.expensas.pagadoDe(id));
-    if (saldo <= 0) throw new BadRequestException('La boleta ya está pagada');
-    return { boleta, saldo: aPesos(saldo) };
-  }
-
-  /** Sin chequeo de permisos: para pagos, que ya sabe qué boleta es (el webhook no tiene usuario). */
-  async findBoletaInterna(id: string): Promise<Boleta> {
-    const boleta = await this.expensas.findBoleta(id);
-    if (!boleta) throw new NotFoundException(`La boleta ${id} no existe`);
-    return boleta;
-  }
-
-  /** Las unidades que ve un vecino; `undefined` para quien administra (lo acota por consorcio). */
-  async unidadesVisibles(usuario: UsuarioActual): Promise<string[] | undefined> {
-    return esGestor(usuario) ? undefined : this.expensas.unidadesDelUsuario(usuario.id);
-  }
-
-  /** A quién avisarle algo de una unidad: los vecinos vinculados hoy. */
-  async vecinosDe(unidadId: string): Promise<string[]> {
-    return (await this.expensas.vecinosPorUnidad([unidadId])).get(unidadId) ?? [];
-  }
-
-  /**
-   * Recalcula el estado desde los pagos. Lo llama pagos después de cada cambio
-   * (un pago nuevo, una aprobación o un reintegro de Mercado Pago).
-   */
-  async sincronizarEstado(boletaId: string): Promise<Boleta> {
-    const boleta = await this.expensas.findBoleta(boletaId);
-    if (!boleta) throw new NotFoundException(`La boleta ${boletaId} no existe`);
-
-    const estado = estadoBoleta(
-      boleta.total,
-      await this.expensas.pagadoDe(boletaId),
-      boleta.liquidacion.fechaVencimiento,
-      await this.expensas.hoy(),
-    );
-    await this.expensas.actualizarEstado(boletaId, estado);
-    if (estado === EstadoBoleta.PAGADA) {
-      await this.expensas.saldarAnteriores(boleta.unidadId, boleta.liquidacion.periodo);
-    }
-    return { ...boleta, estado };
-  }
-
-  // ── Para el panel del administrador ────────────────────────────────────────
-
-  /** Lo cobrado de cada liquidación de sus consorcios entre dos períodos (AAAA-MM). */
-  async cobranzasPorLiquidacion(
-    usuario: UsuarioActual,
-    desde: string,
-    hasta: string,
-  ): Promise<CobranzaDeLiquidacion[]> {
-    await this.expensas.marcarVencidas();
-    return this.expensas.cobranzasPorLiquidacion(consorciosGestionados(usuario), desde, hasta);
-  }
-
-  /** Unidades con deuda vencida hace más de `dias`, por consorcio. */
-  async deudaAntigua(usuario: UsuarioActual, dias: number) {
-    await this.expensas.marcarVencidas();
-    return this.expensas.deudaAntigua(consorciosGestionados(usuario), dias);
-  }
-
-  /** El último período que emitió alguno de sus consorcios, o null si ninguno emitió. */
-  ultimoPeriodoEmitido(usuario: UsuarioActual): Promise<string | null> {
-    return this.expensas.ultimoPeriodoEmitidoDe(consorciosGestionados(usuario));
-  }
-
-  // ── Para reservas ──────────────────────────────────────────────────────────
-
-  /**
-   * Si la unidad tiene expensas impagas y vencidas. Lo consulta reservas para
-   * los amenities con `bloquea_con_deuda`. Marca las vencidas antes de contar:
-   * si no, la respuesta dependería de que alguien hubiera mirado sus boletas.
-   */
-  async tieneDeudaVencida(unidadId: string): Promise<boolean> {
-    await this.expensas.marcarVencidas();
-    return (await this.expensas.contarVencidasDeUnidad(unidadId)) > 0;
-  }
-
-  /** `tieneDeudaVencida` para muchas unidades a la vez: la vista previa del padrón. */
-  async unidadesConDeudaVencida(unidadIds: string[]): Promise<Set<string>> {
-    if (unidadIds.length === 0) return new Set();
-    await this.expensas.marcarVencidas();
-    return new Set(await this.expensas.unidadesConVencidas(unidadIds));
   }
 
   // ── Auxiliares ─────────────────────────────────────────────────────────────
@@ -845,11 +659,10 @@ export class ExpensasService {
 
   private async refrescarPrevisualizacion(liquidacionId: string): Promise<void> {
     const liquidacion = await this.expensas.findById(liquidacionId);
-    if (!liquidacion || liquidacion.estado !== EstadoLiquidacion.PREVISUALIZACION) return;
+    if (!liquidacion || !estadoDe(liquidacion.estado).recalculaAlCambiar) return;
 
-    // Si se borró el último gasto no hay nada que previsualizar: vuelve a borrador.
     if ((await this.expensas.gastosDe(liquidacionId)).length === 0) {
-      await this.expensas.reemplazarBoletas(liquidacionId, [], EstadoLiquidacion.BORRADOR);
+      await this.expensas.reemplazarBoletas(liquidacionId, [], estadoDe(liquidacion.estado).sinGastos());
       return;
     }
     await this.recalcular(liquidacion);
@@ -866,11 +679,7 @@ export class ExpensasService {
 
   private async exigirEditable(usuario: UsuarioActual, id: string): Promise<Liquidacion> {
     const liquidacion = await this.exigirLiquidacion(usuario, id);
-    if (!EDITABLES.includes(liquidacion.estado)) {
-      throw new BadRequestException(
-        `La liquidación está ${liquidacion.estado}: sus boletas ya son deuda y no se modifican`,
-      );
-    }
+    estadoDe(liquidacion.estado).exigirEditable();
     return liquidacion;
   }
 

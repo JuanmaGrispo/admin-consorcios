@@ -10,7 +10,7 @@ import {
 } from '../../database/entities';
 import type { AsambleasService } from '../asambleas/asambleas.service';
 import type { UsuarioActual } from '../auth/auth.types';
-import type { ExpensasService } from '../expensas/expensas.service';
+import type { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import type { NovedadesService } from '../novedades/novedades.service';
 import type { ReclamosService } from '../reclamos/reclamos.service';
 import type { ListarReservasQuery } from '../reservas/dto/listar-reservas.query';
@@ -32,7 +32,7 @@ function crearService(
     { findOne: async () => ({ nombre: 'Julieta', apellido: 'Sosa', avatarUrl: null }) } as unknown as UsuariosService,
     // Sin unidades: estos tests miran sólo los eventos.
     { unidadesDelVecino: async () => [] } as unknown as UnidadesService,
-    {} as ExpensasService,
+    {} as EstadoCuentaService,
     {} as ReclamosService,
     { proximasDelVecino: async () => opts.asambleas ?? [] } as unknown as AsambleasService,
     {

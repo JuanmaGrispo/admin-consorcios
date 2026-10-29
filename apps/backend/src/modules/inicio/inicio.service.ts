@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { EstadoAsamblea, EstadoAsistencia, EstadoReserva, VinculoUnidad } from '../../database/entities';
 import { AsambleasService } from '../asambleas/asambleas.service';
 import type { UsuarioActual } from '../auth/auth.types';
-import { ExpensasService, type SaldoDeUnidad } from '../expensas/expensas.service';
+import { EstadoCuentaService, type SaldoDeUnidad } from '../expensas/estado-cuenta.service';
 import { NovedadesService, type NovedadVista } from '../novedades/novedades.service';
 import { ReclamosService } from '../reclamos/reclamos.service';
 import { ZONA_POR_DEFECTO } from '../reservas/horario';
@@ -102,7 +102,7 @@ export class InicioService {
   constructor(
     private readonly usuarios: UsuariosService,
     private readonly unidades: UnidadesService,
-    private readonly expensas: ExpensasService,
+    private readonly estadoCuenta: EstadoCuentaService,
     private readonly reclamos: ReclamosService,
     private readonly asambleas: AsambleasService,
     private readonly reservas: ReservasService,
@@ -130,7 +130,7 @@ export class InicioService {
             numero: unidad.consorcio.numero,
             barrio: unidad.consorcio.barrio,
           },
-          expensas: await this.expensas.saldoDeUnidad(unidad.id),
+          expensas: await this.estadoCuenta.saldoDeUnidad(unidad.id),
           reclamosAbiertos: await this.contarReclamosAbiertos(usuario, unidad.id),
         };
       }),

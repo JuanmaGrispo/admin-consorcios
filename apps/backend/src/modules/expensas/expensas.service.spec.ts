@@ -23,6 +23,7 @@ import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { ProveedoresService } from '../proveedores/proveedores.service';
 import type { ReclamosService } from '../reclamos/reclamos.service';
 import type { RubrosGastoService } from '../rubros-gasto/rubros-gasto.service';
+import { EstadoCuentaService } from './estado-cuenta.service';
 import type { ExpensasRepository } from './expensas.repository';
 import { ExpensasService, vencimientoPorDefecto } from './expensas.service';
 import type { BoletaCalculada } from './prorrateo';
@@ -176,7 +177,7 @@ function crearEntorno() {
     eventos,
   );
 
-  return { db, service, avisos, publicados };
+  return { db, service, estadoCuenta: new EstadoCuentaService(repo), avisos, publicados };
 }
 
 describe('vencimientoPorDefecto', () => {
@@ -197,11 +198,13 @@ describe('ExpensasService', () => {
   let entorno: ReturnType<typeof crearEntorno>;
   let db: ReturnType<typeof crearEntorno>['db'];
   let service: ExpensasService;
+  let estadoCuenta: EstadoCuentaService;
 
   beforeEach(() => {
     entorno = crearEntorno();
     db = entorno.db;
     service = entorno.service;
+    estadoCuenta = entorno.estadoCuenta;
   });
 
   /** Una liquidación con un gasto de $1.000, lista para previsualizar. */
@@ -412,10 +415,10 @@ describe('ExpensasService', () => {
       const l = await liquidacionConGasto();
       await service.previsualizar(admin, l.id);
       await service.emitir(admin, l.id);
-      await assert.rejects(service.previsualizar(admin, l.id), BadRequestException);
+      await assert.rejects(service.previsualizar(admin, l.id), ConflictException);
       await assert.rejects(
         service.agregarGasto(admin, l.id, { rubroId: 'r1', descripcion: 'X', monto: 1 }),
-        BadRequestException,
+        ConflictException,
       );
     });
   });
@@ -456,7 +459,7 @@ describe('ExpensasService', () => {
 
     it('sólo se cierra una emitida', async () => {
       const l = await liquidacionConGasto();
-      await assert.rejects(service.cerrar(admin, l.id), BadRequestException);
+      await assert.rejects(service.cerrar(admin, l.id), ConflictException);
       await service.previsualizar(admin, l.id);
       await service.emitir(admin, l.id);
       assert.equal((await service.cerrar(admin, l.id)).estado, EstadoLiquidacion.CERRADA);
@@ -565,7 +568,7 @@ describe('ExpensasService', () => {
       db.boletaGuardada = boleta(EstadoLiquidacion.EMITIDA);
       await assert.rejects(
         service.ajustarBoleta(admin, 'b1', { ajusteManual: 10, motivoAjuste: 'x' }),
-        BadRequestException,
+        ConflictException,
       );
     });
 
@@ -580,36 +583,36 @@ describe('ExpensasService', () => {
       it('devuelve el saldo de la última boleta de la unidad', async () => {
         db.boletaGuardada = emitida();
         db.pagado = 150;
-        assert.equal((await service.boletaPagable(vecino, 'b1')).saldo, 250);
+        assert.equal((await estadoCuenta.boletaPagable(vecino, 'b1')).saldo, 250);
       });
 
       it('no deja pagar una boleta vieja: su deuda ya está en la nueva', async () => {
         db.boletaGuardada = emitida();
         db.ultimaBoleta = 'b2';
-        await assert.rejects(service.boletaPagable(admin, 'b1'), /más reciente/);
+        await assert.rejects(estadoCuenta.boletaPagable(admin, 'b1'), /más reciente/);
       });
 
       it('ni una ya pagada, ni una sin emitir', async () => {
         db.boletaGuardada = emitida();
         db.pagado = 400;
-        await assert.rejects(service.boletaPagable(admin, 'b1'), /ya está pagada/);
+        await assert.rejects(estadoCuenta.boletaPagable(admin, 'b1'), /ya está pagada/);
         db.boletaGuardada = boleta(EstadoLiquidacion.PREVISUALIZACION);
-        await assert.rejects(service.boletaPagable(admin, 'b1'), /no se emitió/);
+        await assert.rejects(estadoCuenta.boletaPagable(admin, 'b1'), /no se emitió/);
       });
 
       it('al vecino, una boleta ajena le da 404', async () => {
         db.boletaGuardada = emitida({ unidadId: 'u2' });
-        await assert.rejects(service.boletaPagable(vecino, 'b1'), NotFoundException);
+        await assert.rejects(estadoCuenta.boletaPagable(vecino, 'b1'), NotFoundException);
       });
 
       it('sincroniza el estado y, si queda pagada, salda las anteriores', async () => {
         db.boletaGuardada = emitida();
         db.pagado = 100;
-        assert.equal((await service.sincronizarEstado('b1')).estado, EstadoBoleta.PARCIAL);
+        assert.equal((await estadoCuenta.sincronizarEstado('b1')).estado, EstadoBoleta.PARCIAL);
         assert.equal(db.saldadas, null);
 
         db.pagado = 400;
-        assert.equal((await service.sincronizarEstado('b1')).estado, EstadoBoleta.PAGADA);
+        assert.equal((await estadoCuenta.sincronizarEstado('b1')).estado, EstadoBoleta.PAGADA);
         assert.deepEqual(db.estados.get('b1'), EstadoBoleta.PAGADA);
         assert.deepEqual(db.saldadas, ['u1', '2026-10-01']);
       });

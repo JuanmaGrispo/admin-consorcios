@@ -5,7 +5,7 @@ import type { Notificador } from '../../core/notificaciones/notificador';
 import { Amenity, EstadoReserva, Reserva, RolUsuario } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
 import type { ConsorciosService } from '../consorcios/consorcios.service';
-import type { ExpensasService } from '../expensas/expensas.service';
+import type { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import type { ReservasRepository } from './reservas.repository';
 import { ReservasService } from './reservas.service';
 
@@ -49,7 +49,7 @@ describe('ReservasService — alcance', () => {
     service = new ReservasService(
       repo,
       { findOne: async () => ({}) } as unknown as ConsorciosService,
-      {} as ExpensasService,
+      {} as EstadoCuentaService,
       {} as Notificador,
     );
   });
@@ -151,7 +151,7 @@ function crearEntorno(amenityExtra: Partial<Amenity> = {}, ahora = new Date('202
   const service = new ReservasService(
     repo,
     { findOne: async () => ({ administradorId: 'a1' }) } as unknown as ConsorciosService,
-    { tieneDeudaVencida: async () => false } as unknown as ExpensasService,
+    { tieneDeudaVencida: async () => false } as unknown as EstadoCuentaService,
     { enviar: async () => undefined } as unknown as Notificador,
   );
   return { service, reservas, amenity };

@@ -16,7 +16,7 @@ import {
 import { consorciosGestionados, esGestor, gestiona } from '../auth/alcance';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ConsorciosService } from '../consorcios/consorcios.service';
-import { ExpensasService } from '../expensas/expensas.service';
+import { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import { CrearBloqueoDto } from './dto/crear-bloqueo.dto';
 import { CrearReservaDto } from './dto/crear-reserva.dto';
 import { CreateAmenityDto } from './dto/create-amenity.dto';
@@ -77,7 +77,7 @@ export class ReservasService {
   constructor(
     private readonly reservas: ReservasRepository,
     private readonly consorcios: ConsorciosService,
-    private readonly expensas: ExpensasService,
+    private readonly estadoCuenta: EstadoCuentaService,
     private readonly notificador: Notificador,
   ) {}
 
@@ -489,7 +489,7 @@ export class ReservasService {
       );
     }
 
-    if (amenity.bloqueaConDeuda && (await this.expensas.tieneDeudaVencida(unidadId))) {
+    if (amenity.bloqueaConDeuda && (await this.estadoCuenta.tieneDeudaVencida(unidadId))) {
       throw new ConflictException(
         'La unidad tiene expensas vencidas: regularizá la deuda para poder reservar',
       );

@@ -16,6 +16,7 @@ import { ReclamosModule } from '../reclamos/reclamos.module';
 import { RubrosGastoModule } from '../rubros-gasto/rubros-gasto.module';
 import { ExpensasController } from './expensas.controller';
 import { ExpensasRepository } from './expensas.repository';
+import { EstadoCuentaService } from './estado-cuenta.service';
 import { ExpensasService } from './expensas.service';
 
 @Module({
@@ -39,7 +40,8 @@ import { ExpensasService } from './expensas.service';
     ReclamosModule,
   ],
   controllers: [ExpensasController],
-  providers: [ExpensasService, ExpensasRepository],
-  exports: [ExpensasService],
+  providers: [ExpensasService, EstadoCuentaService, ExpensasRepository],
+  // Los demás módulos sólo preguntan por la deuda: no necesitan el ciclo de la liquidación.
+  exports: [EstadoCuentaService],
 })
 export class ExpensasModule {}

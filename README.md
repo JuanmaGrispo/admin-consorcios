@@ -562,6 +562,12 @@ BORRADOR ──previsualizar──▶ PREVISUALIZACION ──emitir──▶ EMI
 
 El estado `PRORRATEO` del enum no se usa.
 
+Las reglas del ciclo viven en `modules/expensas/estado-liquidacion.ts` (patrón
+State): una clase por estado decide qué acciones admite y a qué estado llevan,
+y `ExpensasService` sólo ejecuta los efectos (recalcular, publicar) y guarda el
+enum. Una acción que el estado no admite (emitir sin previsualizar, cerrar una
+que no se emitió, tocar gastos de una emitida) responde **409 Conflict**.
+
 ### Endpoints
 
 | Método | Ruta                                        | Quién |
@@ -743,6 +749,11 @@ si no                           → PENDIENTE
 Pagos registra el pago y le pide a expensas que recalcule la boleta: la boleta
 es de expensas y pagos no toca sus tablas. `VENCIDA` se marca con un `UPDATE`
 antes de cada lectura de boletas, sin cron.
+
+Lo que los demás módulos le preguntan a expensas (el saldo de una unidad, si
+tiene deuda vencida, la boleta a pagar, el estado después de un pago, las
+cifras del panel) vive en `EstadoCuentaService`, separado de `ExpensasService`,
+que es el ciclo de la liquidación. Es lo único que exporta `ExpensasModule`.
 
 ### Endpoints
 
