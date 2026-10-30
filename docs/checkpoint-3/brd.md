@@ -124,7 +124,7 @@ Priorizados con MoSCoW: **Must** es imprescindible para lanzar, **Should** es im
 | Trazabilidad de reclamos | Reclamos resueltos con al menos un evento por cambio de estado | 100 % |
 | Adopción del cobro en línea | Monto cobrado por Mercado Pago sobre el total cobrado | 50 % a los 6 meses |
 
-## 10. Glosario y aprobaciones
+## 10. Glosario
 
 | Término | Significado |
 |---|---|
@@ -140,8 +140,3 @@ Priorizados con MoSCoW: **Must** es imprescindible para lanzar, **Should** es im
 | Amenity | Espacio común reservable: SUM, parrilla, cochera de visitas. |
 | Quórum | Cantidad mínima de unidades presentes para que una asamblea decida. |
 | Padrón | Las unidades habilitadas para votar en una votación. |
-
-| Rol | Nombre | Fecha | Firma |
-|---|---|---|---|
-| Sponsor | | | |
-| Responsable del equipo | | | |

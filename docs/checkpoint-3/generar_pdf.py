@@ -41,7 +41,6 @@ a { color: #2f5aa8; text-decoration: none; }
 figure { margin: 6pt 0 10pt; break-inside: avoid; }
 figure img { max-width: 100%; max-height: 120mm; border: 1px solid #e6e3dd; }
 figcaption { font-size: 9pt; color: #7a746b; margin-top: 2pt; }
-.pendiente { border: 1.5px dashed #c9c6bf; background: #fbfaf8; color: #7a746b; padding: 22pt 10pt; text-align: center; font-size: 9.5pt; }
 """
 
 
@@ -55,11 +54,10 @@ def en_linea(texto: str) -> str:
 
 def imagen(alt: str, ruta: str) -> str:
     archivo = (CARPETA / ruta).resolve()
-    if archivo.exists():
-        cuerpo = f'<img src="{archivo.as_uri()}" alt="{html.escape(alt)}">'
-    else:
-        cuerpo = f'<div class="pendiente">Captura pendiente: {html.escape(alt)}<br>{html.escape(ruta)}</div>'
-    return f'<figure>{cuerpo}<figcaption>{html.escape(alt)}</figcaption></figure>'
+    if not archivo.exists():
+        return ''
+    return (f'<figure><img src="{archivo.as_uri()}" alt="{html.escape(alt)}">'
+            f'<figcaption>{html.escape(alt)}</figcaption></figure>')
 
 
 def item_con_imagenes(lineas: list[str]) -> str:

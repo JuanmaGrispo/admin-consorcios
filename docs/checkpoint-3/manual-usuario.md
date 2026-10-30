@@ -119,7 +119,6 @@ Vas a cargar los gastos del mes, revisar las boletas y emitirlas.
    ![Gastos de la liquidación](capturas/08-admin-gastos.png)
 3. Tocá **Continuar a previsualización**. Domus calcula la boleta de cada unidad según su coeficiente.
 4. Revisá la previsualización: unidades alcanzadas, suma de coeficientes (tiene que dar 100 %) y la comparación con el mes anterior. Si hace falta, cargá un ajuste en una boleta, con su motivo.
-   ![Previsualización de boletas](capturas/09-admin-previsualizacion.png)
 5. Tocá **Emitir boletas**. Las boletas pasan a ser deuda de cada unidad y los vecinos reciben el aviso por mail y en la app.
 6. Seguí la cobranza en **Cobranzas**. Cuando termine el período, volvé a la liquidación y tocá **Cerrar liquidación**.
 

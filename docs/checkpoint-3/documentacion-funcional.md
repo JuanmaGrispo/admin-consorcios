@@ -485,9 +485,7 @@ Clasificados según ISO/IEC 25010:2023.
 
 ## 5. Prototipo
 
-El prototipo navegable del front está en Figma: **[completar con el enlace de Figma]**.
-
-En el repositorio, [docs/diseno-front.html](../diseno-front.html) tiene las pantallas y los flujos que se usaron como guía visual para implementar el front.
+El prototipo del front está en el repositorio, en `docs/diseno-front.html`: tiene las pantallas y los flujos que se usaron como guía visual para implementar la app.
 
 ## 6. Matriz de trazabilidad
 
