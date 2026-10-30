@@ -57,10 +57,11 @@ import { hashearPassword } from '../modules/auth/password';
  * correrlo dos veces no duplica nada. --aplicar escribe en la base compartida:
  * avisar al grupo antes de usarlo. No publica eventos ni envía correos.
  *
- * La password de todos es `Domus.2026`.
+ * La password de todos sale de SEED_PASSWORD (apps/backend/.env). No va en el
+ * código porque esas cuentas existen en la base compartida.
  */
 
-const PASSWORD = 'Domus.2026';
+const PASSWORD = process.env.SEED_PASSWORD ?? '';
 const CONSORCIO = 'Av. Rivadavia 4820';
 
 interface PersonaDemo {
@@ -421,6 +422,9 @@ async function sembrarActividad(m: EntityManager, consorcioId: string, adminId: 
 }
 
 async function main() {
+  if (PASSWORD.length < 8) {
+    throw new Error('Falta SEED_PASSWORD en apps/backend/.env (mínimo 8 caracteres)');
+  }
   const personas = leerPersonas();
   const aplicar = process.argv.includes('--aplicar');
   await dataSource.initialize();
@@ -477,8 +481,8 @@ async function main() {
   }
 
   // ── Resumen ──
-  console.log(`\n  admin:  admin@domus.test  / ${PASSWORD}`);
-  console.log(`  vecino: vecino@domus.test / ${PASSWORD}   (unidad 3º B)`);
+  console.log('\n  admin:  admin@domus.test   (password: SEED_PASSWORD)');
+  console.log('  vecino: vecino@domus.test  (unidad 3º B)');
 
 }
 

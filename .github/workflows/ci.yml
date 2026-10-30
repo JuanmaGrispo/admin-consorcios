@@ -1,0 +1,46 @@
+name: CI de versión
+run-name: CI de ${{ github.ref_name }}
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: ${{ matrix.nombre }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: Análisis de tipos (backend y frontend)
+            comando: pnpm typecheck
+          - nombre: ESLint (frontend)
+            comando: pnpm front lint
+          - nombre: Pruebas automatizadas
+            comando: pnpm test
+          - nombre: Compilación (backend y frontend)
+            comando: pnpm build
+    steps:
+      - name: Descargar el código del tag
+        uses: actions/checkout@v4
+
+      - name: Configurar pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Instalar dependencias del lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Ejecutar verificación
+        run: ${{ matrix.comando }}
