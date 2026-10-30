@@ -106,13 +106,15 @@ Priorizados con MoSCoW: **Must** es imprescindible para lanzar, **Should** es im
 
 ## 8. Riesgos
 
-| Riesgo | Impacto | Mitigación |
-|---|---|---|
-| Mercado Pago no responde o el aviso de pago no llega | Un pago aprobado queda pendiente en Domus | Al volver del checkout la app consulta el pago; el webhook es idempotente |
-| El servidor de mail falla o limita los envíos | Los vecinos no reciben avisos | Mensajería con reintentos y cola de mensajes fallidos; la operación no depende del mail |
-| Un cambio de esquema afecta a varios módulos | Fallas en cascada | Migraciones versionadas y verificación de entidades contra la base |
-| Datos personales expuestos | Daño a los vecinos y riesgo legal (Ley 25.326) | Control de acceso por rol y por alcance, lo ajeno responde 404 |
-| Baja adopción del portal por parte de los vecinos | No se cumplen O1 y O6 | Tutorial de primer ingreso y avisos por mail con enlace directo |
+Cada riesgo se califica con probabilidad e impacto (alto, medio o bajo). El nivel resulta de combinar los dos, y ordena qué se prueba primero.
+
+| Riesgo | Probabilidad | Impacto | Nivel | Mitigación |
+|---|---|---|---|---|
+| El servidor de mail falla o limita los envíos | Alta | Medio: los vecinos no reciben avisos | Alto | Mensajería con reintentos y cola de mensajes fallidos; la operación no depende del mail |
+| Mercado Pago no responde o el aviso de pago no llega | Media | Alto: un pago aprobado queda pendiente en Domus | Alto | Al volver del checkout la app consulta el pago; el webhook es idempotente |
+| Datos personales expuestos | Baja | Alto: daño a los vecinos y riesgo legal (Ley 25.326) | Medio | Control de acceso por rol y por alcance, lo ajeno responde 404 |
+| Un cambio de esquema afecta a varios módulos | Media | Medio: fallas en cascada | Medio | Migraciones versionadas y verificación de entidades contra la base |
+| Baja adopción del portal por parte de los vecinos | Media | Medio: no se cumplen O1 y O6 | Medio | Tutorial de primer ingreso y avisos por mail con enlace directo |
 
 ## 9. Criterios de éxito y KPIs
 

@@ -35,6 +35,8 @@
 
 ## 2. Tu primer ingreso y tu boleta del mes (tutorial para el vecino)
 
+**Antes de empezar:** Tu cuenta, vinculada a una unidad que tenga una boleta emitida con saldo.
+
 En cinco minutos vas a ver lo que debés, pagarlo y descargar el recibo.
 
 1. **Ingresá** con el email y la contraseña que te dio la administración.
@@ -51,6 +53,8 @@ En cinco minutos vas a ver lo que debés, pagarlo y descargar el recibo.
 
 ### 3.1 Cómo pagar las expensas con Mercado Pago
 
+**Antes de empezar:** Una boleta emitida con saldo en tu unidad.
+
 1. Andá a **Expensas** y tocá **Pagar** en la boleta vigente.
 2. Revisá el detalle y tocá **Pagar** para ir a Mercado Pago.
 3. Pagá con tarjeta, dinero en cuenta o efectivo.
@@ -60,6 +64,8 @@ Sólo se puede pagar la boleta más reciente de tu unidad: incluye la deuda de l
 
 ### 3.2 Cómo ver tu historial y descargar una boleta
 
+**Antes de empezar:** Al menos una boleta emitida en tu unidad.
+
 1. Andá a **Expensas**: arriba ves el saldo de tu unidad y abajo la historia de boletas agrupada por año.
 2. Tocá una boleta para ver los gastos agrupados por rubro, los pagos y sus recibos.
 3. Tocá **Descargar boleta** para bajar el PDF, o **Descargar estado de cuenta** desde la lista.
@@ -67,6 +73,8 @@ Sólo se puede pagar la boleta más reciente de tu unidad: incluye la deuda de l
 ![Mis expensas](capturas/04-vecino-expensas.png)
 
 ### 3.3 Cómo abrir un reclamo con fotos y seguirlo
+
+**Antes de empezar:** Estar vinculado a una unidad. Las categorías las define la administración.
 
 1. Andá a **Reclamos** y tocá **Nuevo reclamo**.
 2. Completá **Título**, **Categoría** y **Descripción**, y sumá hasta 5 fotos.
@@ -78,6 +86,8 @@ Sólo se puede pagar la boleta más reciente de tu unidad: incluye la deuda de l
 
 ### 3.4 Cómo reservar un amenity y pagar la seña
 
+**Antes de empezar:** Que la administración haya cargado el amenity y que tenga horarios libres. Si el amenity bloquea por deuda, tu unidad no puede tener expensas vencidas.
+
 1. Andá a **Reservas** y tocá **Reservar**.
 2. Elegí el amenity, el día y el horario libre.
 3. Confirmá. Si el amenity requiere aprobación, la reserva queda pendiente hasta que la administración la apruebe.
@@ -87,6 +97,8 @@ Sólo se puede pagar la boleta más reciente de tu unidad: incluye la deuda de l
 ![Reservas](capturas/06-vecino-reservas.png)
 
 ### 3.5 Cómo confirmar asistencia a una asamblea y votar
+
+**Antes de empezar:** Una asamblea convocada o una votación publicada en tu consorcio, y que tu unidad esté en el padrón.
 
 1. Las asambleas convocadas y las votaciones abiertas aparecen en **Inicio**, en los próximos eventos. Tocá una para abrirla.
 2. En la asamblea, usá **Confirmá tu asistencia** para avisar si vas a ir.
@@ -112,6 +124,8 @@ La campana muestra cuántos avisos tenés sin leer. Tocá uno para ir a su panta
 
 ## 4. Tu primera liquidación (tutorial para el administrador)
 
+**Antes de empezar:** Un consorcio con sus unidades cargadas, cuyos coeficientes sumen 100 %, y ningún período anterior sin emitir.
+
 Vas a cargar los gastos del mes, revisar las boletas y emitirlas.
 
 1. En el menú, andá a **Liquidación** y tocá **Nueva liquidación**. Elegí el período.
@@ -136,6 +150,8 @@ Una liquidación emitida no se puede editar ni borrar. Si hubo un error, se corr
 
 ### 5.2 Cómo corregir los datos de un vecino o darle una contraseña nueva
 
+**Antes de empezar:** Que el vecino esté vinculado a una unidad de uno de tus consorcios.
+
 1. Andá a **Usuarios y vecinos** y buscalo por nombre, apellido o email. Sólo ves a los vecinos de tus consorcios.
 2. En la fila del vecino, usá **Editar datos** para corregir nombre, teléfono o email. Con el email nuevo entra desde la próxima vez; no se puede usar uno que ya tiene otra cuenta.
 3. Usá **Nueva contraseña** para asignarle una, por ejemplo si se la olvidó. Conviene que después la cambie desde su Perfil.
@@ -144,11 +160,15 @@ Dar de baja una cuenta le corresponde al superadministrador: si un vecino se mud
 
 ### 5.3 Cómo registrar un pago por transferencia
 
+**Antes de empezar:** Una boleta emitida con saldo.
+
 1. Andá a **Cobranzas** y buscá la unidad.
 2. Tocá **Registrar pago**, cargá el monto, el medio y la fecha.
 3. El pago se registra aprobado y genera su recibo. No se puede cargar más que el saldo de la boleta.
 
 ### 5.4 Cómo seguir la cobranza y enviar recordatorios
+
+**Antes de empezar:** Una liquidación emitida.
 
 1. En **Cobranzas** ves lo emitido, lo cobrado, el saldo pendiente y los intereses del período.
 2. Filtrá por pendientes, pagados o vencidos, o buscá por unidad o por propietario. Podés exportar la grilla a Excel.
@@ -157,6 +177,8 @@ Dar de baja una cuenta le corresponde al superadministrador: si un vecino se mud
 ![Cobranzas](capturas/10-admin-cobranzas.png)
 
 ### 5.5 Cómo atender un reclamo
+
+**Antes de empezar:** Un reclamo abierto. Para asignarlo, un proveedor activo en Catálogos.
 
 1. Andá a **Reclamos**. La bandeja se ve como tablero o como lista.
 2. Abrí un reclamo y usá las acciones del detalle: **Asignar proveedor**, **Estado**, **Prioridad** y **Marcar resuelto**.
@@ -172,6 +194,8 @@ Dar de baja una cuenta le corresponde al superadministrador: si un vecino se mud
 4. Cuando una reserva con seña pagada termina, se cancela o se rechaza, aparece en **Señas a devolver**. Devolvé el dinero por fuera de la app y tocá **Marcar devuelta**: queda registrado y se le avisa al vecino.
 
 ### 5.7 Cómo convocar una asamblea y cargar el acta
+
+**Antes de empezar:** Unidades con vecinos vinculados, que forman el padrón.
 
 1. Andá a **Asambleas**, tocá **Nueva asamblea** y cargá fecha, modalidad y orden del día.
 2. Guardala como borrador y, cuando esté lista, tocá **Convocar** (o **Crear y citar** para hacer las dos cosas juntas): los vecinos reciben la citación y aparece en el muro. Una asamblea convocada ya no se edita ni se borra.
@@ -281,6 +305,7 @@ Cada boleta nueva ya incluye lo que quedó sin pagar de la anterior, como saldo 
 
 | Mensaje | Qué pasó | Qué hacer |
 |---|---|---|
+| (Sin mensaje) La app vuelve a la pantalla de ingreso | La sesión venció o se cerró desde otra pestaña. | Ingresá de nuevo. Lo que estabas cargando y no guardaste se pierde. |
 | Email o contraseña incorrectos | Alguno de los dos datos no coincide, o la cuenta está dada de baja. | Revisá los datos. Si no recordás la contraseña, pedile a la administración que te asigne una nueva. |
 | Demasiados intentos fallidos. Probá de nuevo en N minutos. | Hubo 5 intentos fallidos seguidos y la cuenta se bloqueó por seguridad. | Esperá el tiempo indicado. |
 | Esta deuda ya está incluida en la boleta más reciente de la unidad: pagá esa | Intentaste pagar una boleta vieja. | Pagá la boleta más reciente desde Expensas. |
