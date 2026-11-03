@@ -13,19 +13,38 @@ jobs:
   verificar:
     name: ${{ matrix.nombre }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
           - nombre: Análisis de tipos (backend y frontend)
+            id: tipos
             comando: pnpm typecheck
           - nombre: ESLint (frontend)
+            id: lint
             comando: pnpm front lint
           - nombre: Pruebas automatizadas
+            id: pruebas
             comando: pnpm test
           - nombre: Compilación (backend y frontend)
+            id: build
             comando: pnpm build
+          - nombre: Aceptación — timeouts de proveedores
+            id: proveedores
+            comando: pnpm back test:aceptacion:proveedores
+          - nombre: Aceptación — Problem Details
+            id: errores
+            comando: pnpm back test:aceptacion:errores
+          - nombre: Aceptación — email
+            id: email
+            comando: pnpm back test:aceptacion:email
+          - nombre: Integración — PostgreSQL y RabbitMQ
+            id: infraestructura
+            comando: pnpm back test:aceptacion:docker
+          - nombre: Aceptación — API, web y carga
+            id: integral
+            comando: pnpm back test:aceptacion:integral --web --carga
     steps:
       - name: Descargar el código del tag
         uses: actions/checkout@v4
@@ -42,5 +61,26 @@ jobs:
       - name: Instalar dependencias del lockfile
         run: pnpm install --frozen-lockfile
 
+      - name: Instalar Chromium de aceptación
+        if: matrix.id == 'integral'
+        run: pnpm front exec playwright install --with-deps chromium
+
       - name: Ejecutar verificación
-        run: ${{ matrix.comando }}
+        shell: bash
+        run: |
+          mkdir -p resultados
+          ${{ matrix.comando }} 2>&1 | tee resultados/verificacion.log
+
+      - name: Conservar resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-${{ matrix.id }}
+          path: |
+            resultados/verificacion.log
+            apps/backend/acceptance/resultados/integral.json
+            apps/backend/acceptance/resultados/carga-resumen.json
+            apps/backend/acceptance/resultados/web/reporte.json
+            apps/backend/acceptance/resultados/web/**/*.png
+          if-no-files-found: ignore
+          retention-days: 30
