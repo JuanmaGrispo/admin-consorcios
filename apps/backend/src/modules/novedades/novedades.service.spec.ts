@@ -60,10 +60,11 @@ describe('NovedadesService', () => {
       consorciosDelVecino: async () => ['c1'],
       leidasPor: async () => new Set(lecturas),
       contarLecturas: async () => new Map([['n1', 3]]),
-      crear: async (datos: Partial<Novedad>, adjuntos: Partial<NovedadAdjunto>[]) => {
+      crear: async (datos: Partial<Novedad>, adjuntos: Partial<NovedadAdjunto>[], eventos: (n: Novedad) => EventoDomus[] = () => []) => {
         adjuntosGuardados.push(...adjuntos);
         const nueva = novedad({ ...datos, id: 'n2' });
         guardadas.push(nueva);
+        for (const e of eventos(nueva)) publicados.push([e.tipo_evento, e.consorcio_id, e.payload]);
         return nueva;
       },
       actualizar: async (n: Novedad, d: Partial<Novedad>) => ({ ...n, ...d }),

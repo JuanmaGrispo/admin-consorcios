@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -77,8 +78,8 @@ export class ReclamosController {
     description:
       'El vecino lo abre sobre su unidad (se infiere si tiene una sola). La prioridad sólo la fija el administrador.',
   })
-  crear(@UsuarioActual() usuario: Usuario, @Body() dto: CrearReclamoDto) {
-    return this.reclamos.crear(usuario, dto);
+  crear(@UsuarioActual() usuario: Usuario, @Body() dto: CrearReclamoDto, @Headers('idempotency-key') clave?: string) {
+    return this.reclamos.crear(usuario, dto, clave);
   }
 
   @Post(':id/mensajes')

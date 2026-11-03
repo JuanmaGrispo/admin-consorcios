@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { RolUsuario } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
@@ -35,6 +35,7 @@ const puede = (usuario: UsuarioActual, rolRequerido: RolUsuario | null): boolean
 
 @Injectable()
 export class ArchivosService {
+  private readonly logger = new Logger(ArchivosService.name);
   constructor(private readonly storage: ArchivosClient) {}
 
   /**
@@ -74,7 +75,12 @@ export class ArchivosService {
     // barras, "..", o pisar un archivo ajeno. El uuid además hace que la URL
     // pública no se pueda adivinar.
     const ruta = `${destino}/${usuario.id}/${randomUUID()}.${extensionDe(tipo)}`;
-    const url = await this.storage.subir(ruta, archivo.buffer, tipo);
+    let url: string;
+    try { url = await this.storage.subir(ruta, archivo.buffer, tipo); }
+    catch (error) {
+      this.logger.warn(`Subida sin confirmación; conciliar por ruta estable: ${ruta}`);
+      throw error;
+    }
 
     return { url, ruta, tipo, tamanio: archivo.buffer.length };
   }

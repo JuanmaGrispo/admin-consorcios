@@ -66,9 +66,10 @@ export class ConsorciosService {
   async update(
     id: string,
     dto: UpdateConsorcioDto,
+    etag?: string,
   ): Promise<ConsorcioConAdministrador> {
     if (dto.administradorId) await this.exigirAdministrador(dto.administradorId);
-    const updated = await this.consorcios.update(id, dto);
+    const updated = await this.consorcios.update(id, dto, etag, (c) => this.recortar(c));
     if (!updated) throw new NotFoundException(`Consorcio ${id} no existe`);
     return this.recortar(updated);
   }

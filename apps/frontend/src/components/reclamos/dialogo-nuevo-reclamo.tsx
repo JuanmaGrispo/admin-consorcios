@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { archivosService } from '@/services/archivos';
-import { reclamosService } from '@/services/reclamos';
+import { useIntentoReclamo } from '@/hooks/use-intento-reclamo';
 import { unidadesService } from '@/services/unidades';
 import type { CategoriaReclamo } from '@/types/catalogo';
 import type { PrioridadReclamo, Reclamo } from '@/types/reclamo';
@@ -43,6 +43,7 @@ export function DialogoNuevoReclamo({
   onAbiertoChange,
   onCreado,
 }: DialogoNuevoReclamoProps) {
+  const intento = useIntentoReclamo();
   const unidades = usePedido(
     abierto ? `unidades:${consorcioId}` : null,
     () => unidadesService.listar({ consorcioId }),
@@ -59,6 +60,7 @@ export function DialogoNuevoReclamo({
   const [guardando, setGuardando] = useState(false);
 
   function limpiar() {
+    intento.reiniciar();
     setUnidadId('');
     setCategoriaId('');
     setPrioridad('MEDIA');
@@ -69,6 +71,12 @@ export function DialogoNuevoReclamo({
   }
 
   function cambiarAbierto(valor: boolean) {
+    if (!valor && intento.pendiente()) {
+      // Una respuesta perdida puede haber guardado el reclamo y sus fotos.
+      // Conservamos borrador, clave y adjuntos para reintentar al volver a abrir.
+      onAbiertoChange(false);
+      return;
+    }
     if (!valor) {
       // Las fotos subidas de un reclamo que no se crea no tienen que quedar en el storage.
       for (const foto of fotos) archivosService.borrar(foto.url).catch(() => undefined);
@@ -94,7 +102,7 @@ export function DialogoNuevoReclamo({
     setGuardando(true);
     setError(null);
     try {
-      const creado = await reclamosService.crear({
+      const creado = await intento.crear({
         unidadId,
         categoriaId,
         prioridad,

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { TipoArchivo } from './tipos-archivo';
+import { llamarProveedor } from '../../core/http/proveedor-rest';
 
 /**
  * Única puerta a Supabase Storage. Con `fetch` de Node y la API REST: son dos
@@ -22,6 +23,7 @@ export class ArchivosClient {
 
   /** Sube el archivo y devuelve la URL pública con la que queda servido. */
   async subir(ruta: string, contenido: Buffer, tipo: TipoArchivo): Promise<string> {
+    return llamarProveedor(async (signal) => {
     const base = this.exigir('SUPABASE_URL').replace(/\/$/, '');
     const bucket = this.bucket();
 
@@ -37,33 +39,36 @@ export class ArchivosClient {
           'x-upsert': 'false',
         },
         body: new Uint8Array(contenido),
-        signal: AbortSignal.timeout(30_000),
+        signal,
       },
     );
 
     if (!respuesta.ok) {
-      this.logger.error(`subir ${ruta} → ${respuesta.status}: ${await respuesta.text()}`);
+      this.logger.error(`subir ${ruta} → ${respuesta.status}`);
       throw new BadGatewayException('No se pudo guardar el archivo. Probá de nuevo en un rato.');
     }
 
-    return `${base}/storage/v1/object/public/${bucket}/${this.codificar(ruta)}`;
+    return `${this.basePublica()}/storage/v1/object/public/${bucket}/${this.codificar(ruta)}`;
+    });
   }
 
   /** Borra un archivo. Que no exista no es un error: el resultado es el mismo. */
   async borrar(ruta: string): Promise<void> {
+    return llamarProveedor(async (signal) => {
     const base = this.exigir('SUPABASE_URL').replace(/\/$/, '');
     const respuesta = await fetch(
       `${base}/storage/v1/object/${this.bucket()}/${this.codificar(ruta)}`,
       {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${this.exigir('SUPABASE_SERVICE_ROLE_KEY')}` },
-        signal: AbortSignal.timeout(10_000),
+        signal,
       },
     );
     if (!respuesta.ok && respuesta.status !== 404) {
-      this.logger.error(`borrar ${ruta} → ${respuesta.status}: ${await respuesta.text()}`);
+      this.logger.error(`borrar ${ruta} → ${respuesta.status}`);
       throw new BadGatewayException('No se pudo borrar el archivo');
     }
+    });
   }
 
   /**
@@ -71,10 +76,12 @@ export class ArchivosClient {
    * de este bucket. Sirve para no dejar borrar por path arbitrario.
    */
   rutaDeUrl(url: string): string | null {
-    const prefijo = `${this.exigir('SUPABASE_URL').replace(/\/$/, '')}/storage/v1/object/public/${this.bucket()}/`;
+    const prefijo = `${this.basePublica()}/storage/v1/object/public/${this.bucket()}/`;
     if (!url.startsWith(prefijo)) return null;
     try {
-      return decodeURIComponent(url.slice(prefijo.length));
+      const ruta = decodeURIComponent(url.slice(prefijo.length));
+      if (/[\\\x00]/.test(ruta) || ruta.split('/').some((s) => !s || s === '.' || s === '..')) return null;
+      return ruta;
     } catch {
       return null;
     }
@@ -82,6 +89,10 @@ export class ArchivosClient {
 
   private bucket(): string {
     return this.config.get<string>('SUPABASE_STORAGE_BUCKET', 'domus');
+  }
+
+  private basePublica(): string {
+    return (this.config.get<string>('SUPABASE_PUBLIC_URL')?.trim() || this.exigir('SUPABASE_URL')).replace(/\/$/, '');
   }
 
   /** Cada segmento por separado: las barras de la ruta tienen que sobrevivir. */

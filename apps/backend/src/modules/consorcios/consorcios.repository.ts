@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, PreconditionFailedException } from '@nestjs/common';
+import { etagDe } from '../../core/http/contratos-rest';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Consorcio } from '../../database/entities';
@@ -40,24 +41,32 @@ export class ConsorciosRepository {
     return qb.getMany();
   }
 
-  findById(id: string): Promise<Consorcio | null> {
-    return this.repo
+  async findById(id: string, repo = this.repo): Promise<Consorcio | null> {
+    const entidad = await repo
       .createQueryBuilder('c')
       .leftJoinAndSelect('c.administrador', 'a')
       .loadRelationCountAndMap('c.cantidadUnidades', 'c.unidades')
       .where('c.id = :id', { id })
       .getOne();
+    return entidad;
   }
 
   create(data: Partial<Consorcio>): Promise<Consorcio> {
     return this.repo.save(this.repo.create(data));
   }
 
-  async update(id: string, data: Partial<Consorcio>): Promise<Consorcio | null> {
-    const existing = await this.repo.findOneBy({ id });
-    if (!existing) return null;
-    await this.repo.save({ ...existing, ...data });
-    return this.findById(id);
+  async update(id: string, data: Partial<Consorcio>, etag?: string, representar: (c: Consorcio) => unknown = (c) => c): Promise<Consorcio | null> {
+    return this.repo.manager.transaction(async (m) => {
+      const repo = m.getRepository(Consorcio);
+      const locked = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!locked) return null;
+      const existing = (await this.findById(id, repo))!;
+      if (etag !== undefined && etagDe(representar(existing)) !== etag) {
+        throw new PreconditionFailedException('El consorcio cambió. Recargalo para revisar antes de guardar.');
+      }
+      await repo.save({ ...locked, ...data });
+      return this.findById(id, repo);
+    });
   }
 
   async remove(id: string): Promise<boolean> {

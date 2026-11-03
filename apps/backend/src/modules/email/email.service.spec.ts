@@ -38,6 +38,15 @@ describe('EmailService', () => {
     apagados = new Map();
     smtp = true;
     const repo = {
+      reservarEnvio: async (datos: Partial<EnvioNotificacion>) => {
+        const previo = envios.find((e) => e.entidadId === datos.entidadId && e.destinatario === datos.destinatario);
+        if (previo?.estado === EstadoEnvio.ENVIADO) return null;
+        if (previo?.ultimoError === 'ENTREGA_INCIERTA') throw new Error('Entrega incierta');
+        const envio = previo ?? ({ id: `e${envios.length}`, ...datos } as EnvioNotificacion);
+        if (!previo) envios.push(envio);
+        envio.ultimoError = 'ENTREGA_INCIERTA';
+        return envio;
+      },
       vecinosDeUnidades: async () => [
         vecino('ana@x', 'u1', '3º B'),
         vecino('ana@x', 'u2', 'Cochera 4'),
@@ -63,7 +72,7 @@ describe('EmailService', () => {
         return smtp;
       },
       enviar: async (c: Correo) => {
-        if (caidos.has(c.para)) throw new Error('SMTP caído');
+        if (caidos.has(c.para)) throw Object.assign(new Error('SMTP caído'), { responseCode: 450 });
         enviados.push(c);
       },
     } as unknown as MailerClient;

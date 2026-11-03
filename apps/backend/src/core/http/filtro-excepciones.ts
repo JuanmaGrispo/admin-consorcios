@@ -9,6 +9,18 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
+import { STATUS_CODES } from 'node:http';
+
+function responderProblema(res: Response, req: Request, status: number, message: unknown, id = randomUUID()): void {
+  const title = STATUS_CODES[status] ?? 'Error';
+  res.setHeader('Content-Type', 'application/problem+json');
+  res.status(status).json({
+    type: 'about:blank', title, status, instance: req.originalUrl,
+    detail: Array.isArray(message) ? message.join('; ') : String(message),
+    // Compatibilidad con el cliente web actual durante la transición.
+    statusCode: status, message, id,
+  });
+}
 
 /** Sin saltos de línea ni caracteres de control: un dato del cliente no puede falsificar una línea del log. */
 export const limpiarParaLog = (valor: unknown): string =>
@@ -59,11 +71,7 @@ export class FiltroExcepciones implements ExceptionFilter {
         const permitidos = metodosDeRuta(req);
         if (permitidos.length && !permitidos.includes(req.method)) {
           res.setHeader('Allow', permitidos.join(', '));
-          res.status(HttpStatus.METHOD_NOT_ALLOWED).json({
-            statusCode: HttpStatus.METHOD_NOT_ALLOWED,
-            message: `Método ${req.method} no permitido`,
-            error: 'Method Not Allowed',
-          });
+          responderProblema(res, req, HttpStatus.METHOD_NOT_ALLOWED, `Método ${req.method} no permitido`);
           return;
         }
       }
@@ -73,7 +81,13 @@ export class FiltroExcepciones implements ExceptionFilter {
           `${status} ${limpiarParaLog(req.method)} ${limpiarParaLog(req.originalUrl)} ip=${limpiarParaLog(req.ip)} usuario=${limpiarParaLog(req.user?.id ?? 'anónimo')}`,
         );
       }
-      res.status(status).json(excepcion.getResponse());
+      const respuesta = excepcion.getResponse();
+      if (typeof respuesta === 'object' && 'retryAfter' in respuesta) {
+        const espera = Number((respuesta as { retryAfter: unknown }).retryAfter);
+        if (Number.isInteger(espera) && espera > 0) res.setHeader('Retry-After', String(espera));
+      }
+      const message = typeof respuesta === 'string' ? respuesta : (respuesta as { message?: unknown }).message ?? excepcion.message;
+      responderProblema(res, req, status, message);
       return;
     }
 
@@ -82,10 +96,6 @@ export class FiltroExcepciones implements ExceptionFilter {
       `500 ${limpiarParaLog(req.method)} ${limpiarParaLog(req.originalUrl)} id=${id}`,
       excepcion instanceof Error ? excepcion.stack : String(excepcion),
     );
-    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      message: 'Error interno del servidor',
-      id,
-    });
+    responderProblema(res, req, 500, 'Error interno del servidor', id);
   }
 }

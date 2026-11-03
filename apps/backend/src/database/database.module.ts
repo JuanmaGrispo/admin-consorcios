@@ -31,6 +31,7 @@ const ENTIDADES = Object.values(entities).filter(
         // Siempre false: el esquema lo manda la base, no el código. Las entidades
         // se regeneran con `pnpm back db:generate-entities`.
         synchronize: false,
+        applicationName: 'domus-backend',
       }),
     }),
   ],

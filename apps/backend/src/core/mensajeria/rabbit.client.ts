@@ -1,4 +1,5 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
+import { OutboxRepository } from './outbox.repository';
 import { ConfigService } from '@nestjs/config';
 import type { Channel, ConsumeMessage } from 'amqplib';
 import {
@@ -18,10 +19,11 @@ import {
 
 /**
  * La conexión con RabbitMQ. Sin `RABBITMQ_URL` no conecta y la app anda igual:
- * los eventos quedan en el log, como con Mercado Pago o archivos sin configurar.
+ * los eventos quedan persistidos en outbox hasta configurar el broker.
  *
- * amqp-connection-manager reconecta solo y retiene en memoria lo que se publica
- * mientras el broker está caído.
+ * La app inyecta OutboxRepository para persistir antes de publicar y recuperar
+ * pendientes al arrancar. El cliente sin repository solo se usa en pruebas
+ * del transporte; no ofrece durabilidad de publicaciones pendientes.
  */
 @Injectable()
 export class RabbitClient implements OnModuleInit, OnModuleDestroy {
@@ -30,7 +32,12 @@ export class RabbitClient implements OnModuleInit, OnModuleDestroy {
   private publicacion: ChannelWrapper | null = null;
   private readonly canales: ChannelWrapper[] = [];
 
-  constructor(private readonly config: ConfigService) {}
+  private timer?: ReturnType<typeof setInterval>;
+  private enviando = false;
+  private deteniendo = false;
+  private despachoPendiente: Promise<void> = Promise.resolve();
+  private terminarDespacho?: () => void;
+  constructor(private readonly config: ConfigService, @Optional() private readonly outbox?: OutboxRepository) {}
 
   get configurado(): boolean {
     return Boolean(this.config.get<string>('RABBITMQ_URL'));
@@ -39,7 +46,7 @@ export class RabbitClient implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     const url = this.config.get<string>('RABBITMQ_URL');
     if (!url) {
-      this.logger.warn('Sin RABBITMQ_URL: los eventos no se publican, sólo se loguean');
+      this.logger.warn('Sin RABBITMQ_URL: los eventos quedan pendientes en outbox');
       return;
     }
     this.conexion = connect([url]);
@@ -51,20 +58,44 @@ export class RabbitClient implements OnModuleInit, OnModuleDestroy {
       confirm: true,
       setup: (canal: Channel) => declararExchanges(canal),
     });
+    this.timer = setInterval(() => void this.despacharPendientes(), 1000);
+    this.timer.unref();
   }
 
   async onModuleDestroy(): Promise<void> {
+    this.deteniendo = true;
+    clearInterval(this.timer);
     await Promise.allSettled([...this.canales, this.publicacion].map((c) => c?.close()));
+    await this.despachoPendiente;
     await this.conexion?.close();
   }
 
   /** Persistente: sobrevive a un reinicio del broker. */
-  publicar(routingKey: string, contenido: Buffer, messageId: string): Promise<boolean> {
+  async publicar(routingKey: string, contenido: Buffer, messageId: string): Promise<boolean> {
+    if (this.outbox) {
+      await this.outbox.guardar(messageId, routingKey, contenido);
+      void this.despacharPendientes();
+      return true;
+    }
+    return this.enviar(routingKey, contenido, messageId);
+  }
+
+  private async despacharPendientes(): Promise<void> {
+    if (!this.outbox || this.deteniendo || this.enviando || !this.conexion?.isConnected()) return;
+    this.enviando = true;
+    this.despachoPendiente = new Promise((resolve) => { this.terminarDespacho = resolve; });
+    try { await this.outbox.despachar((routing, contenido, id) => this.enviar(routing, contenido, id)); }
+    catch { this.logger.warn('Publicaciones pendientes: se reintentará desde outbox'); }
+    finally { this.enviando = false; this.terminarDespacho?.(); }
+  }
+
+  private enviar(routingKey: string, contenido: Buffer, messageId: string): Promise<boolean> {
     if (!this.publicacion) return Promise.resolve(false);
     return this.publicacion.publish(EXCHANGE, routingKey, contenido, {
       contentType: 'application/json',
       persistent: true,
       messageId,
+      timeout: 5000,
     });
   }
 

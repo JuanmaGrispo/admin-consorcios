@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { EventoDomus } from '../../core/mensajeria/eventos';
+import { registrarEventos } from '../../core/mensajeria/outbox.repository';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Brackets,
@@ -151,8 +153,11 @@ export class VotacionesRepository {
     });
   }
 
-  async actualizar(id: string, cambios: QueryDeepPartialEntity<Votacion>): Promise<void> {
-    await this.votaciones.update({ id }, { ...cambios, updatedAt: new Date() });
+  async actualizar(id: string, cambios: QueryDeepPartialEntity<Votacion>, eventos: EventoDomus[] = []): Promise<void> {
+    await this.dataSource.transaction(async (m) => {
+      await m.update(Votacion, { id }, { ...cambios, updatedAt: new Date() });
+      await registrarEventos(m, eventos);
+    });
   }
 
   async reemplazarOpciones(votacionId: string, extras: string[]): Promise<void> {

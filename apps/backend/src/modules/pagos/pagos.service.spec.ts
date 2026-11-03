@@ -18,7 +18,7 @@ import type { ConsorciosService } from '../consorcios/consorcios.service';
 import type { EstadoCuentaService } from '../expensas/estado-cuenta.service';
 import type { ReservasService } from '../reservas/reservas.service';
 import { firmaValida, type MercadoPagoClient, type PagoMercadoPago } from './mercado-pago.client';
-import type { PagosRepository } from './pagos.repository';
+import type { PagosRepository, EfectosPago } from './pagos.repository';
 import { estadoSegunMercadoPago, PagosService } from './pagos.service';
 
 const admin: UsuarioActual = {
@@ -52,22 +52,33 @@ function crearEntorno() {
       return db.pagos;
     },
     findById: async (id: string) => db.pagos.find((p) => p.id === id) ?? null,
-    crear: async (d: Partial<Pago>) => {
+    crear: async (d: Partial<Pago>, efectos?: EfectosPago) => {
       const p = { id: `p${db.pagos.length + 1}`, ...d } as Pago;
       db.pagos.push(p);
+      await aplicar(p, undefined, efectos);
       return p;
     },
-    actualizar: async (id: string, d: Partial<Pago>) =>
-      Object.assign(db.pagos.find((p) => p.id === id)!, d),
-    actualizarSiEstado: async (id: string, estado: EstadoPago, d: Partial<Pago>) => {
+    actualizar: async (id: string, d: Partial<Pago>, efectos?: EfectosPago) => {
+      const p = db.pagos.find((p) => p.id === id)!;
+      const anterior = p.estado;
+      Object.assign(p, d);
+      await aplicar(p, anterior, efectos);
+      return p;
+    },
+    actualizarSiEstado: async (id: string, estado: EstadoPago, d: Partial<Pago>, efectos?: EfectosPago) => {
       const pago = db.pagos.find((p) => p.id === id)!;
-      return pago.estado === estado ? Object.assign(pago, d) : null;
+      if (pago.estado !== estado) return null;
+      Object.assign(pago, d);
+      await aplicar(pago, estado, efectos);
+      return pago;
     },
     findConRelaciones: async (id: string) => {
       const pago = db.pagos.find((p) => p.id === id);
       return pago ? { ...pago, unidad: { consorcioId: 'c1', etiqueta: '3º B' } } : null;
     },
     siguienteCorrelativoRecibo: async () => (db.correlativo += 1),
+    preferenciaIncierta: async (destino: { boletaId: string | null; reservaId: string | null }) => db.pagos.find((p) =>
+      p.estado === EstadoPago.PENDIENTE && p.mpStatusDetail === 'preferencia_incierta' && (destino.boletaId ? p.boletaId === destino.boletaId : p.reservaId === destino.reservaId)) ?? null,
     pendienteDeMercadoPago: async (destino: { boletaId: string | null; reservaId: string | null }) =>
       [...db.pagos]
         .reverse()
@@ -92,7 +103,7 @@ function crearEntorno() {
     id: 'b1',
     unidadId: 'u1',
     total: 400,
-    liquidacion: { periodo: '2026-10-01', consorcioId: 'c1' },
+    liquidacion: { periodo: '2026-10-01', consorcioId: 'c1', fechaVencimiento: '2099-01-01' },
     unidad: { etiqueta: '3º B' },
   } as Boleta;
   const expensas = {
@@ -163,6 +174,19 @@ function crearEntorno() {
     findInterna: async () => reserva,
   } as unknown as ReservasService;
 
+  // Modelo del nuevo contrato transaccional: aplica el plan del service y conserva eventos.
+  async function aplicar(pago: Pago, anterior: EstadoPago | undefined, efectos?: EfectosPago) {
+    if (!efectos) return;
+    if (pago.estado === EstadoPago.APROBADO && !pago.reciboNumero) pago.reciboNumero = `0001-${String(++db.correlativo).padStart(8, '0')}`;
+    const totalAprobado = db.pagos.filter((p) => p.estado === EstadoPago.APROBADO && (pago.boletaId ? p.boletaId === pago.boletaId : p.reservaId === pago.reservaId)).reduce((sum, p) => sum + p.monto, 0);
+    const plan = efectos({ pago, boleta: pago.boletaId ? boleta : null, reserva: pago.reservaId ? reserva : null,
+      totalAprobado, hoy: '2026-10-01', vecinos: ['v1', 'falla'], administradorId: 'a1',
+      primeraAprobacion: pago.estado === EstadoPago.APROBADO && anterior !== EstadoPago.APROBADO });
+    if (plan.estadoBoleta && anterior !== pago.estado) db.sincronizadas.push(pago.boletaId!);
+    for (const e of plan.eventos) if (e.tipo_evento === 'aviso.directo') avisos.push({
+      destinatarioId: e.payload.destinatario_id, asunto: e.payload.asunto, cuerpo: e.payload.cuerpo, origen: e.payload.origen,
+    });
+  }
   return { db, mp, repo, expensas, consorcios, mercadoPago, notificador, avisos, reservas };
 }
 
@@ -224,8 +248,8 @@ describe('PagosService', () => {
       assert.equal(pago.unidadId, 'u1');
       assert.equal(pago.registradoPorId, 'a1');
       assert.deepEqual(entorno.db.sincronizadas, ['b1']);
-      // El aviso que falla no corta el pago.
-      assert.deepEqual(entorno.avisos.map((a) => a.destinatarioId), ['v1']);
+      // Todos los avisos quedan pendientes; SMTP ya no corre dentro del pago.
+      assert.deepEqual(entorno.avisos.map((a) => a.destinatarioId), ['v1', 'falla']);
     });
 
     it('no acepta más que el saldo', async () => {
@@ -313,6 +337,20 @@ describe('PagosService', () => {
       assert.ok(entorno.avisos.some((a) => a.destinatarioId === 'a1' && a.asunto.startsWith('Cobro duplicado')));
     });
 
+    it('no confirma un webhook de cobro extra si no puede persistir su aviso', async () => {
+      await service.crearPreferencia(admin, { boletaId: 'b1' });
+      entorno.mp.pagos.set('100', pagoMp(100, 'approved'));
+      entorno.mp.pagos.set('101', pagoMp(101, 'approved'));
+      await webhook('100');
+      const enviar = entorno.notificador.enviar;
+      entorno.notificador.enviar = async () => { throw new Error('Outbox no disponible'); };
+      await assert.rejects(webhook('101'), /Outbox no disponible/);
+      assert.equal(entorno.db.pagos[0].mpPaymentId, '100');
+      entorno.notificador.enviar = enviar;
+      await webhook('101');
+      assert.ok(entorno.avisos.some((a) => a.destinatarioId === 'a1'));
+    });
+
     describe('al volver del checkout', () => {
       it('le pregunta a Mercado Pago sin esperar al webhook', async () => {
         const { pagoId } = await service.crearPreferencia(admin, { boletaId: 'b1' });
@@ -345,10 +383,13 @@ describe('PagosService', () => {
       });
     });
 
-    it('si Mercado Pago falla, el pago no queda pendiente para siempre', async () => {
+    it('si Mercado Pago falla sin respuesta definitiva, bloquea otro checkout hasta conciliar', async () => {
       entorno.mp.preferenciaFalla = true;
       await assert.rejects(service.crearPreferencia(admin, { boletaId: 'b1' }));
-      assert.equal(entorno.db.pagos[0].estado, EstadoPago.RECHAZADO);
+      assert.equal(entorno.db.pagos[0].estado, EstadoPago.PENDIENTE);
+      assert.equal(entorno.db.pagos[0].mpStatusDetail, 'preferencia_incierta');
+      await assert.rejects(service.crearPreferencia(admin, { boletaId: 'b1' }));
+      assert.equal(entorno.db.pagos.length, 1);
     });
 
     it('con firma inválida, 401 y no toca nada', async () => {
@@ -367,7 +408,7 @@ describe('PagosService', () => {
       assert.equal(pago.mpPaymentId, '100');
       // El reintento no vuelve a sincronizar ni a avisar.
       assert.deepEqual(entorno.db.sincronizadas, ['b1']);
-      assert.equal(entorno.avisos.length, 1);
+      assert.deepEqual(entorno.avisos.map((a) => a.destinatarioId), ['v1', 'falla']);
     });
 
     it('un intento rechazado tardío no pisa uno aprobado', async () => {

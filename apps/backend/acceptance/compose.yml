@@ -1,0 +1,42 @@
+# Solo infraestructura de aceptación. No lee los .env de la aplicación.
+name: domus-aceptacion
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: domus_aceptacion
+      POSTGRES_USER: ${ACEPTACION_DB_USUARIO:?Definir usuario de prueba}
+      POSTGRES_PASSWORD: ${ACEPTACION_DB_PASSWORD:?Definir password de prueba}
+    ports:
+      - '127.0.0.1:55432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d domus_aceptacion']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: rabbitmq-aceptacion
+    user: '0:0'
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mkdir -p /var/lib/rabbitmq
+        printf '%s' "$$ACEPTACION_ERLANG_COOKIE" > /var/lib/rabbitmq/.erlang.cookie
+        chown rabbitmq:rabbitmq /var/lib/rabbitmq /var/lib/rabbitmq/.erlang.cookie
+        chmod 700 /var/lib/rabbitmq
+        chmod 400 /var/lib/rabbitmq/.erlang.cookie
+        exec docker-entrypoint.sh rabbitmq-server
+    environment:
+      RABBITMQ_DEFAULT_USER: ${ACEPTACION_MQ_USUARIO:?Definir usuario de prueba}
+      RABBITMQ_DEFAULT_PASS: ${ACEPTACION_MQ_PASSWORD:?Definir password de prueba}
+      ACEPTACION_ERLANG_COOKIE: ${ACEPTACION_ERLANG_COOKIE:?Definir cookie efímera}
+    ports:
+      - '127.0.0.1:55672:5672'
+      - '127.0.0.1:55673:15672'
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 30

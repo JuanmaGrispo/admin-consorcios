@@ -1,3 +1,4 @@
+import type { EventoDomus } from '../../core/mensajeria/eventos';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -138,7 +139,8 @@ function crearService(
       escrito.nuevoPunto = nuevoPunto;
       return 'vt1';
     },
-    actualizar: async (_id: string, cambios: unknown) => {
+    actualizar: async (_id: string, cambios: unknown, eventos: EventoDomus[] = []) => {
+      for (const e of eventos) escrito.publicados.push([e.tipo_evento, e.consorcio_id, e.payload]);
       escrito.actualizada.push(cambios);
     },
     reemplazarOpciones: async () => undefined,

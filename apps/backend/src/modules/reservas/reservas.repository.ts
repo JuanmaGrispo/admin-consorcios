@@ -1,4 +1,6 @@
 import { ConflictException, Injectable } from '@nestjs/common';
+import { EventoDomus } from '../../core/mensajeria/eventos';
+import { registrarEventos } from '../../core/mensajeria/outbox.repository';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, EntityManager, Repository } from 'typeorm';
 import {
@@ -397,13 +399,16 @@ export class ReservasRepository {
     datos: Partial<Reserva>,
     /** Corre con el amenity bloqueado; lo que devuelve (el lugar) se suma a la reserva. */
     chequear: (m: EntityManager) => Promise<Partial<Reserva> | void>,
+    eventos: (r: Reserva) => EventoDomus[] = () => [],
   ): Promise<Reserva> {
     try {
       const creada = await this.dataSource.transaction(async (m) => {
         await m.query('SELECT id FROM amenity WHERE id = $1 FOR UPDATE', [amenityId]);
         const extra = (await chequear(m)) ?? {};
         const repo = m.getRepository(Reserva);
-        return repo.save(repo.create({ ...datos, ...extra }));
+        const guardada = await repo.save(repo.create({ ...datos, ...extra }));
+        await registrarEventos(m, eventos(guardada));
+        return guardada;
       });
       return (await this.findById(creada.id))!;
     } catch (error) {
@@ -416,8 +421,11 @@ export class ReservasRepository {
     }
   }
 
-  async actualizarReserva(reserva: Reserva, data: Partial<Reserva>): Promise<Reserva> {
-    await this.reservas.save({ ...reserva, ...data });
+  async actualizarReserva(reserva: Reserva, data: Partial<Reserva>, eventos: EventoDomus[] = []): Promise<Reserva> {
+    await this.dataSource.transaction(async (m) => {
+      await m.save(Reserva, { ...reserva, ...data });
+      await registrarEventos(m, eventos);
+    });
     return (await this.findById(reserva.id))!;
   }
 
@@ -454,6 +462,7 @@ export class ReservasRepository {
     amenityId: string,
     data: Partial<AmenityBloqueo>,
     resolver: (pisadas: Reserva[]) => Promise<Reserva[]>,
+    eventos: (canceladas: Reserva[]) => EventoDomus[] = () => [],
   ): Promise<{ bloqueo: AmenityBloqueo; canceladas: Reserva[] }> {
     return this.dataSource.transaction(async (m) => {
       await m.query('SELECT id FROM amenity WHERE id = $1 FOR UPDATE', [amenityId]);
@@ -469,7 +478,9 @@ export class ReservasRepository {
       }
 
       const repo = m.getRepository(AmenityBloqueo);
-      return { bloqueo: await repo.save(repo.create(data)), canceladas };
+      const bloqueo = await repo.save(repo.create(data));
+      await registrarEventos(m, eventos(canceladas));
+      return { bloqueo, canceladas };
     });
   }
 
