@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { EventoDomus } from '../../core/mensajeria/eventos';
+import { registrarEventos } from '../../core/mensajeria/outbox.repository';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Novedad, NovedadAdjunto, NovedadLectura } from '../../database/entities';
@@ -87,12 +89,13 @@ export class NovedadesRepository {
   }
 
   /** La novedad y sus adjuntos, juntos o ninguno. */
-  async crear(datos: Partial<Novedad>, adjuntos: Partial<NovedadAdjunto>[]): Promise<Novedad> {
+  async crear(datos: Partial<Novedad>, adjuntos: Partial<NovedadAdjunto>[], eventos: (n: Novedad) => EventoDomus[] = () => []): Promise<Novedad> {
     const id = await this.novedades.manager.transaction(async (m) => {
       const novedad = await m.save(m.create(Novedad, datos));
       if (adjuntos.length > 0) {
         await m.save(adjuntos.map((a) => m.create(NovedadAdjunto, { ...a, novedadId: novedad.id })));
       }
+      await registrarEventos(m, eventos(novedad));
       return novedad.id;
     });
     return (await this.findById(id))!;

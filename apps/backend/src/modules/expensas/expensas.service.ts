@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
+import { crearSobre } from '../../core/mensajeria/eventos';
 import { Notificador } from '../../core/notificaciones/notificador';
 import {
   Boleta,
@@ -297,21 +298,17 @@ export class ExpensasService {
       );
     }
 
-    const boletas = await this.recalcular(liquidacion);
+    const boletas = await this.calcular(liquidacion, await this.expensas.ajustesDe(liquidacion.id));
     const totalEmitido = aPesos(boletas.reduce((suma, b) => suma + aCentavos(b.total), 0));
 
-    await this.expensas.update(id, {
-      estado: emitida,
+    await this.expensas.reemplazarBoletas(id, boletas, emitida, [crearSobre('expensas.emitidas', liquidacion.consorcioId, {
+      liquidacion_id: liquidacion.id, periodo: liquidacion.periodo.slice(0, 7),
+      unidades_afectadas: boletas.map((b) => b.unidadId), fecha_vencimiento: liquidacion.fechaVencimiento,
+    })], {
       fechaEmision: new Date(),
       totalEmitido,
     });
 
-    this.eventos.publicar('expensas.emitidas', liquidacion.consorcioId, {
-      liquidacion_id: liquidacion.id,
-      periodo: liquidacion.periodo.slice(0, 7),
-      unidades_afectadas: boletas.map((b) => b.unidadId),
-      fecha_vencimiento: liquidacion.fechaVencimiento,
-    });
     return this.findOne(usuario, id);
   }
 

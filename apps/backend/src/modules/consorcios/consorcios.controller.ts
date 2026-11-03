@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
+  Res,
   HttpCode,
   HttpStatus,
   Param,
@@ -11,6 +13,8 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
+import { etagDe, exigirIfMatch } from '../../core/http/contratos-rest';
 import { RolUsuario } from '../../database/entities';
 import type { UsuarioActual as Usuario } from '../auth/auth.types';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -31,8 +35,10 @@ export class ConsorciosController {
   }
 
   @Get(':id')
-  findOne(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
-    return this.consorcios.findVisible(usuario, id);
+  async findOne(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string, @Res({ passthrough: true }) res: Response) {
+    const consorcio = await this.consorcios.findVisible(usuario, id);
+    res.setHeader('ETag', etagDe(consorcio));
+    return consorcio;
   }
 
   // Crear, modificar y borrar consorcios es del dueño del SaaS, no de los
@@ -45,11 +51,15 @@ export class ConsorciosController {
 
   @Roles(RolUsuario.SUPER_ADMIN)
   @Patch(':id')
-  update(
+  async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateConsorcioDto,
+    @Headers('if-match') ifMatch: string | undefined,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.consorcios.update(id, dto);
+    const consorcio = await this.consorcios.update(id, dto, exigirIfMatch(ifMatch));
+    res.setHeader('ETag', etagDe(consorcio));
+    return consorcio;
   }
 
   @Roles(RolUsuario.SUPER_ADMIN)

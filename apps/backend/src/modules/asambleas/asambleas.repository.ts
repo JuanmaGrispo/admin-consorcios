@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { EventoDomus } from '../../core/mensajeria/eventos';
+import { registrarEventos } from '../../core/mensajeria/outbox.repository';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Brackets,
@@ -149,8 +151,9 @@ export class AsambleasRepository {
    * 48 h y todavía no tuvieron recordatorio. Si dos instancias corren el cron
    * a la vez, cada asamblea la marca una sola.
    */
-  async marcarParaRecordatorio(): Promise<Asamblea[]> {
-    const { raw } = await this.asambleas
+  async marcarParaRecordatorio(eventos: (a: Asamblea) => EventoDomus[] = () => []): Promise<Asamblea[]> {
+    return this.dataSource.transaction(async (m) => {
+    const { raw } = await m.getRepository(Asamblea)
       .createQueryBuilder()
       .update(Asamblea)
       .set({ recordatorioEnviadoAt: () => 'now()' })
@@ -160,7 +163,7 @@ export class AsambleasRepository {
       .andWhere("fecha_hora <= now() + interval '48 hours'")
       .returning(['id', 'consorcio_id', 'titulo', 'fecha_hora', 'lugar', 'link_videollamada'])
       .execute();
-    return (raw as Record<string, unknown>[]).map(
+    const asambleas = (raw as Record<string, unknown>[]).map(
       (fila) =>
         ({
           id: fila.id,
@@ -171,6 +174,9 @@ export class AsambleasRepository {
           linkVideollamada: fila.link_videollamada,
         }) as Asamblea,
     );
+    for (const asamblea of asambleas) await registrarEventos(m, eventos(asamblea));
+    return asambleas;
+    });
   }
 
   findById(id: string): Promise<Asamblea | null> {
@@ -215,13 +221,14 @@ export class AsambleasRepository {
   }
 
   /** El padrón de asistencia y el cambio de estado van juntos o no van. */
-  async convocar(asambleaId: string, asistencias: AsistenciaNueva[]): Promise<void> {
+  async convocar(asambleaId: string, asistencias: AsistenciaNueva[], eventos: EventoDomus[] = []): Promise<void> {
     await this.dataSource.transaction(async (m) => {
       await m.save(
         asistencias.map((a) => m.create(Asistencia, { ...a, asambleaId })),
         { chunk: 500 },
       );
       await m.update(Asamblea, { id: asambleaId }, { estado: EstadoAsamblea.CONVOCADA, updatedAt: new Date() });
+      await registrarEventos(m, eventos);
     });
   }
 

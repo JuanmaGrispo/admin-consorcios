@@ -25,8 +25,8 @@ export const reclamosService = {
 
   detalle: (id: string) => api<ReclamoDetalle>(`/reclamos/${id}`),
 
-  crear: (input: CrearReclamoInput) =>
-    api<Reclamo>('/reclamos', { method: 'POST', body: JSON.stringify(input) }),
+  crear: (input: CrearReclamoInput, clave: string) =>
+    api<Reclamo>('/reclamos', { method: 'POST', headers: { 'Idempotency-Key': clave }, body: JSON.stringify(input) }),
 
   /** Respuesta al vecino o, con `interna`, nota que sólo ve la administración. */
   agregarMensaje: (id: string, mensaje: string, interna = false) =>

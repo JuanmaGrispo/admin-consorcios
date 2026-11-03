@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
+import { claveValida, huellaDe } from '../../core/http/contratos-rest';
+import { crearSobre } from '../../core/mensajeria/eventos';
 import { Notificador } from '../../core/notificaciones/notificador';
 import {
   EstadoReclamo,
@@ -69,7 +71,8 @@ export class ReclamosService {
 
   // ── Alta ───────────────────────────────────────────────────────────────────
 
-  async crear(usuario: UsuarioActual, dto: CrearReclamoDto): Promise<Reclamo> {
+  async crear(usuario: UsuarioActual, dto: CrearReclamoDto, clave?: string): Promise<Reclamo> {
+    claveValida(clave);
     // Las fotos se suben antes con `POST /archivos?destino=reclamos`: una URL
     // externa no es una foto del vecino, aunque pase el `@IsUrl()`.
     for (const adjunto of dto.adjuntos ?? []) {
@@ -102,13 +105,13 @@ export class ReclamosService {
       descripcion: dto.descripcion.trim(),
       prioridad,
       adjuntos: dto.adjuntos ?? [],
-    });
-
-    await this.avisar(
-      reclamo,
-      `Nuevo reclamo ${reclamo.codigo}: ${reclamo.titulo}`,
-      `Se registró el reclamo ${reclamo.codigo}: ${reclamo.descripcion}`,
-    );
+    }, clave ? { usuarioId: usuario.id, clave, huella: huellaDe(dto) } : undefined,
+    (creado) => [crearSobre('aviso.directo', null, {
+      destinatario_id: creado.creadoPorId,
+      asunto: `Nuevo reclamo ${creado.codigo}: ${creado.titulo}`,
+      cuerpo: `Se registró el reclamo ${creado.codigo}: ${creado.descripcion}`,
+      origen: `reclamo:${creado.id}`,
+    })]);
 
     return reclamo;
   }
@@ -139,15 +142,7 @@ export class ReclamosService {
       tipo: interna ? TipoEventoReclamo.NOTA_INTERNA : TipoEventoReclamo.RESPUESTA,
       mensaje: dto.mensaje.trim(),
       visibleParaVecino: !interna,
-    });
-
-    if (!interna && esGestor(usuario)) {
-      await this.avisar(
-        reclamo,
-        `Respuesta en tu reclamo ${reclamo.codigo}`,
-        dto.mensaje.trim(),
-      );
-    }
+    }, !interna && esGestor(usuario) ? [this.aviso(reclamo, `Respuesta en tu reclamo ${reclamo.codigo}`, dto.mensaje.trim())] : []);
 
     return evento;
   }
@@ -185,14 +180,7 @@ export class ReclamosService {
       estadoAnterior,
       estadoNuevo: reclamo.estado,
       visibleParaVecino: true,
-    });
-
-    await this.avisar(
-      actualizado,
-      `Tu reclamo ${actualizado.codigo} fue asignado`,
-      dto.mensaje?.trim() ??
-        `Se asignó un proveedor para atender el reclamo ${actualizado.codigo}.`,
-    );
+    }, [this.aviso(reclamo, `Tu reclamo ${reclamo.codigo} fue asignado`, dto.mensaje?.trim() ?? `Se asignó un proveedor para atender el reclamo ${reclamo.codigo}.`)]);
 
     return actualizado;
   }
@@ -234,25 +222,19 @@ export class ReclamosService {
       estadoAnterior,
       estadoNuevo: dto.estado,
       visibleParaVecino: true,
-    });
-
-    if (dto.estado === EstadoReclamo.RESUELTO) {
-      this.eventos.publicar('reclamo.cerrado', actualizado.consorcioId, {
-        reclamo_id: actualizado.id,
-        codigo: actualizado.codigo,
-        unidad_id: actualizado.unidadId,
-        usuario_id: actualizado.creadoPorId,
-        categoria: actualizado.categoria?.nombre ?? 'Sin categoría',
+    }, dto.estado === EstadoReclamo.RESUELTO ? [crearSobre('reclamo.cerrado', reclamo.consorcioId, {
+        reclamo_id: reclamo.id,
+        codigo: reclamo.codigo,
+        unidad_id: reclamo.unidadId,
+        usuario_id: reclamo.creadoPorId,
+        categoria: reclamo.categoria?.nombre ?? 'Sin categoría',
         resolucion: dto.mensaje?.trim() || null,
-      });
-    } else {
-      await this.avisar(
-        actualizado,
-        `Tu reclamo ${actualizado.codigo} cambió de estado`,
+      })] : [this.aviso(
+        reclamo,
+        `Tu reclamo ${reclamo.codigo} cambió de estado`,
         `Pasó de ${estadoAnterior} a ${dto.estado}.` +
           (dto.mensaje ? ` ${dto.mensaje.trim()}` : ''),
-      );
-    }
+      )]);
 
     return actualizado;
   }
@@ -378,11 +360,9 @@ export class ReclamosService {
    * Avisa a quien abrió el reclamo. Nunca corta la operación: si el aviso
    * falla, el reclamo ya quedó guardado igual (regla del alcance).
    */
-  private async avisar(reclamo: Reclamo, asunto: string, cuerpo: string) {
-    await this.notificador.enviar({
-      destinatarioId: reclamo.creadoPorId,
-      asunto,
-      cuerpo,
+  private aviso(reclamo: Reclamo, asunto: string, cuerpo: string) {
+    return crearSobre('aviso.directo', null, {
+      destinatario_id: reclamo.creadoPorId, asunto, cuerpo,
       origen: `reclamo:${reclamo.id}`,
     });
   }

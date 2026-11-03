@@ -18,14 +18,14 @@ async function errorDe(res: Response): Promise<ApiError> {
   let message = `Error ${res.status}`;
   try {
     const body = await res.json();
-    message = Array.isArray(body.message) ? body.message.join('. ') : (body.message ?? message);
+    message = Array.isArray(body.message) ? body.message.join('. ') : (body.detail ?? body.message ?? message);
   } catch {
     /* body no-JSON: queda el genérico */
   }
   return new ApiError(res.status, message);
 }
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiVersionada<T>(path: string, init?: RequestInit): Promise<{ datos: T; etag: string | null }> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     // La sesión vive en una cookie httpOnly: sin esto el navegador no la manda.
@@ -36,8 +36,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) throw await errorDe(res);
 
   // 204 No Content no trae body.
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  if (res.status === 204) return { datos: undefined as T, etag: res.headers.get('ETag') };
+  return { datos: (await res.json()) as T, etag: res.headers.get('ETag') };
+}
+
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await apiVersionada<T>(path, init)).datos;
 }
 
 /**

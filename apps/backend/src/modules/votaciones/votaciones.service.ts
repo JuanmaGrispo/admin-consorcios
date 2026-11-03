@@ -7,6 +7,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
+import { crearSobre } from '../../core/mensajeria/eventos';
+import { crearAviso } from '../../core/notificaciones/notificador';
 import { Notificador } from '../../core/notificaciones/notificador';
 import {
   EstadoAsamblea,
@@ -277,19 +279,21 @@ export class VotacionesService {
       throw new BadRequestException('El cierre ya pasó: corregilo antes de publicar');
     }
 
-    await this.votaciones.actualizar(id, { estado: EstadoVotacion.ABIERTA });
     // El evento es para las independientes: las de asamblea ya se anunciaron
     // con la convocatoria, así que a esas les llega un aviso a cada vecino.
-    if (votacion.asambleaId) {
-      await this.avisarPublicacion(votacion);
-    } else {
-      this.eventos.publicar('votacion.nueva', votacion.consorcioId, {
+    const eventos = votacion.asambleaId
+      ? (await this.votaciones.vecinosDelConsorcio(votacion.consorcioId)).map((destinatarioId) => crearAviso({
+          destinatarioId, asunto: `Nueva votación: ${votacion.titulo}`,
+          cuerpo: `Se abrió la votación "${votacion.titulo}". Cierra el ${votacion.cierre.toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}.`,
+          origen: `votacion:${votacion.id}`,
+        }))
+      : [crearSobre('votacion.nueva', votacion.consorcioId, {
         votacion_id: votacion.id,
         titulo: votacion.titulo,
         fecha_cierre: votacion.cierre.toISOString(),
         mayoria_necesaria: votacion.mayoria,
-      });
-    }
+      })];
+    await this.votaciones.actualizar(id, { estado: EstadoVotacion.ABIERTA }, eventos);
     return this.findOne(usuario, id);
   }
 
@@ -398,13 +402,12 @@ export class VotacionesService {
     await this.votaciones.actualizar(votacion.id, {
       estado: EstadoVotacion.CERRADA,
       resultado: escrutinio.resultado,
-    });
-    this.eventos.publicar('votacion.cerrada', votacion.consorcioId, {
+    }, [crearSobre('votacion.cerrada', votacion.consorcioId, {
       votacion_id: votacion.id,
       titulo: votacion.titulo,
       resultado: escrutinio.resultado.toLowerCase() as 'aprobada' | 'rechazada' | 'sin_quorum',
       participacion_pct: escrutinio.participacion,
-    });
+    })]);
     return escrutinio.resultado;
   }
 
@@ -436,27 +439,7 @@ export class VotacionesService {
     return votacion;
   }
 
-  /** Nunca corta la operación: si el aviso falla, la votación ya quedó publicada. */
-  private async avisarPublicacion(votacion: Votacion) {
-    try {
-      const vecinos = await this.votaciones.vecinosDelConsorcio(votacion.consorcioId);
-      const cierre = votacion.cierre.toLocaleString('es-AR', {
-        timeZone: 'America/Argentina/Buenos_Aires',
-      });
-      await Promise.allSettled(
-        vecinos.map((destinatarioId) =>
-          this.notificador.enviar({
-            destinatarioId,
-            asunto: `Nueva votación: ${votacion.titulo}`,
-            cuerpo: `Se abrió la votación "${votacion.titulo}". Cierra el ${cierre}.`,
-            origen: `votacion:${votacion.id}`,
-          }),
-        ),
-      );
-    } catch (error) {
-      this.logger.warn(`No se pudo avisar la votación ${votacion.id}: ${String(error)}`);
-    }
-  }
+
 }
 
 function exigirEstado(votacion: Votacion, permitidos: EstadoVotacion[], accion: string) {

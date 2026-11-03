@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
+import { crearSobre } from '../../core/mensajeria/eventos';
 import {
   Asamblea,
   Asistencia,
@@ -119,10 +120,7 @@ export class AsambleasService {
   /** Para la pantalla de inicio: las asambleas convocadas o en curso de sus consorcios. */
   /** Publica `asamblea.recordatorio` para las que empiezan dentro de 48 h. Lo dispara el cron. */
   async enviarRecordatorios(): Promise<number> {
-    const asambleas = await this.asambleas.marcarParaRecordatorio();
-    for (const asamblea of asambleas) {
-      this.eventos.publicar('asamblea.recordatorio', asamblea.consorcioId, datosDeAsamblea(asamblea));
-    }
+    const asambleas = await this.asambleas.marcarParaRecordatorio((a) => [crearSobre('asamblea.recordatorio', a.consorcioId, datosDeAsamblea(a))]);
     return asambleas.length;
   }
 
@@ -252,8 +250,8 @@ export class AsambleasService {
     await this.asambleas.convocar(
       id,
       unidades.map((u) => ({ unidadId: u.id, coeficienteAplicado: u.coeficiente })),
+      [crearSobre('asamblea.creada', asamblea.consorcioId, datosDeAsamblea(asamblea))],
     );
-    this.eventos.publicar('asamblea.creada', asamblea.consorcioId, datosDeAsamblea(asamblea));
     return this.findOne(usuario, id);
   }
 

@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { EventoDomus } from '../../core/mensajeria/eventos';
+import { crearSobre, type EventoDomus } from '../../core/mensajeria/eventos';
 import { PublicadorEventos } from '../../core/mensajeria/publicador-eventos';
 import { Novedad, TipoAdjunto } from '../../database/entities';
 import { ArchivosService } from '../archivos/archivos.service';
@@ -80,12 +80,8 @@ export class NovedadesService {
         publicadaAt: new Date(),
       },
       (dto.adjuntos ?? []).map((a) => ({ url: a.url, nombre: a.nombre ?? null, tipo: tipoDeAdjunto(a.url) })),
+      (n) => [crearSobre('novedad.publicada', n.consorcioId, { novedad_id: n.id, titulo: n.titulo })],
     );
-
-    this.eventos.publicar('novedad.publicada', novedad.consorcioId, {
-      novedad_id: novedad.id,
-      titulo: novedad.titulo,
-    });
     return novedad;
   }
 

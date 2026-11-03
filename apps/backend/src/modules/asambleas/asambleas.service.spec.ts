@@ -1,3 +1,4 @@
+import type { EventoDomus } from '../../core/mensajeria/eventos';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -108,7 +109,8 @@ function crearService(
         { id: 'u1', coeficiente: 50 },
         { id: 'u2', coeficiente: 50 },
       ],
-    convocar: async (_id: string, filas: unknown) => {
+    convocar: async (_id: string, filas: unknown, eventos: EventoDomus[] = []) => {
+      for (const e of eventos) escrito.publicados.push([e.tipo_evento, e.consorcio_id, e.payload]);
       escrito.convocada = filas;
     },
     asistencias: async () => asistencias,
@@ -126,7 +128,11 @@ function crearService(
         .map((a) => ({ ...a, asambleaId: 'as1' })),
     vecinosDelConsorcio: async () => ['v1'],
     votacionesAbiertas: async () => opts.votacionesAbiertas ?? 0,
-    marcarParaRecordatorio: async () => [asamblea({ estado: EstadoAsamblea.CONVOCADA })],
+    marcarParaRecordatorio: async (eventos: (a: Asamblea) => EventoDomus[]) => {
+      const a = asamblea({ estado: EstadoAsamblea.CONVOCADA });
+      for (const e of eventos(a)) escrito.publicados.push([e.tipo_evento, e.consorcio_id, e.payload]);
+      return [a];
+    },
     proximas: async (consorcioIds: string[]) => {
       escrito.proximasConsorcios = consorcioIds;
       return [asamblea({ estado: EstadoAsamblea.CONVOCADA })];

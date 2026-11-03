@@ -81,6 +81,8 @@ function tipoTs(col: Col, enums: Set<string>): string {
       return 'string';
     case 'bool':
       return 'boolean';
+    case 'bytea':
+      return 'Buffer';
     case 'int2':
     case 'int4':
     case 'int8':
@@ -224,9 +226,7 @@ function generarEntidad(
           `  @PrimaryColumn({ type: '${tipoColumna(col)}', name: '${col.column_name}' })\n  ${prop}: ${ts};`,
         );
       }
-      continue;
-    }
-
+    } else {
     // ── Columna común ──
     // created_at/updated_at van como columnas normales y no con
     // @CreateDateColumn: sólo 18 de las 30 tablas tienen updated_at, así que se
@@ -257,6 +257,7 @@ function generarEntidad(
     cuerpo.push(
       `  @Column({ ${opciones.join(', ')} })\n  ${prop}: ${ts}${nullable ? ' | null' : ''};`,
     );
+    }
 
     // ── Si la columna es FK, la relación va sobre esa misma columna ──
     if (fk?.ref_tabla) {

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CategoriaNotificacion, EnvioNotificacion } from '../../database/entities';
+import { CategoriaNotificacion, EnvioNotificacion, EstadoEnvio } from '../../database/entities';
+
+export const ENTREGA_INCIERTA = 'ENTREGA_INCIERTA: requiere conciliación antes de reenviar';
 
 export interface Destinatario {
   usuarioId: string;
@@ -29,6 +31,21 @@ export class EmailRepository {
     @InjectRepository(EnvioNotificacion)
     private readonly envios: Repository<EnvioNotificacion>,
   ) {}
+
+  /** La reserva se confirma antes de SMTP; sobrevive incluso a la caída del proceso. */
+  reservarEnvio(datos: Partial<EnvioNotificacion>): Promise<EnvioNotificacion | null> {
+    const eventoId = datos.entidadId;
+    const destinatario = datos.destinatario;
+    if (!eventoId || !destinatario) throw new Error('La reserva requiere evento y destinatario');
+    return this.envios.manager.transaction(async (m) => {
+      await m.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${eventoId}:${destinatario}`]);
+      const repo = m.getRepository(EnvioNotificacion);
+      const previo = await repo.findOneBy({ entidadTipo: 'evento', entidadId: eventoId, destinatario });
+      if (previo?.estado === EstadoEnvio.ENVIADO) return null;
+      if (previo?.ultimoError === ENTREGA_INCIERTA) throw new Error(ENTREGA_INCIERTA);
+      return repo.save(repo.create({ ...datos, ...previo, ultimoError: ENTREGA_INCIERTA }));
+    });
+  }
 
   vecinosDelConsorcio(consorcioId: string): Promise<VecinoDeUnidad[]> {
     return this.envios.manager.query(`${VECINOS_VIGENTES} AND un.consorcio_id = $1`, [consorcioId]);

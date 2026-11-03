@@ -46,7 +46,7 @@ describe('FiltroExcepciones', () => {
 
   it('un error no controlado es 500 genérico con id y sin detalle', () => {
     let cuerpo: Record<string, unknown> = {};
-    const res = { status: () => ({ json: (c: Record<string, unknown>) => (cuerpo = c) }) };
+    const res = { setHeader: () => undefined, status: () => ({ json: (c: Record<string, unknown>) => (cuerpo = c) }) };
     const req = { method: 'GET', originalUrl: '/x', ip: '1.1.1.1' };
     new FiltroExcepciones().catch(new Error('select * from secreto'), {
       switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
@@ -58,7 +58,7 @@ describe('FiltroExcepciones', () => {
 
   it('un 403 conserva su respuesta', () => {
     let status = 0;
-    const res = { status: (s: number) => { status = s; return { json: () => undefined }; } };
+    const res = { setHeader: () => undefined, status: (s: number) => { status = s; return { json: () => undefined }; } };
     const req = { method: 'GET', originalUrl: '/x', ip: '1.1.1.1', path: '/x' };
     new FiltroExcepciones().catch(new ForbiddenException('no'), {
       switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
