@@ -16,7 +16,7 @@ const compose = ['compose', '-f', path.join(__dirname, 'compose.yml')];
 const aleatorio = () => randomBytes(24).toString('hex');
 const env = { ...process.env, ACEPTACION_DB_USUARIO: 'aceptacion', ACEPTACION_DB_PASSWORD: aleatorio(),
   ACEPTACION_MQ_USUARIO: 'aceptacion', ACEPTACION_MQ_PASSWORD: aleatorio(), ACEPTACION_ERLANG_COOKIE: aleatorio(),
-  NODE_ENV: 'test', PORT: '4400', DB_SSL: 'false', JWT_SECRET: aleatorio(), API_GLOBAL_PREFIX: '/api',
+  NODE_ENV: 'test', PORT: '4400', DB_SSL: 'false', DB_POOL_MAX: process.env.DB_POOL_MAX || '30', JWT_SECRET: aleatorio(), API_GLOBAL_PREFIX: '/api',
   CORS_ORIGINS: 'http://127.0.0.1:3300', MP_NOTIFICATION_URL: '', FRONTEND_URL: 'http://127.0.0.1:3300',
   MP_ACCESS_TOKEN: '', MP_WEBHOOK_SECRET: '', SUPABASE_URL: 'http://127.0.0.1:1', SUPABASE_SERVICE_ROLE_KEY: '',
   SEED_PASSWORD: aleatorio(), ACEPTACION_ESCRITURA: 'SI',
@@ -55,7 +55,7 @@ async function iniciarBackend() {
     const runtime = { ...env, DATABASE_URL: env.DATABASE_URL.replace('127.0.0.1:55432', 'postgres:5432'),
       RABBITMQ_URL: env.RABBITMQ_URL.replace('127.0.0.1:55672','rabbitmq:5672'),
       SMTP_HOST: 'host.docker.internal', MP_API_URL: destino.toString().replace(/\/$/, ''), SUPABASE_URL: destino.toString().replace(/\/$/, '') };
-    const claves = ['DATABASE_URL','RABBITMQ_URL','DB_SSL','JWT_SECRET','PORT','NODE_ENV','API_GLOBAL_PREFIX','SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASS','MAIL_FROM',
+    const claves = ['DATABASE_URL','RABBITMQ_URL','DB_SSL','DB_POOL_MAX','JWT_SECRET','PORT','NODE_ENV','API_GLOBAL_PREFIX','SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASS','MAIL_FROM',
       'MP_API_URL','MP_ACCESS_TOKEN','MP_WEBHOOK_SECRET','SUPABASE_URL','SUPABASE_PUBLIC_URL','SUPABASE_SERVICE_ROLE_KEY','CORS_ORIGINS','MP_NOTIFICATION_URL','FRONTEND_URL'];
     await ejecutar('docker', ['run','-d','--name',contenedorBackend,'--network','domus-aceptacion_default', '--add-host','host.docker.internal:host-gateway',
       '-p','127.0.0.1:4400:4400', ...claves.flatMap((k) => ['--env', k]), imagenBackend], { env: runtime });
