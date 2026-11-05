@@ -85,6 +85,57 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  analisis:
+    name: Análisis estático (SonarCloud)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Descargar el código con historial (blame y código nuevo)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Instalar dependencias del lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Pruebas unitarias con cobertura (lcov)
+        shell: bash
+        run: |
+          pnpm back test:cobertura
+          # node:test escribe rutas relativas a apps/backend; Sonar las resuelve desde la raíz.
+          sed -i 's#^SF:src/#SF:apps/backend/src/#' apps/backend/coverage/lcov.info
+
+      - name: Análisis de SonarCloud y espera del Quality Gate
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          # El tag sale de main: se analiza como main. qualitygate.wait deja el job
+          # en rojo si el Quality Gate no aprueba.
+          args: >
+            -Dsonar.branch.name=main
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=600
+
+      - name: Conservar cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-lcov
+          path: apps/backend/coverage/lcov.info
+          if-no-files-found: ignore
+          retention-days: 30
+
   secretos:
     name: Escaneo de secretos (gitleaks)
     runs-on: ubuntu-latest

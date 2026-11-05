@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { randomUUID } = require('node:crypto');
+const { createHmac, randomUUID } = require('node:crypto');
 const { test } = require('node:test');
 const { Client } = require('pg');
 
@@ -235,4 +235,50 @@ test('C7: ETag viejo rechaza la segunda escritura sin sobrescribir', async () =>
   assert.equal(final.body.nombre, nombre);
   assert.ok(final.headers.get('etag'));
   assert.notEqual(final.headers.get('etag'), etag);
+});
+
+
+/** Arma un JWT a mano para falsificar cabecera, firma y claims (D: JWT → 401). */
+function jwtFalso(payload, { alg = 'HS256', secreto = process.env.JWT_SECRET } = {}) {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const cuerpo = `${b64({ alg, typ: 'JWT' })}.${b64(payload)}`;
+  if (alg === 'none') return `${cuerpo}.`;
+  const hmac = { HS256: 'sha256', HS384: 'sha384', HS512: 'sha512' }[alg];
+  return `${cuerpo}.${createHmac(hmac, secreto).update(cuerpo).digest('base64url')}`;
+}
+
+test('seguridad: JWT vencido, alterado, alg=none, otro algoritmo u otro emisor responden 401', async () => {
+  entorno();
+  assert.ok(process.env.JWT_SECRET, 'Falta JWT_SECRET del backend de aceptación');
+  assert.ok(process.env.ACEPTACION_SUPER_ID, 'Falta ACEPTACION_SUPER_ID');
+  const ahora = Math.floor(Date.now() / 1000);
+  const carga = (extra = {}) => ({ sub: process.env.ACEPTACION_SUPER_ID, email: 'super@example.test', rol: 'SUPER_ADMIN',
+    iat: ahora, exp: ahora + 600, iss: process.env.JWT_ISSUER || 'domus', ...extra });
+
+  // Control: el mismo armado con todo correcto entra. Así un 401 de abajo no es un token mal hecho.
+  assert.equal((await pedir('/consorcios', { token: jwtFalso(carga()) })).status, 200);
+
+  const valido = jwtFalso(carga());
+  const [cabecera, , firma] = valido.split('.');
+  const sinEmisor = carga(); delete sinEmisor.iss;
+  const casos = {
+    vencido: jwtFalso(carga({ iat: ahora - 7200, exp: ahora - 3600 })),
+    'firma alterada': valido.slice(0, -2) + (valido.endsWith('AA') ? 'BB' : 'AA'),
+    'firmado con otro secreto': jwtFalso(carga(), { secreto: 'secreto-de-un-atacante' }),
+    'payload cambiado con la firma original': `${cabecera}.${Buffer.from(JSON.stringify(carga({ email: 'otro@example.test' }))).toString('base64url')}.${firma}`,
+    'alg=none': jwtFalso(carga(), { alg: 'none' }),
+    'HS512 con el secreto correcto': jwtFalso(carga(), { alg: 'HS512' }),
+    'otro emisor': jwtFalso(carga({ iss: 'emisor-ajeno' })),
+    'sin emisor': jwtFalso(sinEmisor),
+    'basura': 'no.es.un-jwt',
+  };
+  for (const [caso, token] of Object.entries(casos)) {
+    const r = await pedir('/consorcios', { token });
+    assert.equal(r.status, 401, `${caso}: se esperaba 401 y respondió ${r.status}`);
+    problema(r, 401);
+  }
+  // Por cookie también: es el camino del navegador.
+  const porCookie = await fetch(`${process.env.ACEPTACION_BASE_URL.replace(/\/$/, '')}/consorcios`, {
+    headers: { Cookie: `domus_session=${casos['alg=none']}` }, signal: AbortSignal.timeout(10_000) });
+  assert.equal(porCookie.status, 401);
 });

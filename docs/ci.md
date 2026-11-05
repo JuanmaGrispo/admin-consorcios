@@ -6,8 +6,9 @@ a ramas ni por pull requests. Publicar una Release para un tag que ya existe
 no dispara otra ejecución: el disparador es el push del tag.
 
 Cada ejecución descarga el commit del tag, instala las dependencias con el
-lockfile y ejecuta nueve verificaciones de aplicación y un job independiente
-de escaneo de secretos, incorporado desde la rama principal remota:
+lockfile y ejecuta nueve verificaciones de aplicación, un job de análisis estático con
+SonarCloud y un job independiente de escaneo de secretos, incorporado desde la
+rama principal remota:
 
 | Verificación | Comando |
 |---|---|
@@ -20,11 +21,25 @@ de escaneo de secretos, incorporado desde la rama principal remota:
 | Duplicados y entregas inciertas de email | `pnpm back test:aceptacion:email` |
 | Integración con PostgreSQL y RabbitMQ reales locales | `pnpm back test:aceptacion:docker` |
 | API integral, navegador y carga k6 | `pnpm back test:aceptacion:integral --web --carga` |
+| Análisis estático y Quality Gate | `pnpm back test:cobertura` y SonarCloud (`sonar-project.properties`) |
 | Secretos en el historial completo | Gitleaks con `--log-opts="--all"` y `--redact` |
 
 Las pruebas web se ejecutan con Playwright desde el runner integral, con
 sesiones reales mediante cookie httpOnly. No se incorporan a `pnpm test`.
 El backend se analiza con TypeScript; no tiene ESLint configurado.
+
+El job de análisis corre las pruebas unitarias con cobertura (`lcov` en
+`apps/backend/coverage/`), corrige las rutas para que Sonar las resuelva desde
+la raíz y ejecuta el scanner con `sonar.qualitygate.wait=true`: si el Quality
+Gate no aprueba, el job queda en rojo. El tag se analiza como rama `main`.
+Requiere, una sola vez, importar el repositorio en sonarcloud.io, apagar
+"Automatic Analysis" y cargar el token como secret `SONAR_TOKEN`; los pasos
+están en el encabezado de `sonar-project.properties`. Excluye de duplicación y
+cobertura las entidades generadas y las migraciones.
+
+El mutation testing (`pnpm back test:mutacion`, Stryker) no está en el
+workflow: tarda unos 34 minutos y el pipeline tiene que quedar en 15. Se corre
+aparte y su reporte HTML queda en `apps/backend/reports/mutation/`.
 
 El job de secretos conserva la versión y el SHA256 fijados en el workflow
 remoto. Descarga todo el historial con `fetch-depth: 0` y analiza los commits
@@ -60,7 +75,7 @@ sin guardar contraseñas, cookies ni tokens. Los proveedores de pagos, Storage
 y SMTP son simuladores locales; no se realizan cobros ni envíos reales.
 
 La configuración del workflow no acredita una ejecución de GitHub Actions:
-para eso se necesita un tag que incluya estos cambios y sus diez verificaciones verdes.
+para eso se necesita un tag que incluya estos cambios y sus once verificaciones verdes.
 El estado de aceptación y sus límites están en
 [`aceptacion-integracion-resiliencia.md`](aceptacion-integracion-resiliencia.md).
 

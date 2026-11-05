@@ -581,3 +581,49 @@ en los dos entornos. El margen con 4 núcleos rápidos es amplio (peor p95 de
 202 ms), pero los núcleos del runner de GitHub no son los mismos, así que esto
 no reemplaza la ejecución del CI. C9 queda acreditado en local; falta la
 ejecución del CI sobre un tag para confirmarlo allí.
+
+## Seguimiento de seguridad — DEF-10
+
+La actualización de Next.js y su configuración de ESLint a `16.4.1`, junto
+con la auditoría posterior y sus verificaciones, se registra en
+[`seguridad-dependencias.md`](seguridad-dependencias.md). Ese registro distingue
+los hallazgos corregidos de Next de los del resto de las dependencias, que se
+corrigieron el 05/11 por la tarde: `pnpm audit --prod` quedó en 0 críticas y
+0 altas.
+
+## Verificación dinámica de seguridad — OWASP ZAP
+
+El procedimiento de baseline web y activo autenticado sobre el entorno
+descartable está en [`seguridad-zap.md`](seguridad-zap.md). Sus hallazgos y
+límites se mantienen separados de los resultados de integración y carga.
+
+## Flujos críticos, responsive y JWT — 05/11/2026
+
+La corrida integral con `--web` suma tres suites nuevas. Se verificaron en la
+corrida local del 05/11 y en un entorno equivalente (mismo esquema, mismos
+fixtures y simuladores, PostgreSQL 17 sin Docker); falta la corrida del CI.
+
+| Suite | Qué prueba | Resultado |
+|---|---|---|
+| `http.test.cjs`, JWT | Vencido, firma alterada, otro secreto, payload cambiado, `alg=none`, HS512, otro emisor, sin emisor y mal formado: 401 con Problem Details, por header y por cookie; control válido 200 | Aprobada |
+| `flujos-criticos.e2e.ts` | HU 09 ingreso por rol, HU 01 pago con Mercado Pago, HU 15 transferencia registrada, HU 04/05 reclamo tomado por la administración y HU 13 alta de consorcio con administrador nuevo | 5/5 |
+| `responsive.e2e.ts` | 9 pantallas de los tres portales a 360, 768 y 1280 px, sin desplazamiento horizontal | 27/27 |
+
+El ancho de `resiliencia.e2e.ts` pasó de 375 y 1440 px a 360, 768 y 1280 px,
+como pide la cátedra; aprobó en los tres.
+
+Defectos encontrados por estas suites:
+
+- **DEF-13 (crítica, cerrado en local):** con "Crear y asignar" el
+  administrador nuevo se creaba pero no quedaba asignado, y el alta del
+  consorcio fallaba. El `Select` de Radix emitía un valor vacío porque la
+  opción recién creada todavía no estaba montada. Corrección en
+  `apps/frontend/src/components/consorcio-form.tsx`.
+- **DEF-14 (mayor, cerrado en local):** con la barra lateral visible, tablas y
+  tablero estiraban la página (813, 786, 809, 1024 y 1316 px). Faltaba
+  `min-w-0` en el `SidebarInset` de los layouts de administración y plataforma.
+
+El flujo de pago intercepta la redirección al checkout y configura el pago
+aprobado en el simulador con `ACEPTACION_PROVEEDOR_URL`; no realiza cobros.
+Las pruebas de administración fijan el consorcio de aceptación en el navegador,
+porque el alta de consorcios de otra prueba cambia el consorcio activo.

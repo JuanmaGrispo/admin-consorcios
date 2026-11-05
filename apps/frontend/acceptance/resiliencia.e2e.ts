@@ -52,7 +52,7 @@ test('C6 web: perder una respuesta no crea otro reclamo al reintentar', async ({
   expect(claves).toHaveLength(2); expect(claves[0]).toBeTruthy(); expect(claves[1]).toBe(claves[0]);
 });
 
-for (const ancho of [375, 1440]) test(`UI: formulario a ${ancho}px`, async ({ page }, info) => {
+for (const ancho of [360, 768, 1280]) test(`UI: formulario a ${ancho}px`, async ({ page }, info) => {
   await page.setViewportSize({ width: ancho, height: 900 });
   await entrar(page, 'super@example.test');
   await page.goto('/consorcios/' + process.env.ACEPTACION_CONSORCIO_ID);

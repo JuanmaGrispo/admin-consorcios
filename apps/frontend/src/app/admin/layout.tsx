@@ -15,7 +15,9 @@ export default function AdminLayout({ children }: Readonly<{ children: React.Rea
       <ConsorcioActivoProvider>
         <SidebarProvider>
           <AdminSidebar />
-          <SidebarInset>
+          {/* min-w-0: sin esto el contenido ancho (tablas, tablero) estira la página en vez de
+            scrollear dentro de su propio contenedor cuando la sidebar está visible (≥ 768 px). */}
+          <SidebarInset className="min-w-0">
             {/* En desktop la sidebar está siempre; en mobile es la única forma de abrir el menú. */}
             <header className="flex h-12 items-center gap-2 border-b px-4 md:hidden">
               <SidebarTrigger className="-ml-1" />

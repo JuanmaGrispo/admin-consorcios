@@ -26,7 +26,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 
 COPY apps/frontend apps/frontend
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000/api
+ARG NEXT_PUBLIC_STORAGE_URL=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_STORAGE_URL=$NEXT_PUBLIC_STORAGE_URL
 RUN pnpm --filter frontend-consorcios build
 
 # ── Runtime ──────────────────────────────────────────────────────────────────

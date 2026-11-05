@@ -1,28 +1,145 @@
-# Levanta todo el sistema con un solo comando, desde la raíz del repo:
+# Levanta el sistema completo con un solo comando, desde la raíz del repo y
+# sin configurar nada:
 #
 #   docker compose up --build
 #
-#   Frontend → http://localhost:3000
-#   Backend  → http://localhost:4000/api   (Swagger en http://localhost:4000/docs)
+#   Frontend          → http://localhost:3000
+#   Backend           → http://localhost:4000/api   (Swagger en /docs)
+#   Mails enviados    → http://localhost:4010/correos
+#   Panel de RabbitMQ → http://localhost:15672
 #
-# Requisito: apps/backend/.env armado a partir de .env.example (la base sigue
-# siendo la de Supabase). Ver README → Docker.
+# Todo corre en contenedores: PostgreSQL, RabbitMQ y simuladores de Mercado
+# Pago, Storage y SMTP. No usa Supabase ni cuentas de terceros. La primera vez
+# el servicio `inicializador` carga el esquema, las migraciones y los datos de
+# demo, y genera los secretos locales (JWT y contraseña de demo) en un volumen.
+# La contraseña de las cuentas de demo se ve con:
+#
+#   docker compose logs inicializador
+#
+# Para empezar de cero: docker compose down -v
+#
+# Para trabajar contra la base compartida de Supabase (como antes), con
+# apps/backend/.env armado:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
 name: admin-consorcios
 
+x-herramientas: &herramientas
+  # Etapa `build` del backend: tiene el código fuente y ts-node, que el
+  # inicializador necesita para correr migraciones y el seed.
+  build:
+    context: .
+    dockerfile: apps/backend/Dockerfile
+    target: build
+  image: admin-consorcios-herramientas:local
+
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      # Base local y descartable, sólo accesible dentro de la red del compose.
+      POSTGRES_DB: domus
+      POSTGRES_USER: domus
+      POSTGRES_PASSWORD: domus
+    volumes:
+      - postgres-datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U domus -d domus']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: domus
+      RABBITMQ_DEFAULT_PASS: domus
+    ports:
+      - '127.0.0.1:15672:15672'
+    volumes:
+      - rabbitmq-datos:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  simuladores:
+    <<: *herramientas
+    working_dir: /repo/apps/backend
+    command: ['node', 'docker/simuladores.cjs']
+    environment:
+      URL_PUBLICA: http://localhost:4010
+    ports:
+      - '4010:4010'
+    volumes:
+      - storage-datos:/datos/storage
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:4010/salud').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  inicializador:
+    <<: *herramientas
+    working_dir: /repo/apps/backend
+    command: ['node', 'docker/inicializar.cjs']
+    environment: &base-local
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: domus
+      DB_PASSWORD: domus
+      DB_NAME: domus
+      DB_SSL: 'false'
+    volumes:
+      - config:/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
   backend:
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
-    env_file: apps/backend/.env
+    # Toma los secretos que generó el inicializador y arranca.
+    command: ['sh', '-c', 'set -a && . /config/secretos.env && set +a && exec node dist/main.js']
     environment:
+      <<: *base-local
       PORT: 4000
-      # La imagen trae production; acá se pisa con development para tener
-      # /docs y la cookie sin Secure. `NODE_ENV=production docker compose up`
-      # para probarlo como en producción.
+      # development deja Swagger en /docs y la cookie sin Secure. Para probarlo
+      # como en producción: NODE_ENV=production docker compose up --build
       NODE_ENV: ${NODE_ENV:-development}
+      API_GLOBAL_PREFIX: /api
+      CORS_ORIGINS: http://localhost:3000
+      FRONTEND_URL: http://localhost:3000
+      RABBITMQ_URL: amqp://domus:domus@rabbitmq:5672
+      SMTP_HOST: simuladores
+      SMTP_PORT: 2525
+      SMTP_USER: domus
+      SMTP_PASS: simulado
+      MAIL_FROM: Domus <no-responder@domus.test>
+      MP_API_URL: http://simuladores:4010
+      MP_ACCESS_TOKEN: simulado
+      SUPABASE_URL: http://simuladores:4010
+      SUPABASE_PUBLIC_URL: http://localhost:4010
+      SUPABASE_SERVICE_ROLE_KEY: simulado
+      SUPABASE_STORAGE_BUCKET: domus
+    volumes:
+      - config:/config:ro
     ports:
       - '4000:4000'
+    depends_on:
+      inicializador:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      simuladores:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -32,6 +149,7 @@ services:
       args:
         # La ve el NAVEGADOR, no el contenedor: por eso es localhost.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+        NEXT_PUBLIC_STORAGE_URL: ${NEXT_PUBLIC_STORAGE_URL:-http://localhost:4010}
     ports:
       - '3000:3000'
     depends_on:
@@ -39,26 +157,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # RabbitMQ local, opcional. El grupo usa CloudAMQP (ver README → Mensajería).
-  # No arranca con `docker compose up` salvo que se pida:
-  #
-  #   docker compose --profile rabbitmq up --build
-  #
-  # y en apps/backend/.env:  RABBITMQ_URL=amqp://domus:domus@rabbitmq:5672
-  # (o, corriendo el backend fuera de Docker: amqp://domus:domus@localhost:5672)
-  #
-  # Panel de administración en http://localhost:15672 (domus / domus).
-  rabbitmq:
-    image: rabbitmq:3-management
-    profiles: ['rabbitmq']
-    ports:
-      - '5672:5672'
-      - '15672:15672'
-    environment:
-      RABBITMQ_DEFAULT_USER: domus
-      RABBITMQ_DEFAULT_PASS: domus
-    volumes:
-      - rabbitmq-datos:/var/lib/rabbitmq
-
 volumes:
+  postgres-datos:
   rabbitmq-datos:
+  storage-datos:
+  config:

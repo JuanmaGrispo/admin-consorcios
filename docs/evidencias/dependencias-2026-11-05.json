@@ -1,0 +1,56 @@
+{
+  "fecha": "2026-11-05",
+  "comando": "pnpm audit --prod --json (pnpm 9.12.0)",
+  "antes": {
+    "critical": 1,
+    "high": 26,
+    "moderate": 26,
+    "low": 5
+  },
+  "despues": {
+    "critical": 0,
+    "high": 0,
+    "moderate": 9,
+    "low": 0
+  },
+  "incluyendoDesarrollo": {
+    "critical": 0,
+    "high": 1,
+    "moderate": 18,
+    "low": 1
+  },
+  "altaAceptada": {
+    "paquete": "zod@3.25.76",
+    "ruta": "apps/frontend > shadcn > @modelcontextprotocol/sdk > zod",
+    "correccion": ">=4.6.6 (versión mayor)",
+    "motivo": "Sólo en la CLI de shadcn, dependencia de desarrollo; no llega al build ni a la imagen."
+  },
+  "cambios": {
+    "overrides": {
+      "proxy-addr": "^2.0.8",
+      "body-parser": "^2.4.0",
+      "multer": "^2.5.0",
+      "brace-expansion (2.x)": "^2.1.7",
+      "fast-uri": "^3.1.7",
+      "js-yaml (4.x)": "^4.3.2",
+      "brace-expansion (1.x)": "^1.1.20",
+      "brace-expansion (5.x)": "^5.0.11",
+      "source-map-js": "^1.2.2",
+      "undici (7.x)": "^7.30.1",
+      "systeminformation": "^5.33.16",
+      "@modelcontextprotocol/sdk": "^1.32.0"
+    },
+    "movidoADesarrollo": [
+      "apps/frontend: shadcn"
+    ]
+  },
+  "verificacion": [
+    "517/517 pruebas unitarias del backend",
+    "pnpm typecheck (backend y frontend)",
+    "nest build",
+    "pnpm front lint",
+    "5/5 flujos críticos de Playwright",
+    "Subidas con multer 2.5.0: PNG válido 201, binario disfrazado 400, archivo de más de 2 MB 400"
+  ],
+  "pendiente": "next build de producción en un equipo con acceso a Google Fonts (docker compose up --build)."
+}

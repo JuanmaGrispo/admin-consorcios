@@ -6,6 +6,11 @@ module.exports = async function proveedor() {
   const estado = { modo: 'ok', solicitudes: 0, canceladas: 0, pagos: {}, objetos: {} };
   const timers = new Set();
   const servidor = createServer(async (req, res) => {
+    if (req.method === 'GET' && req.url === '/storage/v1/object/public/domus/csp.png') {
+      res.setHeader('Content-Type', 'image/png');
+      res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF1kAAAAASUVORK5CYII=', 'base64'));
+      return;
+    }
     const chunks = [];
     for await (const c of req) chunks.push(c);
     if (req.url === '/__control') {

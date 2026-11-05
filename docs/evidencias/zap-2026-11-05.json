@@ -1,0 +1,226 @@
+{
+  "fecha": "2026-11-05T18:14:49.710Z",
+  "resultado": "escaneos ejecutados; revisar hallazgos",
+  "commit": "0309d8f1c953edbe3c4bd1195217f68712d8d4fb",
+  "cambiosSinCommit": true,
+  "modo": "production",
+  "transporte": "HTTP local, sin evaluación TLS",
+  "autenticacion": "Cookie httpOnly obtenida por login real de SUPER_ADMIN; variables efímeras, omitida de los reportes",
+  "limites": [
+    "Sin navegador AJAX: el spider web recorre HTML y enlaces, no ejecuta la SPA.",
+    "API limitada a los métodos y rutas del OpenAPI filtrado; no es cobertura total de endpoints ni de roles.",
+    "Política API de ZAP, máximo 10 minutos y 1 minuto por regla; no es una prueba de carga."
+  ],
+  "escaneos": [
+    {
+      "nombre": "baseline-web",
+      "codigoZAP": 2,
+      "duracionSegundos": 50,
+      "versionZAP": "2.17.0",
+      "trafico": {
+        "muestraMaxima": 10000,
+        "respuestasPorEstado": {
+          "200": 2
+        },
+        "sinRespuestaHTTP": 1,
+        "operacionesCon2xx": []
+      },
+      "alertas": [
+        {
+          "id": "10055",
+          "nombre": "CSP: Wildcard Directive",
+          "riesgo": "Medium (High)",
+          "instancias": "4"
+        },
+        {
+          "id": "10055",
+          "nombre": "CSP: script-src unsafe-inline",
+          "riesgo": "Medium (High)",
+          "instancias": "4"
+        },
+        {
+          "id": "10055",
+          "nombre": "CSP: style-src unsafe-inline",
+          "riesgo": "Medium (High)",
+          "instancias": "4"
+        },
+        {
+          "id": "90004",
+          "nombre": "Cross-Origin-Embedder-Policy Header Missing or Invalid",
+          "riesgo": "Low (Medium)",
+          "instancias": "2"
+        },
+        {
+          "id": "90004",
+          "nombre": "Cross-Origin-Opener-Policy Header Missing or Invalid",
+          "riesgo": "Low (Medium)",
+          "instancias": "2"
+        },
+        {
+          "id": "90004",
+          "nombre": "Cross-Origin-Resource-Policy Header Missing or Invalid",
+          "riesgo": "Low (Medium)",
+          "instancias": "5"
+        },
+        {
+          "id": "10109",
+          "nombre": "Modern Web Application",
+          "riesgo": "Informational (Medium)",
+          "instancias": "4"
+        },
+        {
+          "id": "10049",
+          "nombre": "Non-Storable Content",
+          "riesgo": "Informational (Medium)",
+          "instancias": "3"
+        },
+        {
+          "id": "10049",
+          "nombre": "Storable and Cacheable Content",
+          "riesgo": "Informational (Medium)",
+          "instancias": "5"
+        },
+        {
+          "id": "10049",
+          "nombre": "Non-Storable Content",
+          "riesgo": "Informational (Medium)",
+          "instancias": "1"
+        }
+      ]
+    },
+    {
+      "nombre": "activo-api",
+      "codigoZAP": 0,
+      "duracionSegundos": 92,
+      "versionZAP": "2.17.0",
+      "trafico": {
+        "muestraMaxima": 10000,
+        "respuestasPorEstado": {
+          "200": 453,
+          "201": 1,
+          "400": 3621,
+          "404": 27
+        },
+        "sinRespuestaHTTP": 5,
+        "operacionesCon2xx": [
+          "GET http://host.docker.internal:4400/api/boletas",
+          "GET http://host.docker.internal:4400/api/boletas/",
+          "GET http://host.docker.internal:4400/api/boletas/fdf0717a-7ced-4b5c-a4f8-d57a3783b704",
+          "GET http://host.docker.internal:4400/api/boletas/fdf0717a-7ced-4b5c-a4f8-d57a3783b704/",
+          "GET http://host.docker.internal:4400/api/consorcios",
+          "GET http://host.docker.internal:4400/api/consorcios/",
+          "GET http://host.docker.internal:4400/api/consorcios/abbd596a-2ec2-44cf-a986-e43afad971d2",
+          "GET http://host.docker.internal:4400/api/consorcios/abbd596a-2ec2-44cf-a986-e43afad971d2/",
+          "GET http://host.docker.internal:4400/api/health",
+          "GET http://host.docker.internal:4400/api/health/",
+          "GET http://host.docker.internal:4400/api/novedades",
+          "GET http://host.docker.internal:4400/api/novedades/",
+          "GET http://host.docker.internal:4400/api/panel",
+          "GET http://host.docker.internal:4400/api/panel/",
+          "GET http://host.docker.internal:4400/api/reclamos",
+          "GET http://host.docker.internal:4400/api/reclamos/",
+          "GET http://host.docker.internal:4400/api/reclamos/007f26ce-d3f4-4b92-af30-b66dc45cba37",
+          "GET http://host.docker.internal:4400/api/reclamos/007f26ce-d3f4-4b92-af30-b66dc45cba37/",
+          "GET http://host.docker.internal:4400/api/unidades",
+          "GET http://host.docker.internal:4400/api/unidades/",
+          "GET http://host.docker.internal:4400/api/usuarios",
+          "GET http://host.docker.internal:4400/api/usuarios/",
+          "POST http://host.docker.internal:4400/api/reclamos"
+        ]
+      },
+      "alertas": [
+        {
+          "id": "100000",
+          "nombre": "A Client Error response code was returned by the server",
+          "riesgo": "Informational (High)",
+          "instancias": "39"
+        },
+        {
+          "id": "10024",
+          "nombre": "Information Disclosure - Sensitive Information in URL",
+          "riesgo": "Informational (Medium)",
+          "instancias": "1"
+        },
+        {
+          "id": "10049",
+          "nombre": "Non-Storable Content",
+          "riesgo": "Informational (Medium)",
+          "instancias": "5"
+        }
+      ]
+    }
+  ],
+  "imagen": "ghcr.io/zaproxy/zaproxy@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af",
+  "sesionAntes": {
+    "status": 200,
+    "rol": "SUPER_ADMIN"
+  },
+  "operaciones": [
+    "GET /api/health",
+    "GET /api/auth/me",
+    "GET /api/usuarios",
+    "GET /api/consorcios",
+    "GET /api/consorcios/{id}",
+    "GET /api/unidades",
+    "GET /api/reclamos",
+    "POST /api/reclamos",
+    "GET /api/reclamos/{id}",
+    "GET /api/boletas",
+    "GET /api/boletas/{id}",
+    "GET /api/novedades",
+    "GET /api/panel"
+  ],
+  "sesionDespues": {
+    "status": 200,
+    "rol": "SUPER_ADMIN"
+  },
+  "controles": {
+    "post": {
+      "estado": 201,
+      "valido": true
+    },
+    "sesiones": [
+      {
+        "escaneo": "baseline-web",
+        "fase": "antes",
+        "estado": 200,
+        "rol": "SUPER_ADMIN",
+        "valido": true
+      },
+      {
+        "escaneo": "baseline-web",
+        "fase": "despues",
+        "estado": 200,
+        "rol": "SUPER_ADMIN",
+        "valido": true
+      },
+      {
+        "escaneo": "activo-api",
+        "fase": "antes",
+        "estado": 200,
+        "rol": "SUPER_ADMIN",
+        "valido": true
+      },
+      {
+        "escaneo": "activo-api",
+        "fase": "despues",
+        "estado": 200,
+        "rol": "SUPER_ADMIN",
+        "valido": true
+      }
+    ]
+  },
+  "sha256": {
+    "baseline-web.json": "f82e89b38f3e10e8a24f8539a76f5ae89bc4558068c5aad20d1211fc8045da6b",
+    "baseline-web.html": "8353cda8b15d841ae96b3473134f3d865e4724e1999946cc35a96f2f86b8b36d",
+    "activo-api.json": "ec37525e0ba94458f10869a31b73dd5cbb1975b80c7cc3ecc3a2bda266bf4dbd",
+    "activo-api.html": "948ab9c9e06de7963967809b1932826c4a014bc6937f46f0b9cb2a8f6eb65739",
+    "openapi-alcance.json": "9625373c24ae06c2243354a4bf46eb890397ede9c3c43594b04c7cc84aa237f3",
+    "apps/backend/acceptance/zap.cjs": "e34b96b807cbbf59193a09cbbee81021e9ec23bcfc8e2becb70a76a86bf3c3d7",
+    "apps/backend/acceptance/zap-hooks.py": "a4a91db77a32490b7e7c4b85c13ed578011a46c94c1dd72324c9044f8e0f0ed8",
+    "apps/backend/acceptance/ejecutar-integral.cjs": "71d593cbef058ac95f16aa744879685e920854858d579033829f8d73ef369524",
+    "apps/backend/acceptance/fixtures.cjs": "4139f9ee037ef71d5a01f9fe6ebcad3041a98d1944d7426d7cf61574f5b26ecb",
+    "apps/frontend/package.json": "0b0ef2785036c03a1b4880c60794a310e3c0a275f6f54c3e796e4991edf0cb42",
+    "pnpm-lock.yaml": "0b2a8a040a9acbe257db6f7e428bcea596068feed3b61f198ee2ffa6e0b3b608"
+  }
+}

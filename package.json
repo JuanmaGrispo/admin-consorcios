@@ -13,5 +13,21 @@
     "back": "pnpm --filter backend-consorcios",
     "front": "pnpm --filter frontend-consorcios",
     "docker": "docker compose up --build"
+  },
+  "pnpm": {
+    "overrides": {
+      "proxy-addr": "^2.0.8",
+      "body-parser": "^2.4.0",
+      "multer": "^2.5.0",
+      "brace-expansion@>=2.0.0 <3": "^2.1.7",
+      "fast-uri": "^3.1.7",
+      "js-yaml@>=4.0.0 <5": "^4.3.2",
+      "brace-expansion@>=1.0.0 <2": "^1.1.20",
+      "brace-expansion@>=5.0.0 <6": "^5.0.11",
+      "source-map-js": "^1.2.2",
+      "undici@>=7.0.0 <8": "^7.30.1",
+      "systeminformation": "^5.33.16",
+      "@modelcontextprotocol/sdk": "^1.32.0"
+    }
   }
 }

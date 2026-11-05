@@ -44,6 +44,10 @@ const contenedorBackend = 'domus-aceptacion-backend';
 const imagenBackend = 'domus-aceptacion-backend:local';
 const enDocker = !process.argv.includes('--host');
 const soloCarga = process.argv.includes('--solo-carga');
+const soloZap = process.argv.includes('--solo-zap');
+if (soloZap) env.NODE_ENV = 'production';
+const carpetaZap = process.argv.includes('--csp') ? 'zap-csp' : 'zap';
+const informeRunnerPath = path.join(__dirname, soloZap ? `resultados/${carpetaZap}-entorno.json` : 'resultados/integral.json');
 let imagenLista = false;
 async function iniciarBackend() {
   if (enDocker) {
@@ -167,8 +171,9 @@ async function probarCompensacionArchivo() {
   fs.mkdirSync(path.join(__dirname, 'resultados'), { recursive: true });
   // Evita atribuir una medición anterior a una corrida que falla antes de k6.
   if (process.argv.includes('--carga')) fs.rmSync(path.join(__dirname, 'resultados/carga-resumen.json'), { force: true });
-  fs.writeFileSync(path.join(__dirname, 'resultados/integral.json'), JSON.stringify({ resultado: 'en ejecución', fecha: new Date().toISOString() }));
+  fs.writeFileSync(informeRunnerPath, JSON.stringify({ resultado: 'en ejecución', fecha: new Date().toISOString() }));
   if (soloCarga && (!process.argv.includes('--carga') || process.argv.includes('--web'))) throw new Error('Usar --solo-carga --carga, sin --web');
+  if (soloZap && (soloCarga || process.argv.includes('--carga') || process.argv.includes('--web') || !enDocker)) throw new Error('Usar --solo-zap sin --carga, --web, --solo-carga ni --host');
   try {
     await ejecutar('docker', [...compose, 'up', '-d', '--wait']);
     await hasta(async () => { const c = await amqp.connect(env.RABBITMQ_URL); await c.close(); return true; });
@@ -195,6 +200,11 @@ async function probarCompensacionArchivo() {
     env.ACEPTACION_ADMIN_TOKEN = await login('admin@example.test');
     env.ACEPTACION_VECINO_TOKEN = await login(datos.usuarios[0].email);
     env.ACEPTACION_AJENO_TOKEN = await login('ajeno@example.test');
+    if (soloZap) {
+      await require('./zap.cjs')({ env, datos, db, ejecutar, hasta, contenedorBackend });
+      fs.writeFileSync(informeRunnerPath, JSON.stringify({ resultado: 'ejecutado', alcance: `ZAP, ver ${carpetaZap}/resumen.json`, fecha: new Date().toISOString() }));
+      return;
+    }
     if (!soloCarga) {
     await ejecutar(process.execPath, ['--test', 'acceptance/http.test.cjs']);
     await ejecutar(process.execPath, ['--test', 'acceptance/negocio.test.cjs']);
@@ -239,7 +249,7 @@ async function probarCompensacionArchivo() {
       cargaEjecutada: process.argv.includes('--carga'), webEjecutada: !soloCarga && process.argv.includes('--web'),
       calentamiento: process.argv.includes('--carga') ? { lecturas: 100, altasReclamo: 50, fueraDeVentana: true } : null,
       dataset: { unidades: 500, boletas: 3000, lineasBoleta: 9000, reclamosIniciales: 500, identidades: 50 } };
-    fs.writeFileSync(path.join(__dirname, 'resultados/integral.json'), JSON.stringify(informe, null, 2));
+    fs.writeFileSync(informeRunnerPath, JSON.stringify(informe, null, 2));
     console.log(soloCarga ? 'Carga y regresión puntual aprobadas.' : 'API integral y repetición tras reinicio aprobadas.');
   } finally {
     await detenerBackend().catch(() => undefined);
@@ -248,6 +258,6 @@ async function probarCompensacionArchivo() {
     await ejecutar('docker', [...compose, 'down', '--volumes']);
   }
 })().catch((e) => {
-  fs.writeFileSync(path.join(__dirname, 'resultados/integral.json'), JSON.stringify({ fecha: new Date().toISOString(), resultado: 'fallido', error: e.message }, null, 2));
+  fs.writeFileSync(informeRunnerPath, JSON.stringify({ fecha: new Date().toISOString(), resultado: 'fallido', error: e.message }, null, 2));
   console.error(e.message); process.exitCode = 1;
 });

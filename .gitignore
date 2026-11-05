@@ -16,3 +16,7 @@ coverage/
 *.tsbuildinfo
 next-env.d.ts
 CLAUDE.md
+
+# Mutation testing (Stryker): sandbox y reportes locales
+.stryker-tmp/
+reports/
