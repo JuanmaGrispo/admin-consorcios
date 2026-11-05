@@ -15,6 +15,7 @@ import {
   Min,
 } from 'class-validator';
 import type { HorarioSemanal } from '../horario';
+import { MaxDecimales } from '../../../core/max-decimales';
 
 const recortar = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -132,7 +133,8 @@ export class CreateAmenityDto {
   // `ck_amenity_sena` en la base exige >= 0, y 0 es el default: sin seña.
   @ApiPropertyOptional({ example: 15000, default: 0 })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber()
+  @MaxDecimales(2)
   @Min(0)
   montoSena?: number;
 

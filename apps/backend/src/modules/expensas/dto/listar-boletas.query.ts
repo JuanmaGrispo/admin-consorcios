@@ -12,6 +12,7 @@ import {
   Min,
 } from 'class-validator';
 import { EstadoBoleta } from '../../../database/entities';
+import { PAGINA_MAXIMA } from '../../../core/http/contratos-rest';
 
 /**
  * Las solapas de la grilla de cobranzas. No son lo mismo que `estado`: una
@@ -63,11 +64,12 @@ export class ListarBoletasQuery {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   buscar?: string;
 
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @ApiPropertyOptional({ default: 1, minimum: 1, maximum: PAGINA_MAXIMA })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(PAGINA_MAXIMA)
   pagina?: number = 1;
 
   // Mismo tope que reclamos: sin él, un `limite=100000` voltea la API.

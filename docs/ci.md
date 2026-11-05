@@ -6,8 +6,7 @@ a ramas ni por pull requests. Publicar una Release para un tag que ya existe
 no dispara otra ejecución: el disparador es el push del tag.
 
 Cada ejecución descarga el commit del tag, instala las dependencias con el
-lockfile y ejecuta nueve verificaciones de aplicación, un job de análisis estático con
-SonarCloud y un job independiente de escaneo de secretos, incorporado desde la
+lockfile y ejecuta nueve verificaciones de aplicación y un job independiente de escaneo de secretos, incorporado desde la
 rama principal remota:
 
 | Verificación | Comando |
@@ -20,22 +19,20 @@ rama principal remota:
 | Contrato de errores Problem Details | `pnpm back test:aceptacion:errores` |
 | Duplicados y entregas inciertas de email | `pnpm back test:aceptacion:email` |
 | Integración con PostgreSQL y RabbitMQ reales locales | `pnpm back test:aceptacion:docker` |
-| API integral, navegador y carga k6 | `pnpm back test:aceptacion:integral --web --carga` |
-| Análisis estático y Quality Gate | `pnpm back test:cobertura` y SonarCloud (`sonar-project.properties`) |
+| API integral, navegador, carga k6, colección Postman y contrato | `pnpm back test:aceptacion:integral --web --carga --newman --contrato` |
 | Secretos en el historial completo | Gitleaks con `--log-opts="--all"` y `--redact` |
 
 Las pruebas web se ejecutan con Playwright desde el runner integral, con
 sesiones reales mediante cookie httpOnly. No se incorporan a `pnpm test`.
 El backend se analiza con TypeScript; no tiene ESLint configurado.
 
-El job de análisis corre las pruebas unitarias con cobertura (`lcov` en
-`apps/backend/coverage/`), corrige las rutas para que Sonar las resuelva desde
-la raíz y ejecuta el scanner con `sonar.qualitygate.wait=true`: si el Quality
-Gate no aprueba, el job queda en rojo. El tag se analiza como rama `main`.
-Requiere, una sola vez, importar el repositorio en sonarcloud.io, apagar
-"Automatic Analysis" y cargar el token como secret `SONAR_TOKEN`; los pasos
-están en el encabezado de `sonar-project.properties`. Excluye de duplicación y
-cobertura las entidades generadas y las migraciones.
+El análisis estático con SonarCloud no está en el workflow: el job se sacó el
+05/11 por decisión del grupo, así que no hay Quality Gate verificado.
+`sonar-project.properties` y `pnpm back test:cobertura` (cobertura `lcov` en
+`apps/backend/coverage/`) se conservan. Para reactivarlo: recuperar el job
+`analisis` del commit ae1d41f, importar el repositorio en sonarcloud.io (gratis
+para repositorios públicos), apagar "Automatic Analysis" y cargar el secret
+`SONAR_TOKEN`.
 
 El mutation testing (`pnpm back test:mutacion`, Stryker) no está en el
 workflow: tarda unos 34 minutos y el pipeline tiene que quedar en 15. Se corre
@@ -44,6 +41,19 @@ aparte y su reporte HTML queda en `apps/backend/reports/mutation/`.
 El job de secretos conserva la versión y el SHA256 fijados en el workflow
 remoto. Descarga todo el historial con `fetch-depth: 0` y analiza los commits
 con Gitleaks; no se eliminó al integrar las verificaciones de resiliencia.
+
+La configuración está en `.gitleaks.toml`: usa las reglas por defecto y sólo
+exceptúa los hashes SHA-256 de integridad de las evidencias
+(`docs/evidencias/zap-2026-11-05.json` y `zap-csp-2026-11-05.json`, bloque
+`"sha256"`), que la regla `generic-api-key` marcaba como claves: 6 falsos
+positivos en el commit ae1d41f que dejaban el job en rojo. La excepción exige
+que la clave sea un nombre de archivo y el valor tenga 64 dígitos hex; un
+control negativo con `"api_key": "..."` y `"secret": "<64 hex>"` en esa
+carpeta se sigue detectando (05/11). Limitación: las reglas por defecto **no
+detectan** la contraseña de demo de DEF-09 (una constante `PASSWORD` en
+`seed`), así que este job en verde no prueba que el historial esté limpio.
+Eso se verifica aparte con `git log --all -S"<contraseña>"` después de la
+reescritura del historial.
 
 Se usa Node.js 22 y la versión de pnpm declarada en `package.json`.
 Las verificaciones no despliegan la aplicación ni requieren secretos de
@@ -70,12 +80,16 @@ El job integral restaura un snapshot de esquema sin datos, aplica migraciones
 pendientes, genera 50 identidades y datos ficticios (500 unidades, 3000 boletas
 y 500 reclamos), compila el backend en Docker y prueba la API real. Instala
 Chromium y verifica idempotencia y conflictos en la web; finalmente ejecuta
-k6 durante cinco minutos con 50 usuarios. Conserva el resumen JSON y capturas
+k6 durante cinco minutos con 50 usuarios. Con `--newman` corre la colección
+Postman de `apps/backend/acceptance/postman` (un éxito y un error por endpoint)
+con `postman/newman:6.1.3-alpine`, y con `--contrato` corre Schemathesis
+(`schemathesis/schemathesis:v4.33.1`) contra el OpenAPI de `/docs-json`; ver
+[`api-postman-contrato.md`](api-postman-contrato.md). Conserva el resumen JSON y capturas
 sin guardar contraseñas, cookies ni tokens. Los proveedores de pagos, Storage
 y SMTP son simuladores locales; no se realizan cobros ni envíos reales.
 
 La configuración del workflow no acredita una ejecución de GitHub Actions:
-para eso se necesita un tag que incluya estos cambios y sus once verificaciones verdes.
+para eso se necesita un tag que incluya estos cambios y sus diez verificaciones verdes.
 El estado de aceptación y sus límites están en
 [`aceptacion-integracion-resiliencia.md`](aceptacion-integracion-resiliencia.md).
 

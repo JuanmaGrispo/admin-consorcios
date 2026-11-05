@@ -11,6 +11,13 @@ export function canonico(valor: unknown): string {
   return JSON.stringify(valor);
 }
 
+/**
+ * Tope de `pagina` en los listados paginados (con `limite` de hasta 100, un
+ * millón de filas). Sin tope, una página enorme desborda el OFFSET de
+ * PostgreSQL y la API respondía 500 (DEF-16).
+ */
+export const PAGINA_MAXIMA = 10_000;
+
 export const huellaDe = (valor: unknown): string => createHash('sha256').update(canonico(valor)).digest('hex');
 export const etagDe = (valor: unknown): string => '"' + huellaDe(valor) + '"';
 

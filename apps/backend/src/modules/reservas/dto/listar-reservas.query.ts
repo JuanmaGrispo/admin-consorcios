@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsUUID, Matches, Max, Min } from 'class-validator';
 import { EstadoReserva } from '../../../database/entities';
 import { FECHA } from './crear-reserva.dto';
+import { PAGINA_MAXIMA } from '../../../core/http/contratos-rest';
 
 export class ListarReservasQuery {
   @ApiPropertyOptional({ format: 'uuid' })
@@ -43,11 +44,12 @@ export class ListarReservasQuery {
   @Matches(FECHA, { message: 'hasta tiene que tener el formato AAAA-MM-DD' })
   hasta?: string;
 
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @ApiPropertyOptional({ default: 1, minimum: 1, maximum: PAGINA_MAXIMA })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(PAGINA_MAXIMA)
   pagina?: number = 1;
 
   @ApiPropertyOptional({ default: 20, maximum: 100 })

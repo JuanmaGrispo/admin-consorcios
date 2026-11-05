@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { ModalidadAsamblea, TipoAsamblea } from '../../../database/entities';
 import { PuntoOrdenDiaDto } from './punto-orden-dia.dto';
+import { MaxDecimales } from '../../../core/max-decimales';
 
 export class CreateAsambleaDto {
   @ApiProperty({ format: 'uuid' })
@@ -57,7 +58,8 @@ export class CreateAsambleaDto {
 
   @ApiPropertyOptional({ example: 60, default: 60, description: 'Porcentaje de coeficientes para sesionar' })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber()
+  @MaxDecimales(2)
   @Min(0)
   @Max(100)
   quorumRequerido?: number;

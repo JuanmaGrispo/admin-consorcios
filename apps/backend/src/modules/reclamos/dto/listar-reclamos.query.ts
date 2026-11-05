@@ -11,6 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { EstadoReclamo, PrioridadReclamo } from '../../../database/entities';
+import { PAGINA_MAXIMA } from '../../../core/http/contratos-rest';
 
 /**
  * Filtros de la bandeja. El prototipo muestra, del lado del vecino, tres
@@ -65,11 +66,12 @@ export class ListarReclamosQuery {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   buscar?: string;
 
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @ApiPropertyOptional({ default: 1, minimum: 1, maximum: PAGINA_MAXIMA })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(PAGINA_MAXIMA)
   pagina?: number = 1;
 
   // Con tope: sin él, un `limite=100000` es una forma fácil de voltear la API.

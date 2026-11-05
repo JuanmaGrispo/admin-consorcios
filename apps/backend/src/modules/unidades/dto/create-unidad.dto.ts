@@ -12,6 +12,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { TipoUnidad } from '../../../database/entities';
+import { MaxDecimales } from '../../../core/max-decimales';
 
 const recortar = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -56,14 +57,16 @@ export class CreateUnidadDto {
     example: 4.5,
     description: 'Porcentaje de participación en las expensas (0 < x ≤ 100)',
   })
-  @IsNumber({ maxDecimalPlaces: 4 })
+  @IsNumber()
+  @MaxDecimales(4)
   @IsPositive()
   @Max(100)
   coeficiente: number;
 
   @ApiPropertyOptional({ example: 62.5 })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber()
+  @MaxDecimales(2)
   @IsPositive()
   @Max(999999.99)
   metrosCuadrados?: number;

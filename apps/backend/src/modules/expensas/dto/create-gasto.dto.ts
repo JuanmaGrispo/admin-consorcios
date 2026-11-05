@@ -16,6 +16,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { NaturalezaGasto } from '../../../database/entities';
+import { MaxDecimales } from '../../../core/max-decimales';
 
 const recortar = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -53,7 +54,8 @@ export class CreateGastoDto {
 
   // numeric(14,2)
   @ApiProperty({ example: 185000 })
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber()
+  @MaxDecimales(2)
   @IsPositive()
   @Max(999_999_999_999.99)
   monto: number;

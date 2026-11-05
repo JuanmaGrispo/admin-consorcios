@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateString, IsIn, IsNumber, IsOptional, IsPositive, Max } from 'class-validator';
 import { MedioPago } from '../../../database/entities';
 import { DestinoPagoDto } from './destino-pago';
+import { MaxDecimales } from '../../../core/max-decimales';
 
 /** Los pagos por Mercado Pago entran sólo por su flujo, nunca a mano. */
 export const MEDIOS_MANUALES = [MedioPago.TRANSFERENCIA, MedioPago.EFECTIVO, MedioPago.OTRO];
@@ -10,7 +11,8 @@ export const MEDIOS_MANUALES = [MedioPago.TRANSFERENCIA, MedioPago.EFECTIVO, Med
 export class RegistrarPagoDto extends DestinoPagoDto {
   // numeric(14,2)
   @ApiProperty({ example: 45000 })
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber()
+  @MaxDecimales(2)
   @IsPositive()
   @Max(999_999_999_999.99)
   monto: number;

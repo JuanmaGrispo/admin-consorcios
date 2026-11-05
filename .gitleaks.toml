@@ -1,0 +1,17 @@
+# Configuración de gitleaks para el job "secretos" de la CI (.github/workflows/ci.yml).
+# Usa las reglas por defecto y sólo exceptúa los hashes SHA-256 de integridad que
+# registran las evidencias (por ejemplo docs/evidencias/zap-2026-11-05.json, bloque
+# "sha256"), que la regla generic-api-key confunde con claves. La excepción exige que
+# la clave sea un nombre de archivo y el valor tenga exactamente 64 dígitos hex, así
+# que "api_key": "...", "secret": "<64 hex>" o un token se siguen detectando.
+# Nota: se probó combinar paths + regexes con condition = "AND" y gitleaks 8.30.1
+# exceptuaba todo el archivo; por eso la excepción es sólo por expresión regular.
+title = "Domus - gitleaks"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Hashes SHA-256 de integridad de archivos en las evidencias"
+regexTarget = "match"
+regexes = ['''^[\w./-]+\.(json|html|cjs|js|ts|py|md|yml|yaml|txt|png)": "[0-9a-f]{64}"$''']

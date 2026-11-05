@@ -122,3 +122,14 @@ Google Fonts (`docker compose up --build`). En el entorno donde se verificó no
 había salida a `fonts.googleapis.com`.
 
 Resumen estructurado: [`evidencias/dependencias-2026-11-05.json`](evidencias/dependencias-2026-11-05.json).
+
+## Regresión encontrada después: DEF-17 (05/11, noche)
+
+El override de `multer` a 2.5.0 rompió la traducción de un error de subida.
+`@nestjs/platform-express` reconoce los errores de multer por el texto del
+mensaje, y multer 2.5.0 cambió `"Unexpected field"` por `"Unexpected file field"`
+(y sumó `LIMIT_FIELD_ARRAY_INDEX`, `STREAM_DESTROYED` e `INVALID_FIELD_NAME`).
+Un `POST /archivos` con el campo `archivo` repetido respondía 500 en lugar de
+400. Lo encontró Schemathesis. Corrección: `FiltroExcepciones` traduce
+`MulterError` por `code` (413 por tamaño, 400 el resto); tests en
+`filtro-excepciones.spec.ts`. Detalle en [`api-postman-contrato.md`](api-postman-contrato.md).

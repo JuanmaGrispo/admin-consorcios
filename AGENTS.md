@@ -26,8 +26,8 @@ nuevo tiene que saber antes de tocar código.
   es `@Public()` explícito. Permisos por rol con `@Roles()`. La jerarquía
   (`SUPER_ADMIN` pasa todo) vive en `RolesGuard`, no en la base.
 - **Sesión web = cookie httpOnly.** El frontend nunca toca el token.
-- **Flujo git:** branch desde `develop` → PR a `develop` → `develop` a `main`
-  cuando hay algo estable. Push directo a `main` y `develop` está bloqueado.
+- **Flujo git:** se puede pushear directo a `main` (ya no está bloqueado).
+  Para cambios grandes conviene una rama y PR, para que otro lo revise.
 - **Commits atómicos** con mensaje que explique el porqué, no el qué.
 - **Nunca** credenciales en el código ni en PRs: van en `.env` (gitignoreado).
 

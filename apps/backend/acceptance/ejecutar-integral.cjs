@@ -148,6 +148,43 @@ async function probarRecuperacion(datos) {
   console.log('C2/C3: operación HTTP recuperada después de caída y reinicio; duplicados sin nuevos correos ni notificaciones.');
 }
 
+// Colección Postman (acceptance/postman): un éxito y un error por endpoint, con Newman en Docker.
+// Corre después de la web porque emite una liquidación nueva y eso reemplaza las boletas
+// que usan los flujos de Playwright.
+const redDocker = () => (enDocker ? ['--network', 'domus-aceptacion_default'] : ['--add-host', 'host.docker.internal:host-gateway']);
+const destinoDocker = () => (enDocker ? 'http://domus-aceptacion-backend:4400' : 'http://host.docker.internal:4400');
+async function probarColeccion(datos) {
+  // La bandeja se llena desde RabbitMQ en forma asíncrona; la colección necesita una notificación segura.
+  const { rows: [notificacion] } = await db.query(`INSERT INTO notificacion(usuario_id,titulo,cuerpo,tipo)
+    VALUES ($1,'Aviso de la colección','Notificación de prueba','BOLETA') RETURNING id`, [datos.usuarios[0].id]);
+  const variables = { baseUrl: destinoDocker() + '/api', password: env.SEED_PASSWORD, vecinoEmail: datos.usuarios[0].email,
+    vecinoId: datos.usuarios[0].id, adminId: datos.adminId, consorcioId: datos.consorcioId, unidadId: datos.usuarios[0].unidadId,
+    unidad2Id: datos.usuarios[1].unidadId, categoriaId: datos.categoriaId, boletaId: datos.usuarios[0].boletaId,
+    boleta2Id: datos.usuarios[1].boletaId, notificacionId: notificacion.id, mpSecret: env.MP_WEBHOOK_SECRET };
+  await ejecutar('docker', ['run', '--rm', ...redDocker(), '-u', '0', '-w', '/etc/newman',
+    '-v', `${path.join(__dirname, 'postman')}:/etc/newman/acceptance/postman:ro`, '-v', `${path.join(__dirname, 'resultados')}:/resultados`,
+    'postman/newman:6.1.3-alpine', 'run', 'acceptance/postman/domus.postman_collection.json',
+    ...Object.entries(variables).flatMap(([k, v]) => ['--env-var', `${k}=${v}`]),
+    '--reporters', 'cli,junit', '--reporter-junit-export', '/resultados/newman.xml']);
+  console.log('Colección Postman aprobada: un éxito y un error por endpoint.');
+}
+
+// Pruebas de contrato con Schemathesis contra el OpenAPI que publica Swagger (/docs-json).
+// Corre al final porque genera datos al azar sobre la base de aceptación.
+async function probarContrato() {
+  const destino = destinoDocker();
+  // Token efímero del administrador de este entorno; el reporte JUnit no guarda cabeceras.
+  await ejecutar('docker', ['run', '--rm', ...redDocker(), '-u', '0', '-v', `${path.join(__dirname, 'resultados')}:/resultados`,
+    'schemathesis/schemathesis:v4.33.1', 'run', destino + '/docs-json', '--url', destino,
+    '--header', `Authorization: Bearer ${env.ACEPTACION_ADMIN_TOKEN}`, '--checks', 'not_a_server_error', '--max-examples', '25',
+    '--generation-deterministic', '--suppress-health-check', 'all', '--workers', '4',
+    // Sin filtros manda un recordatorio a cada boleta impaga (3000 en la base de aceptación) y
+    // con cuatro workers pasa los 10 s del cliente. Es DIS01 de la matriz de seguridad.
+    '--exclude-path', '/api/boletas/recordatorios',
+    '--report', 'junit', '--report-junit-path', '/resultados/schemathesis.xml']);
+  console.log('Contrato: ninguna operación del OpenAPI respondió 5xx.');
+}
+
 async function probarCompensacionArchivo() {
   const form = new FormData();
   form.append('archivo', new Blob([Uint8Array.from([137,80,78,71,13,10,26,10,0,0,0,0,0,0,0,0])], { type: 'image/png' }), 'prueba.png');
@@ -221,6 +258,7 @@ async function probarCompensacionArchivo() {
     await probarRecuperacion(datos);
     await probarCompensacionArchivo();
     if (process.argv.includes('--web')) await probarWeb();
+    if (process.argv.includes('--newman')) await probarColeccion(datos);
     } else {
       await ejecutar(process.execPath, ['--test', '--test-name-pattern', 'boletas:|numeración|sesión:|espera acotada', 'acceptance/http.test.cjs']);
     }
@@ -239,7 +277,8 @@ async function probarCompensacionArchivo() {
           'grafana/k6:1.0.0', 'run', '--summary-export', '/resultados/carga-resumen.json', '/carga.js']);
       } finally { fs.unlinkSync(destino); }
     }
-    const git = (args) => spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true }).stdout?.trim();
+    if (process.argv.includes('--contrato')) await probarContrato();
+    const git =(args) => spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true }).stdout?.trim();
     const informe = { fecha: new Date().toISOString(), resultado: 'aprobado', reinicioBackend: !soloCarga,
       alcance: soloCarga ? 'carga y regresión puntual de boletas/numeración/sesión/idempotencia' : 'integral',
       commit: git(['rev-parse','HEAD']), cambiosSinCommit: Boolean(git(['status','--porcelain'])),
@@ -247,6 +286,7 @@ async function probarCompensacionArchivo() {
       esquemaSha256: createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'esquema.sql'))).digest('hex'),
       esquema: (await db.query('SELECT name FROM migrations ORDER BY timestamp')).rows.map((m) => m.name),
       cargaEjecutada: process.argv.includes('--carga'), webEjecutada: !soloCarga && process.argv.includes('--web'),
+      coleccionEjecutada: !soloCarga && process.argv.includes('--newman'), contratoEjecutado: process.argv.includes('--contrato'),
       calentamiento: process.argv.includes('--carga') ? { lecturas: 100, altasReclamo: 50, fueraDeVentana: true } : null,
       dataset: { unidades: 500, boletas: 3000, lineasBoleta: 9000, reclamosIniciales: 500, identidades: 50 } };
     fs.writeFileSync(informeRunnerPath, JSON.stringify(informe, null, 2));

@@ -27,6 +27,22 @@ export const limpiarParaLog = (valor: unknown): string =>
   // eslint-disable-next-line no-control-regex
   String(valor ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 200);
 
+interface ErrorDeMulter extends Error {
+  code?: string;
+  field?: string;
+}
+
+/**
+ * Un error de multer es culpa del pedido (multipart mal armado), no del
+ * servidor. @nestjs/platform-express lo traduce comparando el texto del
+ * mensaje, y multer 2.5 cambió algunos ("Unexpected field" pasó a "Unexpected
+ * file field"), así que esos llegaban acá como 500 (DEF-17). Se decide por
+ * `code`, como pide multer.
+ */
+function esErrorDeMulter(excepcion: unknown): excepcion is ErrorDeMulter {
+  return excepcion instanceof Error && excepcion.name === 'MulterError';
+}
+
 interface CapaExpress {
   route?: { methods?: Record<string, boolean> };
   matchers?: Array<(path: string) => unknown>;
@@ -88,6 +104,13 @@ export class FiltroExcepciones implements ExceptionFilter {
       }
       const message = typeof respuesta === 'string' ? respuesta : (respuesta as { message?: unknown }).message ?? excepcion.message;
       responderProblema(res, req, status, message);
+      return;
+    }
+
+    if (esErrorDeMulter(excepcion)) {
+      const status = excepcion.code === 'LIMIT_FILE_SIZE' ? HttpStatus.PAYLOAD_TOO_LARGE : HttpStatus.BAD_REQUEST;
+      const campo = excepcion.field ? ` (campo ${limpiarParaLog(excepcion.field).slice(0, 40)})` : '';
+      responderProblema(res, req, status, `Multipart inválido: ${excepcion.message}${campo}`);
       return;
     }
 
