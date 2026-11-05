@@ -19,9 +19,9 @@ type ConnectionOptions = Pick<
  * SSL: Supabase lo exige. Si no se define `DB_SSL`, se asume que una conexión
  * por connection string es remota (SSL on) y una por `DB_*` es local (SSL off).
  *
- * Pool: sin `DB_POOL_MAX` queda el default del driver (10 conexiones), que es
- * lo prudente contra el pooler gratuito de Supabase que comparte el grupo. Las
- * pruebas de carga lo suben porque usan su propio Postgres.
+ * Pool: sin `DB_POOL_MAX` queda el default del driver (10 conexiones), lo
+ * prudente contra el pooler gratuito de Supabase y lo que mejor midió en la
+ * prueba de carga.
  */
 export function buildConnectionOptions(env: EnvReader): ConnectionOptions {
   const url = env('DATABASE_URL');

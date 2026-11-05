@@ -8,6 +8,11 @@ todavía no hay evidencia
 de ejecución de esa versión en GitHub Actions. Los resultados históricos de
 abajo no sustituyen este estado actual.
 
+Actualización al 05/11/2026: C9 se cumplió en cuatro corridas completas de
+cinco minutos, con el pool de conexiones en 10 y en 30, sin límite de CPU y
+limitado a 4 núcleos. Ver «Medición con pool configurable» al final. Sigue
+pendiente acreditarlo en GitHub Actions.
+
 La matriz y las primeras ejecuciones conservan el diagnóstico original. La
 sección «Correcciones» al final describe el estado posterior; no confundir
 pruebas de componente aprobadas con aceptación integral del sistema.
@@ -517,3 +522,62 @@ La documentación y el código quedan cerrados para revisión, con estas dos
 verificaciones pendientes explícitas: aprobar C9 con una medición real y obtener
 la evidencia de GitHub Actions sobre un tag que contenga los cambios. Se mantiene
 CI solo por tags `v*`, SOAP excluido y conciliación manual de SMTP aceptada.
+
+## Medición con pool configurable — 05/11/2026
+
+El backend ahora toma el tamaño del pool de conexiones de `DB_POOL_MAX`
+(PR #30). Sin la variable sigue en 10, el default del driver. El runner de
+aceptación la pasa al contenedor del backend; usa 10 si no se define otra, por
+las mediciones de abajo.
+
+Se corrió `node acceptance/ejecutar-integral.cjs --solo-carga --carga` dos veces
+seguidas sobre el commit `8438470`, sin cambios locales: primero con
+`DB_POOL_MAX=10` y después con `DB_POOL_MAX=30`. Docker Desktop con 12 CPUs y
+16 GB en el host, sin otros contenedores activos; PostgreSQL 17.11. Mismo
+dataset, recorrido, calentamiento y umbrales que las corridas anteriores.
+
+La regresión puntual previa aprobó 4/4 en las dos corridas. Incluye las dos
+pruebas que habían quedado preparadas sin ejecutar: revocación de sesión con el
+mismo JWT y espera acotada del bloqueo con Retry-After.
+
+| Endpoint | Pool 10: p95 | Pool 30: p95 | Umbral < 500 ms |
+|---|---:|---:|---|
+| GET /boletas | 253,01 ms | 223,48 ms | Aprobado en las dos |
+| GET /boletas/:id | 200,09 ms | 192,95 ms | Aprobado en las dos |
+| POST /reclamos | 331,89 ms | 445,96 ms | Aprobado en las dos |
+
+Con pool 10 hubo 11.724 muestras por endpoint y con pool 30, 10.869; las dos con
+0 % de errores HTTP y 100 % de checks. k6 terminó con código 0, así que el job
+integral no falla por la carga en este entorno.
+
+Subir a 30 conexiones mejoró poco las lecturas y empeoró el alta de reclamos,
+que pasó de 332 a 446 ms con la mediana duplicada: más escrituras simultáneas
+compiten en la base.
+
+### Limitado a 4 CPUs
+
+El runner de GitHub tiene 4 CPUs. Para aproximarlo se repitió la medición con
+los cuatro contenedores de la prueba (PostgreSQL, RabbitMQ, backend y k6) fijados
+en los mismos 4 núcleos lógicos (`docker update --cpuset-cpus 0-3`), con pool 30
+y después con pool 10, sobre el mismo commit y dataset.
+
+| Endpoint | 4 CPUs, pool 30: p95 | 4 CPUs, pool 10: p95 | Umbral < 500 ms |
+|---|---:|---:|---|
+| GET /boletas | 90,65 ms | 60,14 ms | Aprobado en las dos |
+| GET /boletas/:id | 84,03 ms | 52,98 ms | Aprobado en las dos |
+| POST /reclamos | 202,44 ms | 106,93 ms | Aprobado en las dos |
+
+Hubo 13.277 y 13.881 muestras por endpoint, con 0 % de errores HTTP y 100 % de
+checks. La regresión puntual aprobó 4/4 en las dos.
+
+Con 4 núcleos fue más rápido que sin límite porque el host es un i7-1355U: los
+núcleos lógicos 0 a 3 son los de alto rendimiento, y sin límite el trabajo se
+reparte también en los ocho núcleos de eficiencia, más lentos. La latencia
+depende de la velocidad de cada núcleo más que de la cantidad, lo que también
+explica las diferencias con las corridas del 03/11.
+
+Lectura de los resultados: con estos datos, 10 es la mejor configuración medida
+en los dos entornos. El margen con 4 núcleos rápidos es amplio (peor p95 de
+202 ms), pero los núcleos del runner de GitHub no son los mismos, así que esto
+no reemplaza la ejecución del CI. C9 queda acreditado en local; falta la
+ejecución del CI sobre un tag para confirmarlo allí.
