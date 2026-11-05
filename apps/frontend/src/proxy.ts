@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { randomBytes } from 'node:crypto';
+import { politicaCsp } from '@/lib/csp';
 
 /**
  * Guard de rutas por presencia de cookie. La cookie es httpOnly y la setea el
@@ -10,19 +12,26 @@ import { NextResponse, type NextRequest } from 'next/server';
 const COOKIE_SESION = 'domus_session';
 
 export default function proxy(request: NextRequest) {
+  const nonce = randomBytes(16).toString('base64');
+  const csp = politicaCsp(nonce);
+  const headers = new Headers(request.headers);
+  // Se sobreescriben los valores de entrada: el cliente no elige el nonce.
+  headers.set('x-nonce', nonce);
+  headers.set('Content-Security-Policy', csp);
   const tieneSesion = request.cookies.has(COOKIE_SESION);
   const esLogin = request.nextUrl.pathname === '/login';
 
-  if (!tieneSesion && !esLogin) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-  if (tieneSesion && esLogin) {
-    return NextResponse.redirect(new URL('/', request.url));
-  }
-  return NextResponse.next();
+  const response = !tieneSesion && !esLogin
+    ? NextResponse.redirect(new URL('/login', request.url))
+    : tieneSesion && esLogin
+      ? NextResponse.redirect(new URL('/', request.url))
+      : NextResponse.next({ request: { headers } });
+  response.headers.set('Content-Security-Policy', csp);
+  response.headers.set('Cache-Control', 'private, no-store');
+  return response;
 }
 
 export const config = {
   // Todo salvo assets y archivos estáticos.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.png|logo-domus.png|login-paisaje.jpg).*)'],
 };

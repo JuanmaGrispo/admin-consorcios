@@ -6,6 +6,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { COOKIE_SESION } from './auth.constants';
 import { AuthService } from './auth.service';
 import type { JwtPayload, UsuarioActual } from './auth.types';
+import { emisorJwt, JWT_ALGORITMO } from './jwt.opciones';
 
 /**
  * Valida el JWT buscándolo en dos lugares, en orden:
@@ -28,6 +29,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       ]),
       // Un token vencido se rechaza: nunca se ignora la expiración.
       ignoreExpiration: false,
+      // Sólo HS256 y sólo nuestro emisor: alg=none, otro algoritmo u otro iss → 401.
+      algorithms: [JWT_ALGORITMO],
+      issuer: emisorJwt(config),
       secretOrKey: config.getOrThrow<string>('JWT_SECRET'),
     });
   }

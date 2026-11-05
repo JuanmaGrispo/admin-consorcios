@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Notificador } from '../../core/notificaciones/notificador';
+import { crearAviso } from '../../core/notificaciones/notificador';
 import {
   Amenity,
   AmenityBloqueo,
@@ -321,7 +322,7 @@ export class ReservasService {
       throw new BadRequestException('El bloqueo tiene que terminar después de empezar');
     }
 
-    const { bloqueo, canceladas } = await this.reservas.crearBloqueo(
+    const { bloqueo } = await this.reservas.crearBloqueo(
       amenityId,
       { amenityId, creadoPorId: usuario.id, desde, hasta, motivo: dto.motivo ?? null },
       async (pisadas) => {
@@ -337,16 +338,10 @@ export class ReservasService {
         }
         return vigentes;
       },
+      (canceladas) => canceladas.map((r) => crearAviso({ destinatarioId: r.solicitadaPorId,
+        asunto: `Se canceló tu reserva de ${amenity.nombre}`,
+        cuerpo: `El administrador bloqueó el amenity por mantenimiento${dto.motivo ? ` (${dto.motivo})` : ''}.`, origen: `reserva:${r.id}` })),
     );
-
-    for (const reserva of canceladas) {
-      await this.avisar(
-        reserva.solicitadaPorId,
-        `Se canceló tu reserva de ${amenity.nombre}`,
-        `El administrador bloqueó el amenity por mantenimiento${dto.motivo ? ` (${dto.motivo})` : ''}.`,
-        `reserva:${reserva.id}`,
-      );
-    }
 
     return bloqueo;
   }
@@ -421,13 +416,10 @@ export class ReservasService {
     }
     if (reserva.senaDevueltaAt) throw new BadRequestException('La seña ya se devolvió');
 
-    await this.reservas.actualizarReserva(reserva, { senaDevueltaAt: await this.reservas.ahora() });
-    await this.avisar(
-      reserva.solicitadaPorId,
-      `Te devolvimos la seña de ${reserva.amenity.nombre}`,
-      `Se registró la devolución de $${reserva.amenity.montoSena.toFixed(2)}.`,
-      `reserva:${reserva.id}`,
-    );
+    await this.reservas.actualizarReserva(reserva, { senaDevueltaAt: await this.reservas.ahora() }, [crearAviso({
+      destinatarioId: reserva.solicitadaPorId, asunto: `Te devolvimos la seña de ${reserva.amenity.nombre}`,
+      cuerpo: `Se registró la devolución de $${reserva.amenity.montoSena.toFixed(2)}.`, origen: `reserva:${reserva.id}`,
+    })]);
     return this.findOne(usuario, id);
   }
 
@@ -499,6 +491,7 @@ export class ReservasService {
       ? EstadoReserva.PENDIENTE
       : EstadoReserva.APROBADA;
 
+    const destinatario = estado === EstadoReserva.APROBADA ? usuario.id : (await this.consorcios.findOne(amenity.consorcioId)).administradorId;
     const reserva = await this.reservas.crearReserva(
       amenity.id,
       {
@@ -529,24 +522,14 @@ export class ReservasService {
         }
         return { lugar };
       },
+      (r) => [crearAviso({ destinatarioId: destinatario,
+        asunto: estado === EstadoReserva.APROBADA ? `Reservaste ${amenity.nombre}` : `Nueva reserva de ${amenity.nombre}`,
+        cuerpo: estado === EstadoReserva.APROBADA
+          ? `Tu reserva quedó confirmada para el ${dto.fecha} de ${dto.horaInicio} a ${dto.horaFin}.`
+          : `Hay una reserva para el ${dto.fecha} de ${dto.horaInicio} a ${dto.horaFin} esperando aprobación.`,
+        origen: `reserva:${r.id}` })],
     );
 
-    if (estado === EstadoReserva.APROBADA) {
-      await this.avisar(
-        usuario.id,
-        `Reservaste ${amenity.nombre}`,
-        `Tu reserva quedó confirmada para el ${dto.fecha} de ${dto.horaInicio} a ${dto.horaFin}.`,
-        `reserva:${reserva.id}`,
-      );
-    } else {
-      const consorcio = await this.consorcios.findOne(amenity.consorcioId);
-      await this.avisar(
-        consorcio.administradorId,
-        `Nueva reserva de ${amenity.nombre}`,
-        `Hay una reserva para el ${dto.fecha} de ${dto.horaInicio} a ${dto.horaFin} esperando aprobación.`,
-        `reserva:${reserva.id}`,
-      );
-    }
 
     const [vista] = await this.paraMostrar([reserva]);
     return vista;
@@ -578,14 +561,8 @@ export class ReservasService {
       estado: EstadoReserva.APROBADA,
       resueltaPorId: usuario.id,
       resueltaAt: await this.reservas.ahora(),
-    });
-
-    await this.avisar(
-      reserva.solicitadaPorId,
-      `Se aprobó tu reserva de ${reserva.amenity.nombre}`,
-      'Ya podés usar el amenity en el horario que reservaste.',
-      `reserva:${reserva.id}`,
-    );
+    }, [crearAviso({ destinatarioId: reserva.solicitadaPorId, asunto: `Se aprobó tu reserva de ${reserva.amenity.nombre}`,
+      cuerpo: 'Ya podés usar el amenity en el horario que reservaste.', origen: `reserva:${reserva.id}` })]);
 
     return aprobada;
   }
@@ -603,14 +580,8 @@ export class ReservasService {
       motivoRechazo: dto.motivoRechazo,
       resueltaPorId: usuario.id,
       resueltaAt: await this.reservas.ahora(),
-    });
-
-    await this.avisar(
-      reserva.solicitadaPorId,
-      `Se rechazó tu reserva de ${reserva.amenity.nombre}`,
-      dto.motivoRechazo,
-      `reserva:${reserva.id}`,
-    );
+    }, [crearAviso({ destinatarioId: reserva.solicitadaPorId, asunto: `Se rechazó tu reserva de ${reserva.amenity.nombre}`,
+      cuerpo: dto.motivoRechazo, origen: `reserva:${reserva.id}` })]);
 
     return rechazada;
   }
@@ -638,16 +609,8 @@ export class ReservasService {
 
     const cancelada = await this.reservas.actualizarReserva(reserva, {
       estado: EstadoReserva.CANCELADA,
-    });
-
-    if (usuario.id !== reserva.solicitadaPorId) {
-      await this.avisar(
-        reserva.solicitadaPorId,
-        `Se canceló tu reserva de ${reserva.amenity.nombre}`,
-        'El administrador canceló la reserva.',
-        `reserva:${reserva.id}`,
-      );
-    }
+    }, usuario.id !== reserva.solicitadaPorId ? [crearAviso({ destinatarioId: reserva.solicitadaPorId,
+      asunto: `Se canceló tu reserva de ${reserva.amenity.nombre}`, cuerpo: 'El administrador canceló la reserva.', origen: `reserva:${reserva.id}` })] : []);
 
     return cancelada;
   }
@@ -816,16 +779,5 @@ export class ReservasService {
   }
 
   /** Avisar nunca corta la operación: la reserva ya quedó guardada igual. */
-  private async avisar(
-    destinatarioId: string,
-    asunto: string,
-    cuerpo: string,
-    origen: string,
-  ): Promise<void> {
-    try {
-      await this.notificador.enviar({ destinatarioId, asunto, cuerpo, origen });
-    } catch (error) {
-      this.logger.warn(`No se pudo avisar a ${destinatarioId}: ${String(error)}`);
-    }
-  }
+
 }

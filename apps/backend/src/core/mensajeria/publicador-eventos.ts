@@ -4,8 +4,8 @@ import { RabbitClient } from './rabbit.client';
 
 /**
  * Lo único que ven los services: publicar un evento sin saber quién lo
- * escucha. No espera la confirmación del broker ni lanza nunca — avisar no
- * puede cortar ni demorar la operación que lo originó.
+ * escucha. Espera la persistencia del pendiente; no la disponibilidad del
+ * broker. Un error de base se propaga y no se oculta como publicación exitosa.
  */
 @Injectable()
 export class PublicadorEventos {
@@ -13,27 +13,19 @@ export class PublicadorEventos {
 
   constructor(private readonly rabbit: RabbitClient) {}
 
-  publicar<T extends TipoEvento>(
+  async publicar<T extends TipoEvento>(
     tipo: T,
     consorcioId: string | null,
     payload: PayloadsEventos[T],
-  ): void {
+  ): Promise<void> {
     const sobre = crearSobre(tipo, consorcioId, payload);
     if (!validarSobre(sobre)) {
-      this.logger.error(`Evento ${tipo} incompleto, no se publica: ${JSON.stringify(payload)}`);
-      return;
+      throw new Error(`Evento ${tipo} incompleto`);
     }
     if (!this.rabbit.configurado) {
-      this.logger.log(`[evento sin publicar] ${tipo} ${JSON.stringify(payload)}`);
-      return;
+      this.logger.log(`Evento ${tipo} pendiente de configurar RabbitMQ`);
     }
 
-    this.rabbit
-      .publicar(tipo, Buffer.from(JSON.stringify(sobre)), sobre.evento_id)
-      .catch((error: unknown) =>
-        this.logger.error(
-          `No se pudo publicar ${tipo} ${sobre.evento_id}: ${error instanceof Error ? error.message : error}`,
-        ),
-      );
+    await this.rabbit.publicar(tipo, Buffer.from(JSON.stringify(sobre)), sobre.evento_id);
   }
 }

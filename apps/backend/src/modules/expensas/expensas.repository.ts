@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { EventoDomus } from '../../core/mensajeria/eventos';
+import { registrarEventos } from '../../core/mensajeria/outbox.repository';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, DataSource, Repository, SelectQueryBuilder } from 'typeorm';
 import {
@@ -381,6 +383,8 @@ export class ExpensasRepository {
     liquidacionId: string,
     calculadas: BoletaCalculada[],
     estado: EstadoLiquidacion,
+    eventos: EventoDomus[] = [],
+    datos: Partial<Liquidacion> = {},
   ): Promise<void> {
     await this.dataSource.transaction(async (m) => {
       // El detalle se va en cascada.
@@ -395,7 +399,8 @@ export class ExpensasRepository {
       );
       await m.save(detalles, { chunk: 500 });
 
-      await m.update(Liquidacion, { id: liquidacionId }, { estado });
+      await m.update(Liquidacion, { id: liquidacionId }, { ...datos, estado });
+      await registrarEventos(m, eventos);
     });
   }
 
@@ -410,12 +415,38 @@ export class ExpensasRepository {
     const qb = this.boletasDelAlcance(alcance)
       .innerJoinAndSelect('b.liquidacion', 'l')
       .innerJoinAndSelect('b.unidad', 'u')
+      // La grilla se convierte a FilaCobranza: no necesita hidratar todas las
+      // fechas, parámetros y datos de cálculo de cada liquidación repetida.
+      .select('b.id', 'id').addSelect('b.unidadId', 'unidadId')
+      .addSelect('b.liquidacionId', 'liquidacionId')
+      .addSelect('b.coeficienteAplicado', 'coeficienteAplicado')
+      .addSelect('b.total', 'total').addSelect('b.estado', 'estado')
+      .addSelect('b.interesesMora', 'interesesMora')
+      .addSelect('l.periodo::text', 'periodo')
+      .addSelect('l.fecha_vencimiento::text', 'fechaVencimiento')
+      .addSelect('u.etiqueta', 'etiqueta').addSelect('u.coeficiente', 'coeficiente')
+      .addSelect('count(*) OVER ()', 'totalFilas')
       .orderBy('l.periodo', 'DESC')
       .addOrderBy('u.etiqueta', 'ASC')
-      .skip((pagina.pagina - 1) * pagina.limite)
-      .take(pagina.limite);
+      // Estos joins son muchos-a-uno: no multiplican boletas. LIMIT/OFFSET
+      // evita la consulta DISTINCT adicional que TypeORM usa con skip/take.
+      .offset((pagina.pagina - 1) * pagina.limite)
+      .limit(pagina.limite);
 
-    const [items, total] = await qb.getManyAndCount();
+    // La grilla no necesita entidades completas. Una consulta con ventana
+    // conserva el total exacto y evita hidratar tres entidades por cada fila.
+    const filas = await qb.getRawMany<{
+      id: string; unidadId: string; liquidacionId: string; coeficienteAplicado: string;
+      total: string; estado: EstadoBoleta; interesesMora: string; periodo: string;
+      fechaVencimiento: string; etiqueta: string; coeficiente: string; totalFilas: string;
+    }>();
+    const total = filas.length ? Number(filas[0].totalFilas) : await qb.getCount();
+    const items = filas.map((f) => ({ id: f.id, unidadId: f.unidadId, liquidacionId: f.liquidacionId,
+      coeficienteAplicado: Number(f.coeficienteAplicado), total: Number(f.total), estado: f.estado,
+      interesesMora: Number(f.interesesMora),
+      liquidacion: { id: f.liquidacionId, periodo: f.periodo, fechaVencimiento: f.fechaVencimiento },
+      unidad: { id: f.unidadId, etiqueta: f.etiqueta, coeficiente: Number(f.coeficiente) },
+    } as Boleta));
     return { items, total };
   }
 
@@ -612,11 +643,15 @@ export class ExpensasRepository {
    * (mismo `created_at`), así que el orden se arma por tipo y concepto.
    */
   async findBoleta(id: string): Promise<Boleta | null> {
-    const boleta = await this.boletas.findOne({
-      where: { id },
-      // El rubro de cada línea es lo que permite agrupar "Gastos por rubro".
-      relations: { liquidacion: true, unidad: true, boletaDetalles: { gasto: { rubro: true } } },
-    });
+    // PK única: una consulta puede traer todas las líneas, sin el SELECT de
+    // IDs previo que findOne genera al combinar relaciones y take(1).
+    const boleta = await this.boletas.createQueryBuilder('b')
+      .leftJoinAndSelect('b.liquidacion', 'l')
+      .leftJoinAndSelect('b.unidad', 'u')
+      .leftJoinAndSelect('b.boletaDetalles', 'd')
+      .leftJoinAndSelect('d.gasto', 'g')
+      .leftJoinAndSelect('g.rubro', 'r')
+      .where('b.id = :id', { id }).getOne();
     boleta?.boletaDetalles?.sort(
       (a, b) =>
         Number(a.gastoId === null) - Number(b.gastoId === null) ||

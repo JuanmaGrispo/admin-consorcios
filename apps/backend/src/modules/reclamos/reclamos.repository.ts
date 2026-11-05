@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { EventoDomus } from '../../core/mensajeria/eventos';
+import { registrarEventos } from '../../core/mensajeria/outbox.repository';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Brackets,
   DataSource,
-  EntityManager,
   In,
   IsNull,
   Not,
@@ -21,13 +22,8 @@ import {
 } from '../../database/entities';
 import { ListarReclamosQuery } from './dto/listar-reclamos.query';
 
-/** Relaciones que la bandeja y el detalle necesitan siempre. */
-const RELACIONES = {
-  categoria: true,
-  unidad: true,
-  proveedor: true,
-  creadoPor: true,
-} as const;
+/** Relaciones de los listados relacionados. */
+const RELACIONES = { categoria: true, unidad: true, proveedor: true, creadoPor: true } as const;
 
 /** Qué reclamos puede ver alguien: los de sus unidades (vecino) o de sus consorcios (administrador). */
 export interface AlcanceReclamos {
@@ -85,14 +81,18 @@ export class ReclamosRepository {
   }
 
   findUnidad(id: string): Promise<Unidad | null> {
-    return this.unidades.findOne({ where: { id }, relations: { consorcio: true } });
+    return this.unidades.createQueryBuilder('u').leftJoinAndSelect('u.consorcio', 'c')
+      .where('u.id = :id', { id }).getOne();
   }
 
-  findById(id: string): Promise<Reclamo | null> {
-    return this.reclamos.findOne({
-      where: { id },
-      relations: { ...RELACIONES, reclamoAdjuntos: true },
-    });
+  findById(id: string, repo = this.reclamos): Promise<Reclamo | null> {
+    return repo.createQueryBuilder('r')
+      .leftJoinAndSelect('r.categoria', 'categoria')
+      .leftJoinAndSelect('r.unidad', 'unidad')
+      .leftJoinAndSelect('r.proveedor', 'proveedor')
+      .leftJoinAndSelect('r.creadoPor', 'autor')
+      .leftJoinAndSelect('r.reclamoAdjuntos', 'adjunto')
+      .where('r.id = :id', { id }).getOne();
   }
 
   /**
@@ -236,15 +236,26 @@ export class ReclamosRepository {
     descripcion: string;
     prioridad: Reclamo['prioridad'];
     adjuntos: { url: string; nombre?: string }[];
-  }): Promise<Reclamo> {
+  }, idempotencia?: { usuarioId: string; clave: string; huella: string }, eventos: (creado: Reclamo) => EventoDomus[] = () => []): Promise<Reclamo> {
     const INTENTOS = 5;
 
     for (let intento = 1; intento <= INTENTOS; intento++) {
       try {
-        const id = await this.dataSource.transaction(async (m) => {
-          const reclamo = await m.getRepository(Reclamo).save(
-            m.getRepository(Reclamo).create({
-              codigo: await this.siguienteCodigo(m),
+        return await this.dataSource.transaction(async (m) => {
+          if (idempotencia) {
+            await m.query(`SET LOCAL lock_timeout = '3s'`);
+            await m.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`reclamos:${idempotencia.usuarioId}:${idempotencia.clave}`]);
+            const [previa] = await m.query(`SELECT huella,respuesta FROM solicitud_idempotente
+              WHERE usuario_id=$1 AND metodo='POST' AND ruta='/reclamos' AND clave=$2`, [idempotencia.usuarioId, idempotencia.clave]);
+            if (previa) {
+              if (previa.huella !== idempotencia.huella) throw new ConflictException('La clave ya fue utilizada con otro contenido');
+              return previa.respuesta;
+            }
+          }
+          const insercion = await m.getRepository(Reclamo).insert({
+              codigo: () => `('RC-' || extract(year FROM CURRENT_DATE)::text || '-' ||
+                (SELECT repeat('0', greatest(0, 4-length(n))) || n
+                 FROM (SELECT nextval('reclamo_numero')::text AS n) numeracion))`,
               consorcioId: datos.consorcioId,
               unidadId: datos.unidadId,
               creadoPorId: datos.creadoPorId,
@@ -253,8 +264,8 @@ export class ReclamosRepository {
               descripcion: datos.descripcion,
               prioridad: datos.prioridad,
               estado: EstadoReclamo.NUEVO,
-            }),
-          );
+          });
+          const reclamo = { id: insercion.identifiers[0].id as string };
 
           if (datos.adjuntos.length) {
             await m.getRepository(ReclamoAdjunto).save(
@@ -269,23 +280,26 @@ export class ReclamosRepository {
             );
           }
 
-          await m.getRepository(ReclamoEvento).save(
-            m.getRepository(ReclamoEvento).create({
+          await m.getRepository(ReclamoEvento).insert({
               reclamoId: reclamo.id,
               autorId: datos.creadoPorId,
               tipo: TipoEventoReclamo.CREACION,
               estadoNuevo: EstadoReclamo.NUEVO,
               visibleParaVecino: true,
-            }),
-          );
+          });
 
-          return reclamo.id;
+          const completo = await this.findById(reclamo.id, m.getRepository(Reclamo));
+          if (!completo) throw new Error('No se encontró el reclamo recién creado');
+          await registrarEventos(m, eventos(completo));
+          const respuesta = JSON.parse(JSON.stringify(completo));
+          if (idempotencia) await m.query(`INSERT INTO solicitud_idempotente(usuario_id,metodo,ruta,clave,huella,estado_http,respuesta)
+            VALUES ($1,'POST','/reclamos',$2,$3,201,$4)`, [idempotencia.usuarioId, idempotencia.clave, idempotencia.huella, respuesta]);
+          return respuesta;
         });
-
-        return (await this.findById(id))!;
       } catch (error) {
         // 23505 = unique_violation. Otro reclamo ganó el número: se reintenta.
         const codigoPg = (error as { code?: string }).code;
+        if (codigoPg === '55P03') throw new ServiceUnavailableException({ message: 'La solicitud está en curso. Reintentá con la misma clave en unos segundos.', retryAfter: 3 });
         if (codigoPg !== '23505' || intento === INTENTOS) throw error;
       }
     }
@@ -294,41 +308,29 @@ export class ReclamosRepository {
     throw new Error('No se pudo generar un código de reclamo');
   }
 
-  /** `RC-<año>-<secuencia de 4>`, el formato que usa el prototipo. */
-  private async siguienteCodigo(m: EntityManager): Promise<string> {
-    const anio = new Date().getFullYear();
-    const prefijo = `RC-${anio}-`;
-
-    const ultimo = await m
-      .getRepository(Reclamo)
-      .createQueryBuilder('r')
-      .select('r.codigo', 'codigo')
-      .where('r.codigo LIKE :prefijo', { prefijo: `${prefijo}%` })
-      .orderBy('r.codigo', 'DESC')
-      .limit(1)
-      .getRawOne<{ codigo: string }>();
-
-    const numero = ultimo ? Number(ultimo.codigo.slice(prefijo.length)) + 1 : 1;
-    return `${prefijo}${String(numero).padStart(4, '0')}`;
-  }
-
   /** Guarda el cambio del reclamo y su evento juntos, o no guarda ninguno. */
   async actualizarConEvento(
     reclamo: Reclamo,
     evento: Partial<ReclamoEvento>,
+    eventos: EventoDomus[] = [],
   ): Promise<Reclamo> {
     await this.dataSource.transaction(async (m) => {
       await m.getRepository(Reclamo).save(reclamo);
       await m
         .getRepository(ReclamoEvento)
         .save(m.getRepository(ReclamoEvento).create(evento));
+      await registrarEventos(m, eventos);
     });
     return (await this.findById(reclamo.id))!;
   }
 
   /** Sólo agrega a la timeline, sin tocar el reclamo. */
-  async agregarEvento(evento: Partial<ReclamoEvento>): Promise<ReclamoEvento> {
-    return this.eventos.save(this.eventos.create(evento));
+  async agregarEvento(evento: Partial<ReclamoEvento>, eventos: EventoDomus[] = []): Promise<ReclamoEvento> {
+    return this.dataSource.transaction(async (m) => {
+      const registro = await m.save(m.create(ReclamoEvento, evento));
+      await registrarEventos(m, eventos);
+      return registro;
+    });
   }
 
   /** Reclamos abiertos de una unidad, para no duplicar el mismo caso. */

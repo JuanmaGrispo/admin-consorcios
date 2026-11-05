@@ -35,7 +35,7 @@ export class AuthRepository {
   }
 
   findById(id: string): Promise<Usuario | null> {
-    return this.usuarios.findOneBy({ id });
+    return this.usuarios.findOne({ where: { id }, select: { id: true, nombre: true, apellido: true, email: true, rol: true, activo: true } });
   }
 
   async consorciosAdministrados(usuarioId: string): Promise<string[]> {

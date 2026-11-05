@@ -1,13 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { MaxDecimales } from '../../../core/max-decimales';
 
 export class AjustarBoletaDto {
   @ApiProperty({
     example: -1500,
     description: 'Positivo suma, negativo descuenta. 0 quita el ajuste.',
   })
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber()
+  @MaxDecimales(2)
   @Min(-999_999_999_999.99)
   @Max(999_999_999_999.99)
   ajusteManual: number;

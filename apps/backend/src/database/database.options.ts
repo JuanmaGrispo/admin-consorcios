@@ -5,7 +5,7 @@ type EnvReader = (key: string) => string | undefined;
 /** La parte de "a qué base me conecto" — sin entidades ni migraciones. */
 type ConnectionOptions = Pick<
   Extract<DataSourceOptions, { type: 'postgres' }>,
-  'type' | 'url' | 'host' | 'port' | 'username' | 'password' | 'database' | 'ssl'
+  'type' | 'url' | 'host' | 'port' | 'username' | 'password' | 'database' | 'ssl' | 'extra'
 >;
 
 /**
@@ -18,6 +18,10 @@ type ConnectionOptions = Pick<
  *
  * SSL: Supabase lo exige. Si no se define `DB_SSL`, se asume que una conexión
  * por connection string es remota (SSL on) y una por `DB_*` es local (SSL off).
+ *
+ * Pool: sin `DB_POOL_MAX` queda el default del driver (10 conexiones), lo
+ * prudente contra el pooler gratuito de Supabase y lo que mejor midió en la
+ * prueba de carga.
  */
 export function buildConnectionOptions(env: EnvReader): ConnectionOptions {
   const url = env('DATABASE_URL');
@@ -27,9 +31,11 @@ export function buildConnectionOptions(env: EnvReader): ConnectionOptions {
   const ssl = (sslFlag ? sslFlag === 'true' : Boolean(url))
     ? { rejectUnauthorized: false }
     : false;
+  const max = Number(env('DB_POOL_MAX'));
+  const pool = Number.isInteger(max) && max > 0 ? { extra: { max } } : {};
 
   if (url) {
-    return { type: 'postgres', url, ssl };
+    return { type: 'postgres', url, ssl, ...pool };
   }
 
   return {
@@ -40,5 +46,6 @@ export function buildConnectionOptions(env: EnvReader): ConnectionOptions {
     password: env('DB_PASSWORD') ?? 'postgres',
     database: env('DB_NAME') ?? 'admin_consorcios',
     ssl,
+    ...pool,
   };
 }

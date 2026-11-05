@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PublicadorEventos } from '../mensajeria/publicador-eventos';
+import { crearSobre } from '../mensajeria/eventos';
+
+export const crearAviso = (aviso: Aviso) => crearSobre('aviso.directo', null, {
+  destinatario_id: aviso.destinatarioId, asunto: aviso.asunto, cuerpo: aviso.cuerpo, origen: aviso.origen,
+});
 
 /** Un aviso a una persona, sin decir por qué canal sale. */
 export interface Aviso {
@@ -17,15 +22,14 @@ export interface Aviso {
  * manda fuera del request, con reintentos. Los módulos de negocio siguen
  * dependiendo de `Notificador`, no del broker.
  *
- * Notificar nunca bloquea la operación principal: publicar no espera al broker
- * ni lanza.
+ * Espera el almacenamiento durable del evento, sin esperar al broker.
  */
 @Injectable()
 export class Notificador {
   constructor(private readonly eventos: PublicadorEventos) {}
 
   async enviar(aviso: Aviso): Promise<void> {
-    this.eventos.publicar('aviso.directo', null, {
+    await this.eventos.publicar('aviso.directo', null, {
       destinatario_id: aviso.destinatarioId,
       asunto: aviso.asunto,
       cuerpo: aviso.cuerpo,

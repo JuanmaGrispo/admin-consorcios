@@ -17,13 +17,14 @@ import { useUnidadActiva } from '@/components/vecino/unidad-activa';
 import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { categoriasReclamoService } from '@/services/categorias-reclamo';
-import { reclamosService } from '@/services/reclamos';
+import { useIntentoReclamo } from '@/hooks/use-intento-reclamo';
 
 /** El backend pide al menos 10 caracteres: "no anda" no le alcanza a nadie para actuar. */
 const MINIMO_DESCRIPCION = 10;
 
 /** Pantalla 13b del prototipo: categoría, descripción y hasta 5 fotos. */
 export default function VecinoReclamosNuevoPage() {
+  const intento = useIntentoReclamo();
   const router = useRouter();
   const { unidad, consorcio } = useUnidadActiva();
   const categorias = usePedido(
@@ -59,7 +60,7 @@ export default function VecinoReclamosNuevoPage() {
 
     setEnviando(true);
     try {
-      const creado = await reclamosService.crear({
+      const creado = await intento.crear({
         categoriaId,
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),

@@ -1,34 +1,17 @@
 import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import type { NextConfig } from 'next';
 
-const produccion = process.env.NODE_ENV === 'production';
-
-// El navegador habla con el backend: hay que permitirle conectarse a su origen.
-const apiOrigen = (() => {
-  try {
-    return new URL(process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api').origin;
-  } catch {
-    return '';
-  }
-})();
-
-// Next inyecta scripts en línea para hidratar, así que sin nonces la CSP tiene
-// que admitir 'unsafe-inline'. Aun así corta lo importante: scripts, frames y
-// formularios de otros orígenes. En desarrollo hace falta 'unsafe-eval' (HMR).
-const csp = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${produccion ? '' : " 'unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  `connect-src 'self' ${apiOrigen}${produccion ? '' : ' ws: wss:'}`.trim(),
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join('; ');
+// Sonner 2 inyecta una hoja fija al cargar su módulo. Su hash permite esa hoja
+// concreta; no habilita cualquier <style>. Se recalcula al cambiar la librería.
+const sonnerSource = readFileSync(path.join(__dirname, 'node_modules/sonner/dist/index.mjs'), 'utf8');
+const cssLiteral = sonnerSource.match(/__insertCSS\(("(?:[^"\\]|\\.)*")\)/)?.[1];
+if (!cssLiteral) throw new Error('Revisar la integración CSP: cambió la inyección CSS de Sonner');
+const sonnerHash = 'sha256-' + createHash('sha256').update(JSON.parse(cssLiteral)).digest('base64');
 
 const nextConfig: NextConfig = {
+  env: { SONNER_STYLE_HASH: sonnerHash },
   // Build autocontenido (.next/standalone) para la imagen de Docker. No cambia
   // nada en `pnpm dev`. La raíz del monorepo hace falta para que el tracing
   // encuentre las dependencias que pnpm deja en node_modules de la raíz.
@@ -42,7 +25,6 @@ const nextConfig: NextConfig = {
         source: '/:path*',
         headers: [
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-          { key: 'Content-Security-Policy', value: csp },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

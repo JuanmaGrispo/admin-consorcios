@@ -46,7 +46,7 @@ describe('FiltroExcepciones', () => {
 
   it('un error no controlado es 500 genérico con id y sin detalle', () => {
     let cuerpo: Record<string, unknown> = {};
-    const res = { status: () => ({ json: (c: Record<string, unknown>) => (cuerpo = c) }) };
+    const res = { setHeader: () => undefined, status: () => ({ json: (c: Record<string, unknown>) => (cuerpo = c) }) };
     const req = { method: 'GET', originalUrl: '/x', ip: '1.1.1.1' };
     new FiltroExcepciones().catch(new Error('select * from secreto'), {
       switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
@@ -56,9 +56,40 @@ describe('FiltroExcepciones', () => {
     assert.doesNotMatch(JSON.stringify(cuerpo), /secreto/);
   });
 
+  // DEF-17: con multer 2.5, "Unexpected file field" llegaba sin traducir y era 500.
+  describe('errores de multer', () => {
+    const multer = createRequire(require.resolve('@nestjs/platform-express'))('multer') as {
+      MulterError: new (code: string, field?: string) => Error;
+    };
+    const responder = (error: Error) => {
+      let status = 0;
+      let cuerpo: Record<string, unknown> = {};
+      const res = { setHeader: () => undefined, status: (s: number) => { status = s; return { json: (c: Record<string, unknown>) => (cuerpo = c) }; } };
+      const req = { method: 'POST', originalUrl: '/archivos', ip: '1.1.1.1', path: '/archivos' };
+      new FiltroExcepciones().catch(error, { switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }) } as never);
+      return { status, cuerpo };
+    };
+
+    it('un campo de archivo inesperado es 400', () => {
+      const { status, cuerpo } = responder(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'archivo'));
+      assert.equal(status, 400);
+      assert.match(String(cuerpo.detail), /archivo/);
+    });
+
+    it('los códigos nuevos de multer 2.5 también son 400', () => {
+      for (const codigo of ['LIMIT_FIELD_ARRAY_INDEX', 'STREAM_DESTROYED', 'INVALID_FIELD_NAME']) {
+        assert.equal(responder(new multer.MulterError(codigo)).status, 400, codigo);
+      }
+    });
+
+    it('un archivo más grande que el tope es 413', () => {
+      assert.equal(responder(new multer.MulterError('LIMIT_FILE_SIZE', 'archivo')).status, 413);
+    });
+  });
+
   it('un 403 conserva su respuesta', () => {
     let status = 0;
-    const res = { status: (s: number) => { status = s; return { json: () => undefined }; } };
+    const res = { setHeader: () => undefined, status: (s: number) => { status = s; return { json: () => undefined }; } };
     const req = { method: 'GET', originalUrl: '/x', ip: '1.1.1.1', path: '/x' };
     new FiltroExcepciones().catch(new ForbiddenException('no'), {
       switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),

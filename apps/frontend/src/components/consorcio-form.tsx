@@ -96,6 +96,8 @@ export function ConsorcioForm({ inicial, textoBoton, onSubmit }: Props) {
       .catch(() => setError('No se pudo cargar la lista de administradores.'));
   }, []);
 
+  const adminElegido = admins.find((a) => a.id === campos.administradorId);
+
   function set<K extends keyof Campos>(campo: K, valor: Campos[K]) {
     setCampos((prev) => ({ ...prev, [campo]: valor }));
   }
@@ -197,10 +199,18 @@ export function ConsorcioForm({ inicial, textoBoton, onSubmit }: Props) {
               <FieldLabel htmlFor="administrador">Administrador asignado</FieldLabel>
               <Select
                 value={campos.administradorId}
-                onValueChange={(v) => set('administradorId', v)}
+                // Radix manda '' cuando el valor elegido no está entre las opciones montadas (el
+                // administrador recién creado con "Crear y asignar"): sin este filtro se borraba
+                // la asignación y el alta fallaba con "Asigná un administrador".
+                onValueChange={(v) => {
+                  if (v) set('administradorId', v);
+                }}
               >
                 <SelectTrigger id="administrador" className="w-full">
-                  <SelectValue placeholder="Elegir…" />
+                  <SelectValue placeholder="Elegir…">
+                    {adminElegido &&
+                      `${adminElegido.apellido}, ${adminElegido.nombre} · ${adminElegido.email}`}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {admins.map((a) => (

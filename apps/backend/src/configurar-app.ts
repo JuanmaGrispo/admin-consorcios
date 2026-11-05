@@ -64,6 +64,7 @@ export function configurarApp(app: NestExpressApplication): void {
   app.enableShutdownHooks();
 
   app.enableCors({
+    exposedHeaders: ['ETag', 'Retry-After'],
     origin: (config.get<string>('CORS_ORIGINS') || 'http://localhost:3000')
       .split(',')
       .map((o) => o.trim())

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { llamarProveedor } from '../../core/http/proveedor-rest';
 
 const API = 'https://api.mercadopago.com';
 
@@ -126,20 +127,22 @@ export class MercadoPagoClient {
   }
 
   private async llamar<T>(metodo: 'GET' | 'POST', ruta: string, cuerpo?: unknown): Promise<T> {
-    const respuesta = await fetch(`${API}${ruta}`, {
+    return llamarProveedor(async (signal) => {
+    const respuesta = await fetch(`${this.opcional('MP_API_URL') ?? API}${ruta}`, {
       method: metodo,
       headers: {
         Authorization: `Bearer ${this.exigir('MP_ACCESS_TOKEN')}`,
         'Content-Type': 'application/json',
       },
       body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
-      signal: AbortSignal.timeout(10_000),
+      signal,
     });
     if (!respuesta.ok) {
-      this.logger.error(`${metodo} ${ruta} → ${respuesta.status}: ${await respuesta.text()}`);
-      throw new BadGatewayException('Mercado Pago no respondió bien. Probá de nuevo en un rato.');
+      this.logger.error(`${metodo} ${ruta} → ${respuesta.status}`);
+      throw new BadGatewayException({ message: 'Mercado Pago no respondió bien. Probá de nuevo en un rato.', proveedorStatus: respuesta.status });
     }
     return (await respuesta.json()) as T;
+    });
   }
 
   /** Una variable vacía en el .env cuenta como no configurada: `get` devolvería `""`. */

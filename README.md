@@ -16,15 +16,61 @@ y [diseño de mensajería](docs/mensajeria.md).
 
 ## Cómo levantar el proyecto
 
-Hay dos formas: con **Docker** (un solo comando, no hace falta instalar Node)
-o con **pnpm** (para desarrollar, con recarga en caliente). Las dos usan la
-misma base de Supabase.
+### Rápido: todo el sistema con un comando
 
-### 1. Clonar y configurar (una sola vez)
+Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) abierto. No hace falta Node, ni un `.env`, ni cuentas de terceros.
 
 ```bash
 git clone https://github.com/JuanmaGrispo/admin-consorcios.git
 cd admin-consorcios
+docker compose up --build
+```
+
+La primera vez tarda unos minutos en construir las imágenes. Levanta, todo en contenedores:
+
+| Servicio | Qué es | Dirección |
+|---|---|---|
+| `frontend` | Next.js | http://localhost:3000 |
+| `backend` | NestJS (Swagger en `/docs`) | http://localhost:4000/api |
+| `postgres` | PostgreSQL 17 con el esquema, las migraciones y los datos de demo | interno |
+| `rabbitmq` | Broker de mensajería | panel en http://localhost:15672 (`domus` / `domus`) |
+| `simuladores` | Mercado Pago, Storage y SMTP simulados | mails enviados en http://localhost:4010/correos |
+| `inicializador` | Prepara la base y los secretos locales, y termina | — |
+
+**Entrar.** La contraseña de las cuentas de demo se genera al azar la primera vez (no está en el repo). Se ve con:
+
+```bash
+docker compose logs inicializador
+```
+
+| Cuenta | Rol |
+|---|---|
+| `super@domus.test` | Superadministrador |
+| `admin@domus.test` | Administrador |
+| `vecino@domus.test` | Vecino |
+
+**Pagar una boleta.** "Pagar ahora" abre el checkout simulado de Mercado Pago, con un botón para aprobar y otro para simular una tarjeta rechazada. Al volver, la boleta queda pagada o rechazada. No se cobra nada.
+
+| Para… | Comando |
+|---|---|
+| Frenarlo | `Ctrl+C` |
+| Dejarlo corriendo de fondo | `docker compose up -d --build` |
+| Ver los logs | `docker compose logs -f backend` |
+| Apagar y prender el broker (prueba de resiliencia) | `docker compose stop rabbitmq` / `docker compose start rabbitmq` |
+| Bajarlo | `docker compose down` |
+| Empezar de cero (borra base, archivos y secretos) | `docker compose down -v` |
+
+Detalles:
+
+- El backend corre con `NODE_ENV=development` (Swagger prendido, cookie sin `Secure`). Para probarlo como en producción: `NODE_ENV=production docker compose up --build`.
+- Las migraciones nuevas se aplican solas en cada arranque. El seed sólo corre con la base vacía.
+- Después de un `git pull` o de tocar código, volver a correr con `--build`.
+
+### Contra la base compartida de Supabase (grupo)
+
+Para trabajar con Supabase, CloudAMQP, Mailtrap y Mercado Pago de prueba, como antes, primero hay que armar el `.env`:
+
+```bash
 cp apps/backend/.env.example apps/backend/.env
 ```
 
@@ -37,47 +83,15 @@ En `apps/backend/.env` hay que completar dos variables, el resto es opcional:
 | `SEED_PASSWORD` | Para el seed | La password de las cuentas de demo: pedírsela al grupo |
 | `RABBITMQ_URL`, `SMTP_*`, `MP_*`, `SUPABASE_*` | No | Sin ellas, mails, pagos online y archivos quedan apagados y el resto anda igual |
 
-El `.env` está en el `.gitignore`: nunca se commitea.
-
-### 2a. Con Docker (recomendado)
-
-Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) abierto.
+El `.env` está en el `.gitignore`: nunca se commitea. Con Docker:
 
 ```bash
-docker compose up --build      # o: pnpm docker
+docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
 ```
 
-La primera vez tarda unos minutos en construir las imágenes. Cuando termina:
+Las migraciones contra Supabase **no** corren solas (la base es compartida): se corren a mano con `pnpm back migration:run`.
 
-- Frontend → http://localhost:3000
-- Backend → http://localhost:4000/api (Swagger en http://localhost:4000/docs)
-
-| Para… | Comando |
-|---|---|
-| Frenarlo | `Ctrl+C` |
-| Dejarlo corriendo de fondo | `docker compose up -d --build` |
-| Ver los logs | `docker compose logs -f backend` |
-| Bajarlo | `docker compose down` |
-
-Después de un `git pull` o de tocar código, volver a correr con `--build`: la
-imagen no se actualiza sola. Sin cambios alcanza con `docker compose up`.
-
-Detalles:
-
-- El backend lee `apps/backend/.env` al arrancar: los secretos **no** quedan
-  dentro de la imagen. `apps/frontend/.env` no se usa.
-- `NEXT_PUBLIC_API_URL` queda fija en el build del front (la usa el
-  navegador). Por defecto es `http://localhost:4000/api`; para cambiarla:
-  `NEXT_PUBLIC_API_URL=https://... docker compose up --build`.
-- El backend corre con `NODE_ENV=development` (Swagger prendido, cookie sin
-  `Secure`). Para probarlo como en producción:
-  `NODE_ENV=production docker compose up --build`.
-- RabbitMQ local es opcional: `docker compose --profile rabbitmq up --build`
-  y en el `.env` `RABBITMQ_URL=amqp://domus:domus@rabbitmq:5672`.
-- Las migraciones **no** corren solas (la base es compartida): se corren a
-  mano con `pnpm back migration:run`.
-
-### 2b. Con pnpm (desarrollo)
+### Con pnpm (desarrollo, contra Supabase)
 
 Requisitos: Node >= 22 y pnpm 9 (`corepack enable` lo activa).
 
@@ -92,11 +106,12 @@ pnpm dev             # backend (:4000) y frontend (:3000) juntos, con recarga
 Atajos: `pnpm back <script>` y `pnpm front <script>` corren scripts de cada app
 (ej: `pnpm back dev`, `pnpm front build`).
 
-### 3. Entrar
+### Entrar
 
 Abrir http://localhost:3000 y loguearse con una de las
 [cuentas de demo](#datos-de-demo) (`admin@domus.test` como administrador,
-`vecino@domus.test` como vecino) y la password de `SEED_PASSWORD`. Para crear
+`vecino@domus.test` como vecino). Con el compose local, la password sale de
+`docker compose logs inicializador`; contra Supabase, es la de `SEED_PASSWORD`. Para crear
 un usuario propio: `pnpm back usuario:crear` (ver
 [Crear el primer usuario](#crear-el-primer-usuario)).
 

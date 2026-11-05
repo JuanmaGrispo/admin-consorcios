@@ -79,6 +79,9 @@ export class Consorcio {
   @Column({ type: 'timestamptz', name: 'updated_at', default: () => 'now()' })
   updatedAt: Date;
 
+  @Column({ type: 'int', name: 'version', default: 1 })
+  version: number;
+
   @OneToMany(() => Amenity, (row) => row.consorcio)
   amenityes?: Amenity[];
 

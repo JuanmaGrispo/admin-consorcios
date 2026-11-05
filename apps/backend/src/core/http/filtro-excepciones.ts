@@ -9,11 +9,39 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
+import { STATUS_CODES } from 'node:http';
+
+function responderProblema(res: Response, req: Request, status: number, message: unknown, id = randomUUID()): void {
+  const title = STATUS_CODES[status] ?? 'Error';
+  res.setHeader('Content-Type', 'application/problem+json');
+  res.status(status).json({
+    type: 'about:blank', title, status, instance: req.originalUrl,
+    detail: Array.isArray(message) ? message.join('; ') : String(message),
+    // Compatibilidad con el cliente web actual durante la transición.
+    statusCode: status, message, id,
+  });
+}
 
 /** Sin saltos de línea ni caracteres de control: un dato del cliente no puede falsificar una línea del log. */
 export const limpiarParaLog = (valor: unknown): string =>
   // eslint-disable-next-line no-control-regex
   String(valor ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 200);
+
+interface ErrorDeMulter extends Error {
+  code?: string;
+  field?: string;
+}
+
+/**
+ * Un error de multer es culpa del pedido (multipart mal armado), no del
+ * servidor. @nestjs/platform-express lo traduce comparando el texto del
+ * mensaje, y multer 2.5 cambió algunos ("Unexpected field" pasó a "Unexpected
+ * file field"), así que esos llegaban acá como 500 (DEF-17). Se decide por
+ * `code`, como pide multer.
+ */
+function esErrorDeMulter(excepcion: unknown): excepcion is ErrorDeMulter {
+  return excepcion instanceof Error && excepcion.name === 'MulterError';
+}
 
 interface CapaExpress {
   route?: { methods?: Record<string, boolean> };
@@ -59,11 +87,7 @@ export class FiltroExcepciones implements ExceptionFilter {
         const permitidos = metodosDeRuta(req);
         if (permitidos.length && !permitidos.includes(req.method)) {
           res.setHeader('Allow', permitidos.join(', '));
-          res.status(HttpStatus.METHOD_NOT_ALLOWED).json({
-            statusCode: HttpStatus.METHOD_NOT_ALLOWED,
-            message: `Método ${req.method} no permitido`,
-            error: 'Method Not Allowed',
-          });
+          responderProblema(res, req, HttpStatus.METHOD_NOT_ALLOWED, `Método ${req.method} no permitido`);
           return;
         }
       }
@@ -73,7 +97,20 @@ export class FiltroExcepciones implements ExceptionFilter {
           `${status} ${limpiarParaLog(req.method)} ${limpiarParaLog(req.originalUrl)} ip=${limpiarParaLog(req.ip)} usuario=${limpiarParaLog(req.user?.id ?? 'anónimo')}`,
         );
       }
-      res.status(status).json(excepcion.getResponse());
+      const respuesta = excepcion.getResponse();
+      if (typeof respuesta === 'object' && 'retryAfter' in respuesta) {
+        const espera = Number((respuesta as { retryAfter: unknown }).retryAfter);
+        if (Number.isInteger(espera) && espera > 0) res.setHeader('Retry-After', String(espera));
+      }
+      const message = typeof respuesta === 'string' ? respuesta : (respuesta as { message?: unknown }).message ?? excepcion.message;
+      responderProblema(res, req, status, message);
+      return;
+    }
+
+    if (esErrorDeMulter(excepcion)) {
+      const status = excepcion.code === 'LIMIT_FILE_SIZE' ? HttpStatus.PAYLOAD_TOO_LARGE : HttpStatus.BAD_REQUEST;
+      const campo = excepcion.field ? ` (campo ${limpiarParaLog(excepcion.field).slice(0, 40)})` : '';
+      responderProblema(res, req, status, `Multipart inválido: ${excepcion.message}${campo}`);
       return;
     }
 
@@ -82,10 +119,6 @@ export class FiltroExcepciones implements ExceptionFilter {
       `500 ${limpiarParaLog(req.method)} ${limpiarParaLog(req.originalUrl)} id=${id}`,
       excepcion instanceof Error ? excepcion.stack : String(excepcion),
     );
-    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      message: 'Error interno del servidor',
-      id,
-    });
+    responderProblema(res, req, 500, 'Error interno del servidor', id);
   }
 }

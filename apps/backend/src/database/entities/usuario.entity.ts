@@ -16,6 +16,7 @@ import { PreferenciaNotificacion } from './preferencia_notificacion.entity';
 import { Reclamo } from './reclamo.entity';
 import { ReclamoEvento } from './reclamo_evento.entity';
 import { Reserva } from './reserva.entity';
+import { SolicitudIdempotente } from './solicitud_idempotente.entity';
 import { UnidadUsuario } from './unidad_usuario.entity';
 import { Voto } from './voto.entity';
 
@@ -99,6 +100,9 @@ export class Usuario {
 
   @OneToMany(() => Reserva, (row) => row.solicitadaPor)
   reservasPorSolicitadaPor?: Reserva[];
+
+  @OneToMany(() => SolicitudIdempotente, (row) => row.usuario)
+  solicitudIdempotentes?: SolicitudIdempotente[];
 
   @OneToMany(() => UnidadUsuario, (row) => row.usuario)
   unidadUsuarios?: UnidadUsuario[];

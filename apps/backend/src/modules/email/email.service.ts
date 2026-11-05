@@ -36,20 +36,20 @@ export class EmailService {
 
     let fallidos = 0;
     for (const entrega of entregas) {
-      if (!(await this.entregar(evento, entrega))) fallidos++;
+      try {
+        if (!(await this.entregar(evento, entrega))) fallidos++;
+      } catch {
+        // Una entrega incierta no impide intentar los demás destinatarios.
+        fallidos++;
+      }
     }
     if (fallidos > 0) {
-      throw new Error(`${fallidos} de ${entregas.length} mails de ${evento.tipo_evento} fallaron`);
+      throw new Error(`${fallidos} de ${entregas.length} mails de ${evento.tipo_evento} fallaron o tienen entrega incierta`);
     }
   }
 
   private async entregar(evento: EventoDomus, { destinatario, contexto }: Entrega): Promise<boolean> {
-    const previo = await this.email.buscarEnvio(evento.evento_id, destinatario.email);
-    if (previo?.estado === EstadoEnvio.ENVIADO) return true;
-
-    const envio =
-      previo ??
-      (await this.email.crearEnvio({
+    const envio = await this.email.reservarEnvio({
         canal: CanalNotificacion.EMAIL,
         destinatario: destinatario.email,
         plantilla: evento.tipo_evento,
@@ -58,7 +58,8 @@ export class EmailService {
         intentos: 0,
         entidadTipo: 'evento',
         entidadId: evento.evento_id,
-      }));
+      });
+    if (!envio) return true;
 
     const mensaje = redactar(evento, contexto);
     try {
@@ -71,7 +72,11 @@ export class EmailService {
       });
       return true;
     } catch (error) {
-      await this.email.actualizarEnvio(envio.id, {
+      // Solo una respuesta SMTP explícita prueba que no se aceptó el correo.
+      // Un timeout, caída o fallo al guardar ENVIADO conserva la reserva y va
+      // a DLQ para conciliación, sin arriesgar un segundo efecto externo.
+      const codigo = (error as { responseCode?: number })?.responseCode;
+      if (codigo && codigo >= 400) await this.email.actualizarEnvio(envio.id, {
         estado: EstadoEnvio.FALLIDO,
         intentos: envio.intentos + 1,
         ultimoError: error instanceof Error ? error.message : String(error),

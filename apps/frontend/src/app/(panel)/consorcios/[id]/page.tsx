@@ -2,12 +2,15 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { use, useEffect, useState } from 'react';
+import { use, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { usePedido } from '@/hooks/use-pedido';
+import { ApiError } from '@/lib/api';
 import { ConsorcioForm } from '@/components/consorcio-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { consorciosService } from '@/services/consorcios';
-import type { Consorcio, ConsorcioInput } from '@/types/consorcio';
+import type { ConsorcioInput } from '@/types/consorcio';
 
 export default function EditarConsorcioPage({
   params,
@@ -16,18 +19,15 @@ export default function EditarConsorcioPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const [consorcio, setConsorcio] = useState<Consorcio | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    consorciosService
-      .get(id)
-      .then(setConsorcio)
-      .catch(() => setError('No se encontró el consorcio.'));
-  }, [id]);
+  const pedido = usePedido(`consorcio:${id}`, () => consorciosService.getVersionado(id), 'No se encontró el consorcio.');
+  const consorcio = pedido.datos?.datos;
+  const error = pedido.error;
+  const [conflicto, setConflicto] = useState(false);
 
   async function guardar(input: ConsorcioInput) {
-    await consorciosService.update(id, input);
+    if (!pedido.datos?.etag) throw new ApiError(428, 'Recargá el consorcio antes de guardar.');
+    try { await consorciosService.update(id, input, pedido.datos.etag); }
+    catch (err) { if (err instanceof ApiError && err.status === 412) setConflicto(true); throw err; }
     router.push('/');
   }
 
@@ -46,8 +46,15 @@ export default function EditarConsorcioPage({
       </header>
 
       <div className="mt-6">
+        {conflicto && <Alert className="mb-4"><AlertDescription>
+          El consorcio cambió. Tu borrador se conserva; recargá para revisar la versión nueva antes de editar de nuevo.
+          <Button type="button" variant="outline" onClick={() => { pedido.recargar(); setConflicto(false); }}>
+            Recargar y descartar borrador
+          </Button>
+        </AlertDescription></Alert>}
         {consorcio && (
           <ConsorcioForm
+            key={pedido.datos?.etag}
             inicial={consorcio}
             textoBoton="Guardar cambios"
             onSubmit={guardar}

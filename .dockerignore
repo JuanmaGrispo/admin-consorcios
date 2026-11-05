@@ -7,6 +7,7 @@
 **/*.tsbuildinfo
 **/next-env.d.ts
 **/*.log
+**/acceptance/resultados
 
 # Secretos: el backend los recibe en runtime vía env_file (docker-compose.yml),
 # nunca quedan dentro de la imagen.

@@ -1,0 +1,916 @@
+{
+  "fecha": "2026-11-05",
+  "hashesLogs": {
+    "apps/backend/acceptance/matriz-seguridad-regresion.log": "977EBB6A647D993A1B68AD14E491374BE10DAE130ECA0BC27DAE90190DF29260",
+    "apps/backend/acceptance/def-10-integral-final.log": "3EC0ABBD087FBACA7703B68030BA1AC5D613EBA7481872FE1686912ED1F1E375",
+    "apps/backend/acceptance/csp-verificacion-completa.log": "CEE10F84A34BE9EA480ED1E7B6E98581F07CAEC2FDDB4F01CDAA90335A619254"
+  },
+  "documentoOriginal": "https://docs.google.com/document/d/1wkKXFamLStn9kIv_WIBYFhEKJTWsuIBTAGT9kvbUwc8/edit",
+  "tab": "t.0",
+  "commitBase": "0309d8f1c953edbe3c4bd1195217f68712d8d4fb",
+  "cambiosSinCommit": true,
+  "resumen": {
+    "Pendiente": 58,
+    "Pasa": 18,
+    "Falla": 9
+  },
+  "alcance": "Revisión de código y evidencia local, no certificación de seguridad ni ejecución exhaustiva de 85 pruebas. Pendiente incluye implementación parcial o falta de evidencia. Falla incluye discrepancias literales documentales, identificadas como tales.",
+  "fuentes": "Rutas sin prefijo: apps/backend/src/modules/; core y database: apps/backend/src/; acceptance: apps/backend/; frontend: apps/. Las referencias con varios números de línea son puntos de entrada orientativos al snapshot, no rangos.",
+  "ejecuciones": [
+    {
+      "comando": "pnpm back test",
+      "fecha": "2026-11-05",
+      "tests": 506,
+      "suites": 126,
+      "aprobados": 506,
+      "fallidos": 0,
+      "omitidos": 0,
+      "duracionMs": 87020.784,
+      "logLocal": "apps/backend/acceptance/matriz-seguridad-regresion.log"
+    },
+    {
+      "evidencia": "docs/seguridad-dependencias.md",
+      "resultado": "Corrida integral local 05/11; HTTP 11/11 antes y después del reinicio, negocio 2/2. Se reutiliza evidencia existente; no se reejecutó integral para esta revisión."
+    },
+    {
+      "evidencia": "docs/evidencias/zap-csp-2026-11-05.json",
+      "resultado": "8/8 pruebas web; ZAP baseline y activo API acotados. No valida todos los roles, rutas ni criterios."
+    },
+    {
+      "comando": "pnpm back test",
+      "fecha": "2026-11-05",
+      "tests": 517,
+      "suites": 128,
+      "aprobados": 517,
+      "fallidos": 0,
+      "omitidos": 0,
+      "nota": "Incluye jwt.opciones.spec.ts."
+    },
+    {
+      "evidencia": "acceptance/http.test.cjs",
+      "resultado": "Corrida integral del 05/11 (tarde): prueba de JWT manipulados aprobada junto con el resto de la API."
+    },
+    {
+      "evidencia": "docs/evidencias/dependencias-2026-11-05.json",
+      "resultado": "pnpm audit --prod: 0 críticas, 0 altas, 9 moderadas."
+    }
+  ],
+  "decisionesUsuario": [
+    "DEF-09 omitido; no se declara corregido.",
+    "CI omitido; no se declara ejecutado.",
+    "COEP/COOP/CORP bajas aceptadas sin corrección. Se conservan hallazgos originales.",
+    "El 05/11 por la tarde el usuario pidió corregir las dependencias: CFG07 pasa a Pasa."
+  ],
+  "criterios": [
+    {
+      "id": "AUT01",
+      "area": "Login y sesión",
+      "criterio": "Dado un email inexistente, una contraseña incorrecta o una cuenta dada de baja, cuando se intenta ingresar, entonces el mensaje y el código de respuesta son los mismos en los tres casos y no se revela qué cuentas existen.",
+      "referencia": "A07, API2",
+      "metodoOriginal": "Test automático de login con los tres casos y comparación de la respuesta.",
+      "estado": "Pendiente",
+      "fuentes": "auth/auth.service.ts; auth/auth.service.spec.ts; frontend/acceptance/flujos-criticos.e2e.ts",
+      "evaluacion": "El código unifica el 401 y el mensaje. El flujo E2E de la HU 09 compara email inexistente y contraseña incorrecta; falta cuenta dada de baja."
+    },
+    {
+      "id": "AUT02",
+      "area": "Login y sesión",
+      "criterio": "Dados cinco intentos de login fallidos en quince minutos, cuando llega el sexto, entonces la cuenta queda limitada quince minutos y responde 429 sin revisar la contraseña.",
+      "referencia": "A07, API4",
+      "metodoOriginal": "Test automático. Prueba manual repitiendo el login en Swagger.",
+      "estado": "Pasa",
+      "fuentes": "auth/limitador-login.spec.ts; auth/auth.service.spec.ts; acceptance/http.test.cjs:184",
+      "evaluacion": "Pruebas ejecutadas: quinto fallo bloquea 15 minutos, ventana temporal y sexto intento 429 sin consultar la cuenta."
+    },
+    {
+      "id": "AUT03",
+      "area": "Login y sesión",
+      "criterio": "Las contraseñas se guardan con bcrypt. El hash nunca sale en una respuesta de la API ni queda en los logs.",
+      "referencia": "A04, A07",
+      "metodoOriginal": "Consulta a la base, revisión de la entidad y de una respuesta de /usuarios.",
+      "estado": "Pendiente",
+      "fuentes": "auth/password.ts; usuarios/usuarios.service.spec.ts",
+      "evaluacion": "bcrypt y recorte del hash comprobados en usuarios/perfil; falta revisión completa de respuestas y logs."
+    },
+    {
+      "id": "AUT04",
+      "area": "Login y sesión",
+      "criterio": "La cookie de sesión lleva HttpOnly y SameSite, y Secure en producción. Desde la consola del navegador, document.cookie no muestra el token.",
+      "referencia": "A07",
+      "metodoOriginal": "Inspección de headers y de la cookie en el navegador.",
+      "estado": "Pendiente",
+      "fuentes": "auth/auth.controller.ts:64; frontend/src/proxy.ts",
+      "evaluacion": "HttpOnly, SameSite=lax y Secure condicionado a producción en código. Falta captura HTTPS de cookies y document.cookie."
+    },
+    {
+      "id": "AUT05",
+      "area": "Login y sesión",
+      "criterio": "Dado un token vencido, alterado o firmado con el algoritmo \"none\", cuando se usa en cualquier endpoint, entonces la API responde 401.",
+      "referencia": "A07, API2",
+      "metodoOriginal": "Test con tokens manipulados (Postman o test automático).",
+      "estado": "Pasa",
+      "fuentes": "auth/jwt.opciones.ts; auth/jwt.strategy.ts; auth/jwt.opciones.spec.ts; acceptance/http.test.cjs",
+      "evaluacion": "HS256 y emisor domus fijados en firma y verificación. Prueba HTTP: vencido, firma alterada, otro secreto, payload cambiado, alg=none, HS512, otro emisor, sin emisor y mal formado responden 401 con Problem Details, por header y por cookie; control válido 200. Aprobada en la corrida integral del 05/11."
+    },
+    {
+      "id": "AUT06",
+      "area": "Login y sesión",
+      "criterio": "El token de acceso dura como máximo quince minutos. Hay un refresh token que se revoca al cerrar sesión, y reusar una cookie anterior al logout responde 401.",
+      "referencia": "A07",
+      "metodoOriginal": "Test: logout y reintento con el token viejo. Revisión de la duración configurada.",
+      "estado": "Falla",
+      "fuentes": "auth/auth.module.ts:28; auth/auth.controller.ts:84; auth/auth.service.ts:62",
+      "evaluacion": "JWT con duración por defecto 1d; no hay refresh token ni revocación al logout. Borrar la cookie no invalida una copia del JWT."
+    },
+    {
+      "id": "AUT07",
+      "area": "Login y sesión",
+      "criterio": "Dado un usuario dado de baja o con el rol cambiado y una sesión abierta, cuando hace su próximo pedido, entonces el cambio tiene efecto de inmediato (401 o 403).",
+      "referencia": "A01, A07",
+      "metodoOriginal": "Prueba manual: dar de baja a un vecino con sesión abierta y repetir un pedido.",
+      "estado": "Pasa",
+      "fuentes": "acceptance/http.test.cjs:47; auth/auth.service.ts:69",
+      "evaluacion": "Prueba integral ejecutada con el mismo JWT: baja rechaza y cambio de rol modifica permisos desde el pedido siguiente."
+    },
+    {
+      "id": "AUT08",
+      "area": "Login y sesión",
+      "criterio": "Para cambiar la contraseña desde el perfil se exige la contraseña actual, y la nueva tiene un largo mínimo. Dada una contraseña corta, la API responde 400.",
+      "referencia": "A07",
+      "metodoOriginal": "Test automático y prueba manual desde el perfil.",
+      "estado": "Pendiente",
+      "fuentes": "usuarios/usuarios.service.spec.ts; usuarios/dto/cambiar-password.dto.ts",
+      "evaluacion": "Prueba ejecutada exige contraseña actual; DTO fija mínimo 8. Falta probar por HTTP contraseña corta y ausencia de persistencia."
+    },
+    {
+      "id": "AUT09",
+      "area": "Login y sesión",
+      "criterio": "Dado un vecino al que el administrador le resetea la contraseña, cuando ingresa con la clave temporal, entonces la app le exige elegir una nueva. La clave temporal es aleatoria y no queda en los logs.",
+      "referencia": "A07",
+      "metodoOriginal": "Prueba manual del reseteo y revisión de los logs.",
+      "estado": "Falla",
+      "fuentes": "usuarios/usuarios.service.ts:130",
+      "evaluacion": "Reset recibe una contraseña elegida y guarda el hash; no genera clave temporal aleatoria ni exige cambio al primer ingreso."
+    },
+    {
+      "id": "AUT10",
+      "area": "Login y sesión",
+      "criterio": "Dado un usuario que cambia su contraseña, cuando alguien usa una sesión abierta antes del cambio, entonces la API responde 401.",
+      "referencia": "A07",
+      "metodoOriginal": "Prueba manual con dos navegadores.",
+      "estado": "Falla",
+      "fuentes": "usuarios/usuarios.service.ts:174; auth/auth.service.ts:69",
+      "evaluacion": "Cambio de contraseña sólo modifica hash; validarPayload no compara versión de sesión ni fecha de cambio."
+    },
+    {
+      "id": "AUT11",
+      "area": "Login y sesión",
+      "criterio": "Dado un pedido que modifica datos (POST, PATCH o DELETE) enviado desde otro sitio con la cookie del usuario, cuando llega a la API, entonces se rechaza.",
+      "referencia": "A01, A07",
+      "metodoOriginal": "Prueba manual desde una página externa de prueba. Revisión de SameSite y del origen permitido.",
+      "estado": "Pendiente",
+      "fuentes": "auth/auth.controller.ts; configurar-app.ts",
+      "evaluacion": "SameSite y CORS presentes; falta prueba de rechazo de mutaciones cross-site. Bloquear lectura por CORS no demuestra rechazo del pedido."
+    },
+    {
+      "id": "ACC01",
+      "area": "Control de acceso",
+      "criterio": "Dado un pedido sin sesión, cuando llama a un endpoint que no está marcado como público, entonces la API responde 401. Los endpoints públicos son sólo los listados (login, webhook de Mercado Pago, estado del servicio).",
+      "referencia": "A01, A02",
+      "metodoOriginal": "Prueba manual en Swagger sin token y revisión del listado de rutas públicas.",
+      "estado": "Falla",
+      "fuentes": "auth/auth.controller.ts:84; auth/guards/jwt-auth.guard.ts",
+      "evaluacion": "Hay logout marcado Public además del inventario exigido. Es una discrepancia documental de alcance: logout público es intencional, no demuestra acceso indebido a datos."
+    },
+    {
+      "id": "ACC02",
+      "area": "Control de acceso",
+      "criterio": "Dado un vecino con sesión, cuando llama a un endpoint de administrador (por ejemplo crear una liquidación), entonces la API responde 403.",
+      "referencia": "A01, API5",
+      "metodoOriginal": "Guard de roles global. Test automático y prueba manual.",
+      "estado": "Pendiente",
+      "fuentes": "acceptance/http.test.cjs:184; auth/guards/roles.guard.ts",
+      "evaluacion": "403 ejecutado para vecino en alta de consorcio; falta endpoint de administrador, por ejemplo crear liquidación, para cubrir este criterio exacto."
+    },
+    {
+      "id": "ACC03",
+      "area": "Control de acceso",
+      "criterio": "Dado un administrador sin permisos de superadministrador, cuando llama a un endpoint de la plataforma (alta de consorcios o de administradores), entonces la API responde 403.",
+      "referencia": "A01, API5",
+      "metodoOriginal": "Prueba manual con una sesión de administrador.",
+      "estado": "Pendiente",
+      "fuentes": "auth/guards/roles.guard.ts",
+      "evaluacion": "Hay guard de roles; falta evidencia HTTP con administrador sin SUPER_ADMIN en altas de consorcios y administradores."
+    },
+    {
+      "id": "ACC04",
+      "area": "Control de acceso",
+      "criterio": "Dado un administrador del consorcio A, cuando pide un reclamo, una boleta, una unidad, una asamblea o una votación del consorcio B, entonces la API responde 404 y no devuelve ningún dato.",
+      "referencia": "A01, API1 (BOLA)",
+      "metodoOriginal": "Test automático por módulo, cambiando el id por uno ajeno.",
+      "estado": "Pendiente",
+      "fuentes": "reclamos/reclamos.service.spec.ts; expensas/expensas.service.spec.ts; votaciones/votaciones.service.spec.ts",
+      "evaluacion": "Hay pruebas por módulo de alcance. Falta consolidar los cinco recursos exigidos, incluidas asamblea y unidad, con respuesta HTTP sin datos."
+    },
+    {
+      "id": "ACC05",
+      "area": "Control de acceso",
+      "criterio": "Dado un vecino, cuando pide el estado de cuenta, una boleta, un reclamo o una reserva de otra unidad, entonces la API responde 404 y no devuelve ningún dato.",
+      "referencia": "A01, API1 (BOLA)",
+      "metodoOriginal": "Test automático. Prueba manual cambiando el id en la URL.",
+      "estado": "Pendiente",
+      "fuentes": "reservas/reservas.service.spec.ts:87; pagos/pagos.service.spec.ts:488",
+      "evaluacion": "Probados reserva y pago ajenos en services; falta completar estado de cuenta, boleta y reclamo por HTTP con otra unidad."
+    },
+    {
+      "id": "ACC06",
+      "area": "Control de acceso",
+      "criterio": "Dado un pedido con un campo que el endpoint no admite (el rol, el consorcio o el estado), cuando se envía, entonces la API responde 400 y no guarda nada.",
+      "referencia": "A01, API3",
+      "metodoOriginal": "Test con un cuerpo con campos de más. Validación global con lista blanca.",
+      "estado": "Pasa",
+      "fuentes": "configurar-app.spec.ts:65; configurar-app.ts:74",
+      "evaluacion": "Prueba HTTP ejecutada con campo extra devuelve 400; ValidationPipe global whitelist y forbidNonWhitelisted antes del handler."
+    },
+    {
+      "id": "ACC07",
+      "area": "Control de acceso",
+      "criterio": "Dado un vecino que entra por URL directa a una pantalla del portal administrador, cuando la abre, entonces el front lo redirige y la API igual rechaza los datos. Ocultar un botón no cuenta como control.",
+      "referencia": "A01",
+      "metodoOriginal": "Prueba manual pegando la URL del portal administrador con sesión de vecino.",
+      "estado": "Pendiente",
+      "fuentes": "frontend/src/proxy.ts; auth/guards/roles.guard.ts",
+      "evaluacion": "Falta prueba de navegación por URL directa a portal administrador con sesión de vecino y rechazo de su API."
+    },
+    {
+      "id": "ACC08",
+      "area": "Control de acceso",
+      "criterio": "Dado un administrador al que le quitan un consorcio, cuando pide datos de ese consorcio, entonces la API responde 404 desde el pedido siguiente.",
+      "referencia": "A01",
+      "metodoOriginal": "Prueba manual quitando la asignación con sesión abierta.",
+      "estado": "Pendiente",
+      "fuentes": "auth/auth.service.ts:100; auth/alcance.spec.ts",
+      "evaluacion": "Consorcios se releen por request y alcance tiene pruebas; falta quitar asignación con sesión abierta y comprobar 404."
+    },
+    {
+      "id": "ACC09",
+      "area": "Control de acceso",
+      "criterio": "Dado un método HTTP que el endpoint no prevé (por ejemplo DELETE sobre un reclamo), cuando se envía, entonces la API responde 405 y no hace nada.",
+      "referencia": "A02, API5",
+      "metodoOriginal": "Prueba manual en Postman con métodos no previstos.",
+      "estado": "Pasa",
+      "fuentes": "configurar-app.spec.ts:50; core/http/filtro-excepciones.spec.ts:35",
+      "evaluacion": "Prueba HTTP ejecutada: método no previsto devuelve 405 y Allow; ruta inexistente sigue en 404."
+    },
+    {
+      "id": "ACC10",
+      "area": "Control de acceso",
+      "criterio": "Dado un listado con un tamaño de página enorme (por ejemplo limit=100000), cuando se pide, entonces la API lo acota al máximo definido.",
+      "referencia": "API4",
+      "metodoOriginal": "Prueba manual en los listados de cobranzas, reclamos y vecinos.",
+      "estado": "Pendiente",
+      "fuentes": "usuarios/usuarios.service.ts:48; expensas/dto; reclamos/dto",
+      "evaluacion": "La evidencia de paginación de boletas no cubre los tres listados requeridos ni limit=100000. Falta definir y comprobar sus máximos."
+    },
+    {
+      "id": "ACC11",
+      "area": "Control de acceso",
+      "criterio": "Dado un archivo, un recibo o una boleta en PDF de otra unidad o de otro consorcio, cuando se pide por su id, entonces la API responde 404 y no entrega el archivo.",
+      "referencia": "A01, API1 (BOLA)",
+      "metodoOriginal": "Prueba manual cambiando el id de la boleta, del recibo o del adjunto.",
+      "estado": "Pendiente",
+      "fuentes": "pagos/pagos.service.spec.ts:488; archivos/archivos.client.ts:51",
+      "evaluacion": "Hay 404 de recibo ajeno en service, pero no prueba completa de PDFs y adjuntos; revisar también exposición por URL pública de ARC05."
+    },
+    {
+      "id": "ACC12",
+      "area": "Control de acceso",
+      "criterio": "La exportación a Excel de cobranzas y liquidaciones incluye sólo datos de los consorcios del administrador que la pide.",
+      "referencia": "A01",
+      "metodoOriginal": "Exportar con dos administradores y comparar el contenido.",
+      "estado": "Pendiente",
+      "fuentes": "expensas/expensas.service.spec.ts",
+      "evaluacion": "Falta exportar con dos administradores y verificar filas y consorcios del archivo resultante."
+    },
+    {
+      "id": "ENT01",
+      "area": "Entradas",
+      "criterio": "Dado un texto como ' OR 1=1 -- en un buscador o en un filtro, cuando se envía, entonces la consulta no se altera y no se devuelven datos de más. No hay SQL armado a mano.",
+      "referencia": "A05",
+      "metodoOriginal": "Prueba manual en los buscadores y revisión de que todo use TypeORM con parámetros.",
+      "estado": "Pendiente",
+      "fuentes": "usuarios/usuarios.repository.ts; expensas/expensas.repository.ts",
+      "evaluacion": "Hay consultas parametrizadas; falta ataque ejecutado en todos los buscadores/filtros y auditoría completa de consultas."
+    },
+    {
+      "id": "ENT02",
+      "area": "Entradas",
+      "criterio": "Dado un dato fuera de rango (un gasto negativo, una fecha inválida, coeficientes de unidades que suman más de 100 %), cuando se envía, entonces la API responde 400 y no persiste nada.",
+      "referencia": "A05, A06",
+      "metodoOriginal": "Test automático de validación de cada módulo.",
+      "estado": "Pendiente",
+      "fuentes": "unidades; gastos; expensas",
+      "evaluacion": "Hay validaciones y pruebas de negocio; falta consolidar gasto negativo, fecha inválida y coeficientes >100 por HTTP, sin persistencia."
+    },
+    {
+      "id": "ENT03",
+      "area": "Entradas",
+      "criterio": "Dado un texto con <script> en un reclamo, una novedad o el nombre de un vecino, cuando otro usuario lo ve, entonces se muestra como texto y no se ejecuta.",
+      "referencia": "A05",
+      "metodoOriginal": "Prueba manual cargando el texto y abriéndolo con otro rol.",
+      "estado": "Pendiente",
+      "fuentes": "frontend/src/lib/csp.ts; frontend/acceptance/csp.e2e.ts",
+      "evaluacion": "CSP e inyección genérica probadas; falta XSS almacenado en reclamo, novedad y nombre leído por otro rol."
+    },
+    {
+      "id": "ENT04",
+      "area": "Entradas",
+      "criterio": "Dado un pedido con un cuerpo mayor al límite, cuando llega a la API, entonces responde 413.",
+      "referencia": "API4",
+      "metodoOriginal": "Prueba manual con un cuerpo grande desde Postman.",
+      "estado": "Pendiente",
+      "fuentes": "configurar-app.ts; archivos/archivos.controller.ts",
+      "evaluacion": "Límites de archivos no prueban tamaño del cuerpo JSON; falta pedido sobredimensionado y respuesta 413."
+    },
+    {
+      "id": "ENT05",
+      "area": "Entradas",
+      "criterio": "Dado un id con formato inválido en la URL, cuando se pide, entonces la API responde 400 o 404, nunca 500.",
+      "referencia": "A10",
+      "metodoOriginal": "Prueba manual con ids inválidos en cada módulo.",
+      "estado": "Pendiente",
+      "fuentes": "core/http/filtro-excepciones.ts",
+      "evaluacion": "Filtro genérico no demuestra validación de ids; falta recorrer todos los módulos con ids inválidos y descartar 500."
+    },
+    {
+      "id": "ENT06",
+      "area": "Entradas",
+      "criterio": "Dado un nombre o un asunto con saltos de línea (\\r\\n), cuando se usa en un mail, entonces no se pueden inyectar encabezados ni destinatarios.",
+      "referencia": "A05",
+      "metodoOriginal": "Prueba manual cargando un nombre con saltos de línea y revisando el mail enviado.",
+      "estado": "Pendiente",
+      "fuentes": "email/mailer.client.ts",
+      "evaluacion": "Falta enviar nombre/asunto con CRLF y revisar encabezados y destinatarios del mensaje capturado."
+    },
+    {
+      "id": "ENT07",
+      "area": "Entradas",
+      "criterio": "Dado un texto que empieza con =, +, - o @ (por ejemplo el nombre de un vecino), cuando se exporta a Excel, entonces se escapa y no se ejecuta como fórmula.",
+      "referencia": "A05",
+      "metodoOriginal": "Prueba manual: exportar y abrir el Excel.",
+      "estado": "Pasa",
+      "fuentes": "expensas/cobranzas.spec.ts:117",
+      "evaluacion": "Prueba ejecutada del exportador CSV: nombres que comienzan con =, +, - y @ salen como texto; importes negativos siguen numéricos."
+    },
+    {
+      "id": "ENT08",
+      "area": "Entradas",
+      "criterio": "Dado un parámetro de orden o de filtro con una columna que no existe, cuando se envía, entonces la API responde 400 y no muestra ningún error de la base.",
+      "referencia": "A05, A10",
+      "metodoOriginal": "Prueba manual en los listados.",
+      "estado": "Pendiente",
+      "fuentes": "configurar-app.ts",
+      "evaluacion": "Whitelist global sólo cubre campos desconocidos; falta probar columnas de orden/filtro inválidas en los listados."
+    },
+    {
+      "id": "ARC01",
+      "area": "Archivos",
+      "criterio": "Dado un ejecutable con extensión de imagen, cuando se sube como foto de un reclamo, entonces la API responde 400 y el archivo no se guarda.",
+      "referencia": "A08",
+      "metodoOriginal": "Test automático: el tipo se detecta por los bytes y no por la extensión.",
+      "estado": "Pasa",
+      "fuentes": "archivos/archivos.service.spec.ts:80; archivos/tipos-archivo.spec.ts",
+      "evaluacion": "Pruebas ejecutadas rechazan bytes ELF y PDF declarado imagen; tipo real por bytes y rechazo anterior a subir."
+    },
+    {
+      "id": "ARC02",
+      "area": "Archivos",
+      "criterio": "Dado un archivo mayor al tamaño máximo, cuando se sube, entonces se rechaza y no queda guardado.",
+      "referencia": "API4",
+      "metodoOriginal": "Prueba manual subiendo un archivo grande.",
+      "estado": "Pasa",
+      "fuentes": "archivos/archivos.service.spec.ts:101; archivos/archivos.service.ts:78",
+      "evaluacion": "Prueba ejecutada: 3 MB admitidos en reclamos y rechazados en avatar de máximo 2 MB; validación anterior a storage.subir."
+    },
+    {
+      "id": "ARC03",
+      "area": "Archivos",
+      "criterio": "Dado un nombre de archivo con ../ o caracteres especiales, cuando se sube, entonces se ignora y el archivo se guarda con un nombre generado por el sistema.",
+      "referencia": "A05",
+      "metodoOriginal": "Prueba manual y revisión del código de subida.",
+      "estado": "Pasa",
+      "fuentes": "archivos/archivos.service.spec.ts:57",
+      "evaluacion": "Prueba ejecutada con ../../etc/passwd: ruta usa destino, propietario y UUID, sin nombre original."
+    },
+    {
+      "id": "ARC04",
+      "area": "Archivos",
+      "criterio": "Dada una URL de un archivo que no subió la app, o que corresponde a otro módulo, cuando se intenta usar como adjunto, entonces la API responde 400.",
+      "referencia": "A08",
+      "metodoOriginal": "Test automático: cada módulo sólo acepta archivos de su destino.",
+      "estado": "Pasa",
+      "fuentes": "archivos/archivos.service.spec.ts — exigirPropia",
+      "evaluacion": "Pruebas ejecutadas rechazan URL externa y URL de otro destino con BadRequestException."
+    },
+    {
+      "id": "ARC05",
+      "area": "Archivos",
+      "criterio": "El bucket es privado y los archivos se piden con URLs firmadas que vencen. Una URL vencida deja de funcionar.",
+      "referencia": "A01, A02",
+      "metodoOriginal": "Prueba manual: abrir una URL firmada vencida. Revisión de la política del bucket.",
+      "estado": "Falla",
+      "fuentes": "archivos/archivos.client.ts:51; archivos/archivos.service.ts:29",
+      "evaluacion": "Cliente genera URLs object/public sin firma ni vencimiento. No cumple el modelo de bucket privado con URLs temporales; no se inspeccionó política real del proveedor."
+    },
+    {
+      "id": "ARC06",
+      "area": "Archivos",
+      "criterio": "Dada una foto con ubicación GPS en sus metadatos, cuando se sube a un reclamo, entonces los metadatos se eliminan antes de guardarla.",
+      "referencia": "A04, Ley 25.326",
+      "metodoOriginal": "Subir una foto con GPS y revisar el archivo guardado.",
+      "estado": "Falla",
+      "fuentes": "archivos/archivos.service.ts:93",
+      "evaluacion": "El buffer original se envía directamente a Storage; no hay transformación ni eliminación de metadatos GPS."
+    },
+    {
+      "id": "PAG01",
+      "area": "Pagos",
+      "criterio": "Dado un aviso de Mercado Pago con firma inválida, cuando llega al webhook, entonces la API responde 401 y el pago no cambia.",
+      "referencia": "A08",
+      "metodoOriginal": "Test automático con firma inválida.",
+      "estado": "Pasa",
+      "fuentes": "pagos/pagos.service.spec.ts:395",
+      "evaluacion": "Prueba ejecutada: firma inválida lanza 401 y no modifica pagos."
+    },
+    {
+      "id": "PAG02",
+      "area": "Pagos",
+      "criterio": "Dado el mismo aviso de Mercado Pago recibido dos veces, cuando se procesa, entonces el pago se registra una sola vez y no se genera un segundo recibo.",
+      "referencia": "A08, A06",
+      "metodoOriginal": "Test automático de idempotencia.",
+      "estado": "Pasa",
+      "fuentes": "pagos/pagos.service.spec.ts:401,467; acceptance/negocio.test.cjs:42",
+      "evaluacion": "Pruebas unitarias e integral ejecutadas: webhook repetido/concurrente conserva un pago aprobado y un recibo sin renumeración."
+    },
+    {
+      "id": "PAG03",
+      "area": "Pagos",
+      "criterio": "Dado un aviso cuyo cuerpo dice \"aprobado\", cuando Mercado Pago informa otro estado al consultarlo, entonces vale el estado consultado y no el del cuerpo.",
+      "referencia": "A08, API10",
+      "metodoOriginal": "Test automático con el cliente de Mercado Pago simulado.",
+      "estado": "Pendiente",
+      "fuentes": "pagos/pagos.service.ts; pagos/pagos.service.spec.ts:414",
+      "evaluacion": "Se consulta Mercado Pago y un rechazo tardío no pisa aprobación; falta caso explícito de cuerpo adulterado y proveedor con estado contrario."
+    },
+    {
+      "id": "PAG04",
+      "area": "Pagos",
+      "criterio": "El monto del pago lo calcula el servidor. Dado un pedido de pago con un monto distinto al de la deuda, cuando se envía, entonces se ignora o se rechaza.",
+      "referencia": "A06, API6",
+      "metodoOriginal": "Prueba manual alterando el cuerpo del pedido.",
+      "estado": "Pendiente",
+      "fuentes": "pagos/pagos.service.spec.ts:278",
+      "evaluacion": "Preferencia por saldo probada; falta intento HTTP que altere el monto y demuestre rechazo/ignorancia del campo."
+    },
+    {
+      "id": "PAG05",
+      "area": "Pagos",
+      "criterio": "No se guardan datos de tarjetas: de cada pago sólo quedan el número de operación de Mercado Pago, el medio y los últimos cuatro dígitos.",
+      "referencia": "A04, Ley 25.326",
+      "metodoOriginal": "Revisión de la tabla de pagos.",
+      "estado": "Pendiente",
+      "fuentes": "pagos/pagos.service.spec.ts:288; database/entities/pago.entity.ts",
+      "evaluacion": "Prueba descarta dígitos que no son cuatro; falta revisión completa de esquema, filas persistidas y ausencia de datos de tarjeta adicionales."
+    },
+    {
+      "id": "PAG06",
+      "area": "Pagos",
+      "criterio": "Dado Mercado Pago sin responder durante más de diez segundos, cuando el vecino quiere pagar, entonces ve un error controlado, la deuda sigue vigente y no se muestran detalles internos.",
+      "referencia": "A10",
+      "metodoOriginal": "Prueba manual con el adaptador forzado a fallar.",
+      "estado": "Pendiente",
+      "fuentes": "acceptance/http.test.cjs:193; pagos/mercado-pago.client.spec.ts",
+      "evaluacion": "Timeout y error controlado ejecutados en menos de 5,5 s; falta afirmar explícitamente que la deuda sigue vigente después del timeout."
+    },
+    {
+      "id": "PAG07",
+      "area": "Pagos",
+      "criterio": "Dado un pago manual, cuando lo registra un administrador, entonces lo puede hacer sólo en sus consorcios, no admite montos negativos ni mayores a la deuda y queda auditado.",
+      "referencia": "A06, A01",
+      "metodoOriginal": "Test automático y prueba manual.",
+      "estado": "Pendiente",
+      "fuentes": "pagos/pagos.service.spec.ts:245; pagos/pagos.service.spec.ts:495",
+      "evaluacion": "Saldo máximo y alcance tienen pruebas; falta cubrir monto negativo por HTTP y auditoría completa del actor."
+    },
+    {
+      "id": "PAG08",
+      "area": "Pagos",
+      "criterio": "Dada una seña ya devuelta, cuando se intenta devolver otra vez, entonces la API lo rechaza. Sólo se devuelve una seña que fue cobrada.",
+      "referencia": "A06",
+      "metodoOriginal": "Test automático de la devolución.",
+      "estado": "Pendiente",
+      "fuentes": "pagos/pagos.service.spec.ts; reservas/reservas.service.spec.ts",
+      "evaluacion": "La evidencia de reintegro y conciliación no prueba conjuntamente seña cobrada y segunda devolución rechazada."
+    },
+    {
+      "id": "PAG09",
+      "area": "Pagos",
+      "criterio": "Dado un vecino que vuelve del checkout con parámetros manipulados (por ejemplo status=approved), cuando el pago no está aprobado en Mercado Pago, entonces la deuda sigue vigente.",
+      "referencia": "A08",
+      "metodoOriginal": "Prueba manual editando la URL de retorno.",
+      "estado": "Pendiente",
+      "fuentes": "pagos/pagos.service.spec.ts:355",
+      "evaluacion": "Sincronización consulta al proveedor; falta manipular parámetros del retorno y verificar deuda vigente en la UI y base."
+    },
+    {
+      "id": "MSJ01",
+      "area": "Mensajería y mail",
+      "criterio": "La conexión con RabbitMQ va cifrada con TLS (amqps).",
+      "referencia": "A02, A04",
+      "metodoOriginal": "Revisión de la cadena de conexión y del panel de CloudAMQP.",
+      "estado": "Pendiente",
+      "fuentes": "core/mensajeria/rabbit.client.ts",
+      "evaluacion": "El entorno desechable usa AMQP local. Falta acreditar amqps y TLS en el ambiente desplegado."
+    },
+    {
+      "id": "MSJ02",
+      "area": "Mensajería y mail",
+      "criterio": "Cada servicio usa su propio usuario de RabbitMQ con permisos sólo sobre sus colas. Dado el consumidor del mail, cuando intenta publicar en una cola que no es suya, entonces recibe un error de autorización.",
+      "referencia": "A01, A02",
+      "metodoOriginal": "Prueba manual con las credenciales de cada consumidor.",
+      "estado": "Pendiente",
+      "fuentes": "core/mensajeria/rabbit.client.ts",
+      "evaluacion": "Falta evidencia de usuarios por servicio y prueba negativa de permisos en el broker desplegado; conexión compartida de pruebas no lo acredita."
+    },
+    {
+      "id": "MSJ03",
+      "area": "Mensajería y mail",
+      "criterio": "Los mensajes llevan sólo los datos necesarios para el aviso, nunca contraseñas ni tokens.",
+      "referencia": "A04, Ley 25.326",
+      "metodoOriginal": "Revisión del sobre de los eventos y de un mensaje real en la cola.",
+      "estado": "Pendiente",
+      "fuentes": "core/mensajeria/eventos.spec.ts; docs/mensajeria.md",
+      "evaluacion": "Sobre de eventos probado; falta inspección de mensajes reales de todos los tipos y minimización de datos."
+    },
+    {
+      "id": "MSJ04",
+      "area": "Mensajería y mail",
+      "criterio": "Dado un mensaje mal formado o que agotó los tres reintentos, cuando falla, entonces va a la cola de mensajes fallidos y no frena a los demás.",
+      "referencia": "A10",
+      "metodoOriginal": "Prueba manual publicando un mensaje inválido y mirando la cola.",
+      "estado": "Pendiente",
+      "fuentes": "core/mensajeria/despacho.spec.ts; acceptance — consumidores",
+      "evaluacion": "Pruebas ejecutadas de retry y decisión de DLQ; falta enlazar evidencia específica de tres reintentos y mensaje posterior procesado sin bloqueo."
+    },
+    {
+      "id": "MSJ05",
+      "area": "Mensajería y mail",
+      "criterio": "Dado que el servidor de mail falla, cuando se emite una liquidación o se registra un pago, entonces la operación queda registrada igual y el mail se reintenta.",
+      "referencia": "A10",
+      "metodoOriginal": "Prueba manual con credenciales de mail inválidas.",
+      "estado": "Pendiente",
+      "fuentes": "core/mensajeria/publicador-eventos.spec.ts; acceptance — outbox",
+      "evaluacion": "Hay atomicidad del outbox y recuperación del broker; falta caída SMTP durante liquidación y pago con persistencia y reintento comprobados."
+    },
+    {
+      "id": "MSJ06",
+      "area": "Mensajería y mail",
+      "criterio": "Cada aviso llega sólo a quien corresponde: la respuesta a un reclamo no le llega a otro vecino ni aparece en el muro.",
+      "referencia": "A01",
+      "metodoOriginal": "Prueba manual con dos vecinos y revisión de los destinatarios.",
+      "estado": "Pendiente",
+      "fuentes": "email; notificaciones; reclamos",
+      "evaluacion": "Falta evidencia con dos vecinos de destinatario correcto de respuesta a reclamo y ausencia en muro."
+    },
+    {
+      "id": "MSJ07",
+      "area": "Mensajería y mail",
+      "criterio": "Los mails no incluyen tokens de sesión ni el detalle de la deuda de otras unidades, y salen siempre desde el remitente de Domus.",
+      "referencia": "A04, A01",
+      "metodoOriginal": "Revisión de las plantillas y de mails recibidos.",
+      "estado": "Pendiente",
+      "fuentes": "email/plantillas.ts; email/mailer.client.ts",
+      "evaluacion": "Falta inspección de correos reales/capturados que cubra remitente y ausencia de tokens y deuda ajena."
+    },
+    {
+      "id": "MSJ08",
+      "area": "Mensajería y mail",
+      "criterio": "La cuenta SMTP usa una contraseña de aplicación y no la contraseña de la cuenta de Gmail. Va en variables de entorno.",
+      "referencia": "A02",
+      "metodoOriginal": "Revisión del archivo de entorno y de la configuración de la cuenta.",
+      "estado": "Pendiente",
+      "fuentes": "email/mailer.client.ts",
+      "evaluacion": "Credenciales por entorno; eso no demuestra que Gmail tenga contraseña de aplicación. Falta evidencia de configuración de cuenta sin exponer el secreto."
+    },
+    {
+      "id": "DAT01",
+      "area": "Datos sensibles",
+      "criterio": "Las respuestas de la API usan DTOs con lo mínimo necesario, nunca la entidad completa.",
+      "referencia": "API3, A01",
+      "metodoOriginal": "Revisión de las respuestas de usuarios, unidades y vecinos.",
+      "estado": "Falla",
+      "fuentes": "unidades/unidades.service.ts:77; usuarios/usuarios.service.ts:27,212",
+      "evaluacion": "Hay retornos de entidades y de usuario completo salvo hash. No se cumple la exigencia literal de DTOs mínimos en todas las respuestas; no implica que se haya demostrado fuga de hash."
+    },
+    {
+      "id": "DAT02",
+      "area": "Datos sensibles",
+      "criterio": "Los logs no contienen contraseñas, tokens ni el DNI completo.",
+      "referencia": "A09, Ley 25.326",
+      "metodoOriginal": "Revisión de los logs después de un login, un pago y una subida de archivo.",
+      "estado": "Pendiente",
+      "fuentes": "core/http/filtro-excepciones.ts; acceptance/resultados",
+      "evaluacion": "Reportes ZAP exportados sin cookie; falta revisar logs completos de login, pago y subida y ausencia de DNI completo."
+    },
+    {
+      "id": "DAT03",
+      "area": "Datos sensibles",
+      "criterio": "Dado un vecino, cuando consulta la app, entonces no ve el DNI, el teléfono, el mail ni la deuda de otros vecinos, ni en el padrón de una votación.",
+      "referencia": "A01, Ley 25.326",
+      "metodoOriginal": "Prueba manual con dos vecinos del mismo consorcio.",
+      "estado": "Pendiente",
+      "fuentes": "votaciones/padron.spec.ts; unidades/unidades.service.ts",
+      "evaluacion": "Falta prueba con dos vecinos que inspeccione todas las respuestas, incluido padrón, sin datos personales ni deuda ajena."
+    },
+    {
+      "id": "DAT04",
+      "area": "Datos sensibles",
+      "criterio": "La conexión con la base de Supabase va cifrada, y el entorno de pruebas usa sólo datos ficticios.",
+      "referencia": "A04, Ley 25.326",
+      "metodoOriginal": "Revisión de la cadena de conexión y de los datos de prueba.",
+      "estado": "Pendiente",
+      "fuentes": "acceptance/ejecutar-integral.cjs; database",
+      "evaluacion": "Aceptación usa datos sintéticos; falta acreditar conexión cifrada a Supabase en el despliegue."
+    },
+    {
+      "id": "DAT05",
+      "area": "Datos sensibles",
+      "criterio": "Las acciones críticas (emitir una liquidación, registrar un pago manual, cerrar una votación, cambiar un rol, resetear una contraseña) dejan registro de quién, cuándo y qué.",
+      "referencia": "A09",
+      "metodoOriginal": "Prueba manual de cada acción y revisión del registro.",
+      "estado": "Falla",
+      "fuentes": "usuarios/usuarios.service.ts:130,174",
+      "evaluacion": "Reset de contraseña guarda el hash sin registrar actor, fecha y acción en un registro de auditoría. Basta este flujo para incumplir el requisito conjunto; no se afirma que todos los módulos carezcan de registros."
+    },
+    {
+      "id": "DAT06",
+      "area": "Datos sensibles",
+      "criterio": "La base de datos tiene copias de respaldo y la copia se restauró al menos una vez en una prueba.",
+      "referencia": "A02, Ley 25.326",
+      "metodoOriginal": "Captura del panel de Supabase y de la restauración de prueba.",
+      "estado": "Pendiente",
+      "fuentes": "Proveedor Supabase",
+      "evaluacion": "Sin captura de backups ni evidencia de restauración ejecutada; no se realizó restauración sobre datos reales."
+    },
+    {
+      "id": "DAT07",
+      "area": "Datos sensibles",
+      "criterio": "Dado un vecino dado de baja, cuando se envían avisos o se arma un padrón, entonces ya no recibe mails ni aparece, y sus datos se conservan sólo en lo necesario.",
+      "referencia": "Ley 25.326",
+      "metodoOriginal": "Prueba manual dando de baja a un vecino.",
+      "estado": "Pendiente",
+      "fuentes": "votaciones/padron.spec.ts; email",
+      "evaluacion": "Falta prueba de baja que abarque destinatarios de mail, padrón y conservación mínima de datos."
+    },
+    {
+      "id": "DAT08",
+      "area": "Datos sensibles",
+      "criterio": "Cada vecino puede ver y corregir sus propios datos desde el perfil, y sólo los suyos.",
+      "referencia": "Ley 25.326, A01",
+      "metodoOriginal": "Prueba manual desde el perfil de un vecino.",
+      "estado": "Pendiente",
+      "fuentes": "usuarios/usuarios.service.spec.ts — perfil propio; usuarios/usuarios.controller.ts",
+      "evaluacion": "Perfil y cambio de contraseña tienen pruebas de service; falta flujo completo con dos vecinos, lectura y edición por HTTP/UI."
+    },
+    {
+      "id": "DAT09",
+      "area": "Datos sensibles",
+      "criterio": "Dado un reclamo con fotos, cuando lo abre alguien que no es el vecino que lo hizo ni el administrador del consorcio, entonces la API responde 404 y el reclamo nunca aparece en el muro.",
+      "referencia": "A01, Ley 25.326",
+      "metodoOriginal": "Prueba manual con otro vecino y revisión del muro.",
+      "estado": "Pendiente",
+      "fuentes": "reclamos/reclamos.service.spec.ts; archivos/archivos.client.ts",
+      "evaluacion": "Falta caso completo con fotos y vecino ajeno, 404 y ausencia en muro; URL pública se trata además en ARC05."
+    },
+    {
+      "id": "LOG01",
+      "area": "Registro y monitoreo",
+      "criterio": "Los intentos de login fallidos, los 401 y 403 y los webhooks con firma inválida quedan registrados con fecha, usuario e IP.",
+      "referencia": "A09",
+      "metodoOriginal": "Provocar cada caso y revisar el log.",
+      "estado": "Pendiente",
+      "fuentes": "core/http/filtro-excepciones.ts:85",
+      "evaluacion": "401/403 se registran con IP y usuario o anónimo; falta provocar y revisar las cuatro clases de eventos con fecha y contexto esperado."
+    },
+    {
+      "id": "LOG02",
+      "area": "Registro y monitoreo",
+      "criterio": "Dado un dato con saltos de línea (por ejemplo un email), cuando se registra en el log, entonces no puede falsificar líneas del log.",
+      "referencia": "A09",
+      "metodoOriginal": "Prueba manual con un email con saltos de línea.",
+      "estado": "Pasa",
+      "fuentes": "core/http/filtro-excepciones.spec.ts:69; core/http/filtro-excepciones.ts:32",
+      "evaluacion": "Prueba ejecutada elimina saltos de línea y controles; filtro aplica limpieza a método, URL, IP y usuario de eventos 401/403."
+    },
+    {
+      "id": "CFG01",
+      "area": "Configuración",
+      "criterio": "Dado un error interno, cuando la API responde, entonces devuelve un 500 genérico con un id de correlación, sin stack trace, SQL ni versión del servidor.",
+      "referencia": "A10, A02",
+      "metodoOriginal": "Prueba manual forzando un error y mirando la respuesta.",
+      "estado": "Pasa",
+      "fuentes": "configurar-app.spec.ts:57; core/http/filtro-excepciones.spec.ts:47",
+      "evaluacion": "Pruebas ejecutadas de 500 genérico con id de correlación y sin detalle interno."
+    },
+    {
+      "id": "CFG02",
+      "area": "Configuración",
+      "criterio": "Las respuestas del front llevan los headers Strict-Transport-Security, Content-Security-Policy y X-Content-Type-Options: nosniff.",
+      "referencia": "A02",
+      "metodoOriginal": "Inspección de headers (curl -I o la pestaña Network).",
+      "estado": "Pendiente",
+      "fuentes": "frontend/next.config.ts:27; frontend/acceptance/csp.e2e.ts",
+      "evaluacion": "CSP de producción ejecutada y headers HSTS/nosniff configurados. Falta captura conjunta de los tres headers del front; no se evaluó TLS."
+    },
+    {
+      "id": "CFG03",
+      "area": "Configuración",
+      "criterio": "CORS acepta sólo los orígenes de Domus. Dado un origen ajeno, cuando hace un pedido con credenciales, entonces el navegador lo bloquea. Nunca se usa * con credenciales.",
+      "referencia": "A02",
+      "metodoOriginal": "Revisión de la configuración y pedido desde otro origen.",
+      "estado": "Pasa",
+      "fuentes": "configurar-app.spec.ts:75; configurar-app.ts:87",
+      "evaluacion": "Prueba HTTP ejecutada: origen ajeno no recibe Access-Control-Allow-Origin. Allowlist explícita y credentials=true sin wildcard."
+    },
+    {
+      "id": "CFG04",
+      "area": "Configuración",
+      "criterio": "Swagger y los endpoints de depuración están disponibles sólo en desarrollo. En producción responden 404.",
+      "referencia": "A02",
+      "metodoOriginal": "Prueba manual contra el entorno de producción.",
+      "estado": "Pasa",
+      "fuentes": "configurar-app.spec.ts:83,93; configurar-app.ts:105",
+      "evaluacion": "Pruebas ejecutadas: Swagger disponible en desarrollo y /docs 404 bajo configuración production. Evidencia local, no comprobación del hosting."
+    },
+    {
+      "id": "CFG05",
+      "area": "Configuración",
+      "criterio": "Dado un pedido por HTTP, cuando llega al sitio, entonces recibe una redirección 301 a HTTPS.",
+      "referencia": "A02, A04",
+      "metodoOriginal": "curl -I a la dirección con http://.",
+      "estado": "Pendiente",
+      "fuentes": "Entorno desplegado",
+      "evaluacion": "Escaneos locales fueron HTTP. Falta petición al dominio publicado que demuestre redirección 301 a HTTPS."
+    },
+    {
+      "id": "CFG06",
+      "area": "Configuración",
+      "criterio": "Ninguna clave ni contraseña está en el repositorio, y la clave de servicio de Supabase sólo la usa el backend: no aparece en el código que llega al navegador.",
+      "referencia": "A02, A03",
+      "metodoOriginal": "Escaneo de secretos del repositorio y revisión del código compilado del front.",
+      "estado": "Pendiente",
+      "fuentes": "docs/seguridad-dependencias.md; .github/workflows",
+      "evaluacion": "Falta escaneo de secretos e inspección de bundle del front en esta revisión. DEF-09 omitido por decisión del usuario no equivale a corregido."
+    },
+    {
+      "id": "CFG07",
+      "area": "Configuración",
+      "criterio": "Las dependencias no tienen vulnerabilidades críticas ni altas abiertas.",
+      "referencia": "A03",
+      "metodoOriginal": "Resultado de pnpm audit.",
+      "estado": "Pasa",
+      "fuentes": "docs/seguridad-dependencias.md",
+      "evaluacion": "pnpm audit --prod del 05/11 (tarde): 0 críticas y 0 altas, 9 moderadas. Overrides de proxy-addr, body-parser, multer y brace-expansion; shadcn pasó a desarrollo. En desarrollo queda zod 3 en la CLI de shadcn, aceptado: no se publica."
+    },
+    {
+      "id": "CFG08",
+      "area": "Configuración",
+      "criterio": "Las respuestas no revelan la tecnología del servidor: no llevan los headers X-Powered-By ni Server con la versión.",
+      "referencia": "A02",
+      "metodoOriginal": "Inspección de headers de la respuesta.",
+      "estado": "Pendiente",
+      "fuentes": "configurar-app.spec.ts:42; frontend/next.config.ts:21",
+      "evaluacion": "Backend prueba ausencia de Express y frontend desactiva poweredByHeader; falta captura completa front/API/proxy sin Server con versión."
+    },
+    {
+      "id": "CFG09",
+      "area": "Configuración",
+      "criterio": "Las respuestas con datos personales llevan Cache-Control: no-store, así que no quedan en la caché del navegador.",
+      "referencia": "A02",
+      "metodoOriginal": "Inspección de headers y prueba con el botón Atrás después de cerrar sesión.",
+      "estado": "Pendiente",
+      "fuentes": "configurar-app.ts:52; frontend/acceptance/csp.e2e.ts:21",
+      "evaluacion": "no-store configurado y probado en HTML; falta botón Atrás tras logout y verificación de respuestas con datos personales."
+    },
+    {
+      "id": "CFG10",
+      "area": "Configuración",
+      "criterio": "El secreto del JWT es aleatorio y de al menos 32 caracteres, y los secretos de producción son distintos a los de desarrollo.",
+      "referencia": "A02, A04",
+      "metodoOriginal": "Revisión de los archivos de entorno de cada ambiente.",
+      "estado": "Pendiente",
+      "fuentes": "auth/auth.module.ts",
+      "evaluacion": "Se exige JWT_SECRET para arrancar; no acredita aleatoriedad, longitud ni separación de ambientes. Falta verificación sin publicar secretos."
+    },
+    {
+      "id": "CFG11",
+      "area": "Configuración",
+      "criterio": "Los puertos de la base y del broker no aceptan conexiones sin credenciales, y la base sólo se usa desde el backend.",
+      "referencia": "A02",
+      "metodoOriginal": "Prueba de conexión sin credenciales y revisión de la configuración del proveedor.",
+      "estado": "Pendiente",
+      "fuentes": "docker-compose.yml; Proveedores",
+      "evaluacion": "Falta prueba negativa sin credenciales y revisión de exposición/red del despliegue. Contenedores locales no prueban restricciones de proveedores."
+    },
+    {
+      "id": "CFG12",
+      "area": "Configuración",
+      "criterio": "Las dependencias están fijadas con el archivo de bloqueo (pnpm-lock) y la instalación usa --frozen-lockfile.",
+      "referencia": "A03",
+      "metodoOriginal": "Revisión del repositorio y de los comandos de instalación.",
+      "estado": "Pasa",
+      "fuentes": "pnpm-lock.yaml; .github/workflows/ci.yml:62; apps/backend/Dockerfile:23; apps/frontend/Dockerfile:25",
+      "evaluacion": "Lockfile versionado y comandos de CI y Docker usan pnpm install --frozen-lockfile. Verificación estática del requisito, sin afirmar CI ejecutado."
+    },
+    {
+      "id": "CFG13",
+      "area": "Configuración",
+      "criterio": "Dada la clave pública (anon) de Supabase, cuando se consulta directo la API de Supabase, entonces ninguna tabla devuelve datos (RLS activa o acceso cerrado).",
+      "referencia": "A01, A02",
+      "metodoOriginal": "Pedido con curl a la API de Supabase usando la clave pública.",
+      "estado": "Pendiente",
+      "fuentes": "Supabase / RLS",
+      "evaluacion": "No se consultó API anon ni se inspeccionaron políticas del proyecto real. Falta prueba de lectura directa sin filas accesibles."
+    },
+    {
+      "id": "NEG01",
+      "area": "Reglas de negocio",
+      "criterio": "Dado un recurso en un estado que no lo permite (emitir una liquidación sin previsualizar, cancelar una reserva que ya empezó), cuando se intenta la acción, entonces la API la rechaza y el estado no cambia.",
+      "referencia": "A06",
+      "metodoOriginal": "Test automático de las transiciones de cada módulo.",
+      "estado": "Pendiente",
+      "fuentes": "expensas/estado-liquidacion.spec.ts; reservas/reservas.service.spec.ts",
+      "evaluacion": "Transiciones de liquidación y plazo de cancelación tienen pruebas; falta conjunto exacto de estados y comprobar persistencia sin cambios."
+    },
+    {
+      "id": "NEG02",
+      "area": "Reglas de negocio",
+      "criterio": "Dado un voto, cuando la votación está cerrada, la unidad ya votó, no está en el padrón o tiene expensas vencidas, entonces la API lo rechaza y el conteo no cambia.",
+      "referencia": "A06, API6",
+      "metodoOriginal": "Test automático y prueba manual con una unidad con deuda.",
+      "estado": "Pendiente",
+      "fuentes": "votaciones/votaciones.service.spec.ts:426,436,461,496",
+      "evaluacion": "Pruebas de deuda, padrón y duplicación ejecutadas; falta consolidar votación cerrada y conteo inalterado en todos los rechazos."
+    },
+    {
+      "id": "NEG03",
+      "area": "Reglas de negocio",
+      "criterio": "Dada una votación cerrada, cuando alguien intenta cambiar un voto o reabrirla, entonces la API lo rechaza y el resultado publicado no cambia.",
+      "referencia": "A06, A08",
+      "metodoOriginal": "Test automático y prueba manual.",
+      "estado": "Pendiente",
+      "fuentes": "votaciones/votaciones.service.spec.ts:336; votaciones/votaciones.service.ts",
+      "evaluacion": "Sólo edición en borrador probada; falta intentar modificar voto y reabrir votación cerrada, comparando resultado publicado."
+    },
+    {
+      "id": "NEG04",
+      "area": "Reglas de negocio",
+      "criterio": "Dada una liquidación emitida, cuando se intenta editar sus gastos o sus boletas, entonces la API lo rechaza. Las correcciones van como ajuste en la liquidación siguiente.",
+      "referencia": "A06, A08",
+      "metodoOriginal": "Test automático de la liquidación.",
+      "estado": "Pendiente",
+      "fuentes": "expensas/estado-liquidacion.spec.ts:62,69; expensas/expensas.service.spec.ts",
+      "evaluacion": "Pruebas del autómata limitan edición y ajustes; falta demostrar por endpoints gastos/boletas emitidos inmutables y ajuste siguiente."
+    },
+    {
+      "id": "NEG05",
+      "area": "Reglas de negocio",
+      "criterio": "Dados dos pedidos simultáneos por el último lugar de un amenity, cuando llegan juntos, entonces sólo uno se confirma y el otro se rechaza.",
+      "referencia": "A06",
+      "metodoOriginal": "Test de concurrencia o dos pedidos en paralelo desde Postman.",
+      "estado": "Pendiente",
+      "fuentes": "reservas/reservas.service.spec.ts:199",
+      "evaluacion": "Prueba de cupos existente hace llamadas secuenciales. No demuestra carrera real: faltan dos pedidos simultáneos por el último lugar contra DB."
+    },
+    {
+      "id": "DIS01",
+      "area": "Resiliencia",
+      "criterio": "Dado un mismo usuario que repite pedidos en endpoints costosos (subir archivos, crear reclamos, exportar), cuando supera el límite, entonces la API responde 429.",
+      "referencia": "API4, API6",
+      "metodoOriginal": "Prueba manual repitiendo pedidos con un script.",
+      "estado": "Falla",
+      "fuentes": "archivos/archivos.controller.ts; reclamos/reclamos.controller.ts; expensas/expensas.controller.ts; auth/limitador-login.ts",
+      "evaluacion": "Sólo se encontró limitador de login; no hay límite por usuario para subida, creación de reclamo y exportación exigidos por este criterio."
+    },
+    {
+      "id": "DIS02",
+      "area": "Resiliencia",
+      "criterio": "Dado un servicio externo (Mercado Pago, mail o almacenamiento) que no responde, cuando se llama, entonces el pedido corta por timeout, devuelve un error controlado y no deja hilos colgados.",
+      "referencia": "A10",
+      "metodoOriginal": "Prueba manual con el adaptador apuntando a una dirección sin respuesta.",
+      "estado": "Pendiente",
+      "fuentes": "acceptance/http.test.cjs:193; email/mailer.client.spec.ts; archivos/archivos.client.ts",
+      "evaluacion": "Timeouts de proveedores y cancelación tienen evidencia parcial; falta cubrir conjuntamente mail y Storage sin respuestas pendientes y error controlado."
+    }
+  ]
+}

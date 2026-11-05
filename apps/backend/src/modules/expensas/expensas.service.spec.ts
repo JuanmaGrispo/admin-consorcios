@@ -1,3 +1,4 @@
+import type { EventoDomus } from '../../core/mensajeria/eventos';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
@@ -123,7 +124,9 @@ function crearEntorno() {
       ),
     hoy: async () => db.hoy,
     contarBoletas: async (id: string) => db.boletas.get(id)?.length ?? 0,
-    reemplazarBoletas: async (id: string, b: BoletaCalculada[], estado: EstadoLiquidacion) => {
+    reemplazarBoletas: async (id: string, b: BoletaCalculada[], estado: EstadoLiquidacion, eventos: EventoDomus[] = [], datos: Partial<Liquidacion> = {}) => {
+      Object.assign(liq(id)!, datos);
+      for (const e of eventos) publicados.push([e.tipo_evento, e.consorcio_id, e.payload]);
       db.boletas.set(id, b);
       liq(id)!.estado = estado;
     },

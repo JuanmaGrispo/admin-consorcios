@@ -1,0 +1,21 @@
+# Modo del grupo: backend contra la base compartida de Supabase y los servicios
+# reales (CloudAMQP, Mailtrap, Mercado Pago de prueba) configurados en
+# apps/backend/.env. Se usa encima del compose principal:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.supabase.yml up --build
+#
+# Sin este archivo, `docker compose up` levanta todo local y no toca Supabase.
+services:
+  backend:
+    env_file: apps/backend/.env
+    command: ['node', 'dist/main.js']
+    environment: !override
+      PORT: 4000
+      NODE_ENV: ${NODE_ENV:-development}
+    volumes: !reset []
+    depends_on: !reset {}
+
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_STORAGE_URL: ${NEXT_PUBLIC_STORAGE_URL:-}
