@@ -16,7 +16,7 @@ const compose = ['compose', '-f', path.join(__dirname, 'compose.yml')];
 const aleatorio = () => randomBytes(24).toString('hex');
 const env = { ...process.env, ACEPTACION_DB_USUARIO: 'aceptacion', ACEPTACION_DB_PASSWORD: aleatorio(),
   ACEPTACION_MQ_USUARIO: 'aceptacion', ACEPTACION_MQ_PASSWORD: aleatorio(), ACEPTACION_ERLANG_COOKIE: aleatorio(),
-  NODE_ENV: 'test', PORT: '4400', DB_SSL: 'false', DB_POOL_MAX: process.env.DB_POOL_MAX || '30', JWT_SECRET: aleatorio(), API_GLOBAL_PREFIX: '/api',
+  NODE_ENV: 'test', PORT: '4400', DB_SSL: 'false', DB_POOL_MAX: process.env.DB_POOL_MAX || '10', JWT_SECRET: aleatorio(), API_GLOBAL_PREFIX: '/api',
   CORS_ORIGINS: 'http://127.0.0.1:3300', MP_NOTIFICATION_URL: '', FRONTEND_URL: 'http://127.0.0.1:3300',
   MP_ACCESS_TOKEN: '', MP_WEBHOOK_SECRET: '', SUPABASE_URL: 'http://127.0.0.1:1', SUPABASE_SERVICE_ROLE_KEY: '',
   SEED_PASSWORD: aleatorio(), ACEPTACION_ESCRITURA: 'SI',
