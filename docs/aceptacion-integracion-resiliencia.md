@@ -8,6 +8,10 @@ todavía no hay evidencia
 de ejecución de esa versión en GitHub Actions. Los resultados históricos de
 abajo no sustituyen este estado actual.
 
+Actualización al 05/11/2026: C9 se cumplió en dos corridas completas de cinco
+minutos, con el pool de conexiones en 10 y en 30. Ver «Medición con pool
+configurable» al final. Sigue pendiente acreditarlo en GitHub Actions.
+
 La matriz y las primeras ejecuciones conservan el diagnóstico original. La
 sección «Correcciones» al final describe el estado posterior; no confundir
 pruebas de componente aprobadas con aceptación integral del sistema.
@@ -517,3 +521,39 @@ La documentación y el código quedan cerrados para revisión, con estas dos
 verificaciones pendientes explícitas: aprobar C9 con una medición real y obtener
 la evidencia de GitHub Actions sobre un tag que contenga los cambios. Se mantiene
 CI solo por tags `v*`, SOAP excluido y conciliación manual de SMTP aceptada.
+
+## Medición con pool configurable — 05/11/2026
+
+El backend ahora toma el tamaño del pool de conexiones de `DB_POOL_MAX`
+(PR #30). Sin la variable sigue en 10, el default del driver. El runner de
+aceptación la pasa al contenedor del backend y usa 30 si no se define otra.
+
+Se corrió `node acceptance/ejecutar-integral.cjs --solo-carga --carga` dos veces
+seguidas sobre el commit `8438470`, sin cambios locales: primero con
+`DB_POOL_MAX=10` y después con `DB_POOL_MAX=30`. Docker Desktop con 12 CPUs y
+16 GB en el host, sin otros contenedores activos; PostgreSQL 17.11. Mismo
+dataset, recorrido, calentamiento y umbrales que las corridas anteriores.
+
+La regresión puntual previa aprobó 4/4 en las dos corridas. Incluye las dos
+pruebas que habían quedado preparadas sin ejecutar: revocación de sesión con el
+mismo JWT y espera acotada del bloqueo con Retry-After.
+
+| Endpoint | Pool 10: p95 | Pool 30: p95 | Umbral < 500 ms |
+|---|---:|---:|---|
+| GET /boletas | 253,01 ms | 223,48 ms | Aprobado en las dos |
+| GET /boletas/:id | 200,09 ms | 192,95 ms | Aprobado en las dos |
+| POST /reclamos | 331,89 ms | 445,96 ms | Aprobado en las dos |
+
+Con pool 10 hubo 11.724 muestras por endpoint y con pool 30, 10.869; las dos con
+0 % de errores HTTP y 100 % de checks. k6 terminó con código 0, así que el job
+integral no falla por la carga en este entorno.
+
+Lectura de los resultados: la mejora respecto del 03/11 se explica sobre todo
+por el entorno (12 CPUs libres contra 8 compartidas), no por el pool. Subir a
+30 conexiones mejoró poco las lecturas y empeoró el alta de reclamos, que pasó
+de 332 a 446 ms con la mediana duplicada: más escrituras simultáneas compiten
+en la base. Con estos datos, 10 es la mejor configuración medida.
+
+Pendiente: el runner de GitHub tiene 4 CPUs, menos que los dos entornos
+medidos. C9 queda acreditado en local; falta la ejecución del CI sobre un tag
+para confirmarlo allí.
