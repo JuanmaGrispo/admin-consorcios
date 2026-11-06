@@ -33,16 +33,17 @@ La primera vez tarda unos minutos en construir las imágenes. Levanta, todo en c
 | `frontend` | Next.js | http://localhost:3000 |
 | `backend` | NestJS (Swagger en `/docs`) | http://localhost:4000/api |
 | `postgres` | PostgreSQL 17 con el esquema, las migraciones y los datos de demo | interno |
-| `rabbitmq` | Broker de mensajería | panel en http://localhost:15672 (`domus` / `domus`) |
+| `rabbitmq` | Broker de mensajería | panel en http://localhost:15672 |
 | `simuladores` | Mercado Pago, Storage y SMTP simulados | mails enviados en http://localhost:4010/correos |
 | `inicializador` | Prepara la base y los secretos locales, y termina | — |
 
-**Entrar.** La contraseña de las cuentas de demo se genera al azar la primera vez (no está en el repo). Se ve con:
+**Entrar.** El entorno local genera cuentas de demostración durante la inicialización. Los datos de acceso se consultan con:
 
 ```bash
 docker compose logs inicializador
 ```
 
+Para acceder al entorno compartido, solicitar acceso al equipo.
 
 | Para… | Comando |
 |---|---|
@@ -73,7 +74,7 @@ En `apps/backend/.env` hay que completar dos variables, el resto es opcional:
 |---|---|---|
 | `DATABASE_URL` | Sí | Supabase → Connect → URI del **Session pooler** (puerto 5432). Ver [Base de datos](#base-de-datos) |
 | `JWT_SECRET` | Sí | Uno propio: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` |
-| `SEED_PASSWORD` | Para el seed | La password de las cuentas de demo: pedírsela al grupo |
+| `SEED_PASSWORD` | Para el seed | Configuración privada del seed; ver `.env.example` |
 | `RABBITMQ_URL`, `SMTP_*`, `MP_*`, `SUPABASE_*` | No | Sin ellas, mails, pagos online y archivos quedan apagados y el resto anda igual |
 
 El `.env` está en el `.gitignore`: nunca se commitea. Con Docker:
@@ -1426,18 +1427,3 @@ pnpm back db:seed-demo --aplicar
 Es idempotente: conserva las filas existentes y no publica eventos ni envía correos.
 Si encuentra unidades ajenas al demo, otro administrador o una liquidación
 ajena al seed en ese período, aborta y revierte toda la carga.
-
-Para agregar un consorcio independiente por integrante, pasar `--personas`
-con un archivo JSON local (la clave debe ser única, de 1 a 7 letras minúsculas,
-números o guiones; el email de demo debe ser único y terminar en `@domus.test`):
-
-```json
-[{ "clave": "nacho", "nombre": "Ignacio", "apellido": "Alcaraz", "email": "admin.nacho@domus.test" }]
-```
-
-```bash
-pnpm back db:seed-demo --personas ./personas.local.json
-pnpm back db:seed-demo --personas ./personas.local.json --aplicar
-pnpm back db:seed-demo --personas ./personas.local.json --verificar
-```
-
