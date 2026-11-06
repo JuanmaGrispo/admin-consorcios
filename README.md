@@ -43,13 +43,6 @@ La primera vez tarda unos minutos en construir las imágenes. Levanta, todo en c
 docker compose logs inicializador
 ```
 
-| Cuenta | Rol |
-|---|---|
-| `super@domus.test` | Superadministrador |
-| `admin@domus.test` | Administrador |
-| `vecino@domus.test` | Vecino |
-
-**Pagar una boleta.** "Pagar ahora" abre el checkout simulado de Mercado Pago, con un botón para aprobar y otro para simular una tarjeta rechazada. Al volver, la boleta queda pagada o rechazada. No se cobra nada.
 
 | Para… | Comando |
 |---|---|
@@ -105,24 +98,6 @@ pnpm dev             # backend (:4000) y frontend (:3000) juntos, con recarga
 
 Atajos: `pnpm back <script>` y `pnpm front <script>` corren scripts de cada app
 (ej: `pnpm back dev`, `pnpm front build`).
-
-### Entrar
-
-Abrir http://localhost:3000 y loguearse con una de las
-[cuentas de demo](#datos-de-demo) (`admin@domus.test` como administrador,
-`vecino@domus.test` como vecino). Con el compose local, la password sale de
-`docker compose logs inicializador`; contra Supabase, es la de `SEED_PASSWORD`. Para crear
-un usuario propio: `pnpm back usuario:crear` (ver
-[Crear el primer usuario](#crear-el-primer-usuario)).
-
-### Si algo falla
-
-| Síntoma | Causa probable |
-|---|---|
-| `Unable to connect to the database` | `DATABASE_URL` mal copiada, password sin url-encodear o puerto 6543 (usar el 5432 del Session pooler) |
-| El front carga pero el login no responde | El backend no levantó: `docker compose logs backend` |
-| `port is already allocated` / `EADDRINUSE` | Ya hay algo en el 3000 o el 4000 (¿un `pnpm dev` abierto?) |
-| Cambié código y en Docker no se ve | Falta `--build` |
 
 ## Arquitectura del backend
 
@@ -1092,18 +1067,6 @@ no corresponde, y hace que cada pantalla pueda confiar en lo que va a recibir.
 En Supabase → Storage, crear un bucket llamado `domus` y marcarlo **público**.
 Después, las tres variables de `.env.example`: `SUPABASE_URL`,
 `SUPABASE_SERVICE_ROLE_KEY` y `SUPABASE_STORAGE_BUCKET`.
-
-### Pendiente
-
-- **El bucket es público.** Cualquiera con la URL ve el archivo, y la foto del
-  baño de un vecino es información suya. Hoy lo que protege es que la URL lleva
-  un uuid y no se puede adivinar, que es lo que se banca el esquema actual:
-  las columnas de la base se llaman `url` y guardan una URL. Hacerlo bien es
-  bucket privado y URLs firmadas al leer, pero eso implica guardar la **ruta**
-  en vez de la URL y tocar todos los módulos que hoy leen esas columnas. Por
-  eso la subida ya devuelve `ruta` además de `url`: el día que se haga el
-  cambio, el dato está.
-
 ## Inicio del vecino
 
 `GET /inicio` (sólo rol `VECINO`) arma de una sola vez lo que la app necesita
@@ -1478,23 +1441,3 @@ pnpm back db:seed-demo --personas ./personas.local.json --aplicar
 pnpm back db:seed-demo --personas ./personas.local.json --verificar
 ```
 
-Cada persona recibe el consorcio `Demo <clave>` y 48 vecinos con email
-`vecino+<clave>-<numero>@domus.test` (numerados por piso de 1º A a 12º D).
-El edificio original y sus cuentas se mantienen para las pruebas comunes.
-`--verificar` repite la carga en la misma transacción y comprueba que no se
-dupliquen filas; sin `--aplicar` también revierte toda la prueba.
-
-| Usuario             | Rol           | Unidad |
-|---------------------|---------------|--------|
-| `admin@domus.test`  | ADMINISTRADOR | —      |
-| `vecino@domus.test` | VECINO        | 3º B   |
-| `vecina2@domus.test`| VECINO        | 6º B   |
-| `vecino3@domus.test`| VECINO        | 2º A   |
-
-La password de todos es la de `SEED_PASSWORD` en `apps/backend/.env` (pedísela
-al grupo; no va en el repo). Sin esa variable el seed no corre.
-
-Además del seed existe `superadmin@domus.app` (rol `SUPER_ADMIN`, misma
-password), creado por CLI para el panel de la plataforma. También hay un
-administrador de prueba sin consorcio, `julian.sosa@domus.test`, útil para
-probar la asignación.
