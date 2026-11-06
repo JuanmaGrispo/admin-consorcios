@@ -2,7 +2,7 @@
 
 > Alcance funcional e integraciones previstas, escrito antes de arrancar el
 > código. Si algo de acá choca con [CLAUDE.md](../CLAUDE.md) o el
-> [README](../README.md), mandan esos: describen cómo está hecho hoy.
+> [referencia técnica](referencia-tecnica.md), mandan esos: describen cómo está hecho hoy.
 
 ## Qué es este proyecto
 

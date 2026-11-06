@@ -4,7 +4,8 @@ Sistema de administración de consorcios. TP de Desarrollo de Aplicaciones 2
 (UADE). Monorepo pnpm: `apps/backend` (NestJS 11 + TypeORM + Postgres en
 Supabase) y `apps/frontend` (Next.js 16 + shadcn/ui + Tailwind 4).
 
-El README tiene el arranque, la arquitectura y el detalle de cada módulo. Este
+El README tiene el arranque y un resumen de arquitectura; el detalle de cada
+módulo está en `docs/referencia-tecnica.md`. Este
 archivo tiene las reglas que no se negocian y que un agente o un compañero
 nuevo tiene que saber antes de tocar código.
 
@@ -35,7 +36,8 @@ nuevo tiene que saber antes de tocar código.
 
 | Archivo | Qué tiene |
 |---|---|
-| [README.md](README.md) | Arranque, base de datos, auth y detalle de cada módulo |
+| [README.md](README.md) | Arranque, comandos y resumen de arquitectura |
+| [docs/referencia-tecnica.md](docs/referencia-tecnica.md) | Base de datos, auth y detalle de cada módulo |
 | [apps/frontend/AGENTS.md](apps/frontend/AGENTS.md) | Reglas de UI |
 | [docs/producto.md](docs/producto.md) | Visión del producto: funcionalidades, roles, integraciones y flujos |
 | [docs/diseno-front.html](docs/diseno-front.html) | Prototipo visual del front: pantallas y flujos a implementar |
