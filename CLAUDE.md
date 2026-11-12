@@ -43,6 +43,7 @@ nuevo tiene que saber antes de tocar código.
 | [docs/diseno-front.html](docs/diseno-front.html) | Prototipo visual del front: pantallas y flujos a implementar |
 | [docs/mensajeria.md](docs/mensajeria.md) | Diseño de notificaciones pub/sub con RabbitMQ: eventos, bindings, sobre del mensaje |
 | [docs/integracion-arca.md](docs/integracion-arca.md) | Diseño de la verificación de CUIT contra ARCA (SOAP): contratos, eventos, sync/async, timeouts |
+| [docs/asistente-ia.md](docs/asistente-ia.md) | Gobernanza del asistente de ayuda con IA: ficha, datos, apagado, riesgos y eval set |
 ## Frontend
 
 Todo lo de UI está en [apps/frontend/CLAUDE.md](apps/frontend/CLAUDE.md):
