@@ -1309,6 +1309,133 @@ no importa quién procese cada mensaje.
   guardada, todo está habilitado. WhatsApp y push se guardan pero todavía no
   envían nada (`disponible: false`).
 
+## Asistente de ayuda
+
+Domot, un botón flotante con un robot, abre un chat que responde cómo usar
+Domus con el manual de usuario. **Sólo guía**: explica a qué pantalla ir y qué tocar, y sus
+botones únicamente navegan. No crea, paga, reserva ni completa nada. Lo usan
+el vecino y el administrador: el botón arranca abajo a la derecha y se puede
+arrastrar si tapa algo (la posición queda en el navegador);
+el superadministrador lo prende, lo apaga y mira sus métricas en
+`/asistente` del panel de la plataforma. La gobernanza (datos, apagado,
+riesgos) está en [asistente-ia.md](asistente-ia.md).
+
+```
+AsistenteController   DTO, @Roles
+  └─ AsistenteService  interruptor, límite por usuario, disyuntor, tope diario, registro
+       ├─ politica.ts          puras: redacción de datos personales, rutas por rol, validación del JSON
+       ├─ HerramientasAsistente  lectura con el usuario del token (EstadoCuenta, Reclamos, Reservas)
+       ├─ AIGateway ─ OpenAIClient     OpenAI con el manual en caché, herramientas y salida estructurada
+       ├─ ManualClient                 respaldo sin IA: busca la sección por palabras clave
+       └─ AsistenteRepository          asistente_interaccion, asistente_feedback, configuracion_plataforma
+```
+
+### Endpoints
+
+| Método | Ruta                      | Quién |
+|--------|---------------------------|-------|
+| GET    | `/asistente/estado`       | cualquiera con sesión: `{ habilitado }`, para mostrar o no el botón |
+| POST   | `/asistente/preguntas`    | vecino y administrador: `{ pregunta, conversacion_id?, pantalla? }` |
+| POST   | `/asistente/preguntas/stream` | lo mismo, con la respuesta a medida que se escribe (Server-Sent Events: `texto` con cada pedazo, `fin` con la respuesta validada, `error`) |
+| POST   | `/asistente/feedback`     | vecino y administrador: `{ interaccion_id, util, comentario? }`, sólo sobre respuestas propias |
+| PUT    | `/asistente/habilitado`   | superadmin: `{ habilitado }` |
+| GET    | `/asistente/metricas`     | superadmin: uso, costo, latencia, feedback y motivos de respaldo de los últimos `dias` |
+
+La respuesta de una pregunta:
+
+```json
+{
+  "interaccion_id": "…", "conversacion_id": "…",
+  "respuesta": "Andá a **Expensas** y tocá **Pagar**…",
+  "fuentes": [{ "seccion": "Cómo pagar las expensas con Mercado Pago", "ancla": "pagar-expensa" }],
+  "acciones": [{ "tipo": "IR_A", "etiqueta": "Ir a Expensas", "ruta": "/vecino/expensas" }],
+  "datos_consultados": ["consultar_saldo"],
+  "confianza": "alta", "derivar_a_humano": false, "origen": "llm"
+}
+```
+
+`origen` es `llm` (el modelo de OpenAI), `manual` (el respaldo) o `rechazo` (el modelo se
+negó). Errores: 400 si el DTO no valida, 403 al superadmin, 429 con más de 10
+preguntas por minuto o 100 por día, 503 si está apagado.
+
+### Reglas
+
+- **El manual es la fuente.** `modules/asistente/manual/*.md`, una sección por
+  título `## Título {#ancla}`. El vecino recibe `comun.md` + `vecino.md`; el
+  administrador, `comun.md` + `administrador.md`. Viajan al build como assets
+  (`nest-cli.json`). Si cambia la app, se cambia el manual y se corre el eval.
+- **Lo que dice el modelo se valida** (`validarRespuesta`): sin la forma del
+  contrato, responde el manual; las fuentes que no son anclas del manual del
+  rol y las acciones a rutas que el rol no tiene se descartan, y la etiqueta
+  del botón la pone el servidor. Sin fuentes, la confianza no puede ser alta.
+- **Herramientas de sólo lectura**: `consultar_saldo`, `mis_reclamos`,
+  `mis_reservas` y `disponibilidad_amenity` (vecino); `deuda_antigua` y
+  `disponibilidad_amenity` (administrador). Ninguna recibe un id: usan el
+  usuario del token y el alcance de siempre, así que el modelo no tiene cómo
+  pedir datos ajenos. Devuelven lo justo, sin ids ni datos de contacto, entre
+  delimitadores fijos y con los datos personales tapados. Como mucho tres por
+  pregunta.
+- **Datos personales**: email, DNI, CUIT, teléfono y CBU se tapan en la
+  pregunta antes de mandarla y de guardarla.
+- **OpenAI** (Responses API): `gpt-5.4-mini` por defecto (`ASISTENTE_MODELO`;
+  `gpt-5.4-nano` es más barato pero falla más casos del eval), razonamiento `low`, instrucciones y
+  manual siempre iguales al principio para que el proveedor los cachee, salida
+  JSON estricta con las anclas y rutas del rol como `enum`, 15 s de tope para
+  toda la pregunta y un reintento. `store: false`: OpenAI no guarda las
+  conversaciones. Con cada pregunta va la fecha y el alcance del usuario (sus
+  unidades o los consorcios que administra), para que sepa qué es ajeno.
+- **El título de cada fuente lo pone el servidor** desde el manual: el modelo
+  elige el ancla, no cómo se llama la sección.
+- **Respaldo**: responde `ManualClient` sin API key, con el disyuntor abierto
+  (5 fallas en las últimas 20 llamadas lo abren 5 minutos), pasado el tope
+  diario (`ASISTENTE_TOPE_DIARIO_USD`, US$ 5 por defecto, sumando `costo_usd`
+  del día de Buenos Aires) o si el modelo falla. Una pregunta siempre tiene
+  respuesta.
+- **Interruptor**: `configuracion_plataforma.asistente_habilitado`, leído con
+  un caché de un minuto. El límite por usuario y el disyuntor viven en
+  memoria, como el límite de login.
+- **Streaming**: el chat usa `/preguntas/stream`. El texto de `respuesta` se
+  va sacando del JSON a medida que llega (`respuesta-parcial.ts`) y se manda
+  en pedazos; lo que vale es el evento `fin`, que pasa por la misma
+  validación. Cuesta lo mismo: se cobran los mismos tokens. Sin razonamiento
+  previo (`ASISTENTE_RAZONAMIENTO=none`) el primer texto aparece en alrededor
+  de un segundo; si consulta datos, un poco más.
+- **Conversación**: con `conversacion_id` se le mandan al modelo los últimos 6
+  turnos del mismo usuario.
+
+### Configurar
+
+`OPENAI_API_KEY`, `ASISTENTE_MODELO` y `ASISTENTE_TOPE_DIARIO_USD` en
+`apps/backend/.env` (ver `.env.example`). Sin key el asistente anda igual,
+sólo con el manual. La key sale de platform.openai.com y se paga con crédito
+prepago, aparte de ChatGPT Plus: conviene apagar el auto-recharge.
+
+### Eval set
+
+`pnpm back asistente:eval` corre los 20 casos de la Clase 14 contra el modelo
+real, 3 veces cada uno, con chequeos automáticos (contrato, fuentes, rutas,
+herramienta esperada, montos de otras unidades, la cuenta inyectada) y
+`gpt-5.4-mini` como juez (`--juez` para otro). Imprime las métricas de la sección 3.4 y sale con 1 si
+falla una bloqueante. Usa el seed de demo; `--sembrar` carga antes el reclamo
+con la instrucción incrustada de IA17 (sólo en una base local),
+`--casos IA01,IA15` y `--corridas 1` acotan la corrida, `ASISTENTE_MODELO`
+elige el modelo a evaluar y `--detalle` imprime las respuestas que fallaron.
+Es manual: cuesta plata (menos de US$ 1 con 3 corridas) y no está en el CI.
+
+### Tests
+
+`asistente.service.spec.ts` cubre los cinco casos de la sección 6 con un
+gateway simulado (respuesta válida, timeout, JSON inválido, ruta inventada y
+disyuntor), más el tope, el interruptor, el límite y la redacción. `politica`,
+`manual`, `herramientas`, `disyuntor` y `limitador-asistente` tienen los suyos.
+
+### Pendiente
+
+- La retención de 30 y 90 días de la política de datos: hoy las interacciones
+  se borran sólo con la cuenta.
+- Avisarle al superadmin cuando se llega al tope diario (hoy se ve en
+  `/asistente`).
+
 ## Datos de demo
 
 ```bash

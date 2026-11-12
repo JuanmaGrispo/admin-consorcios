@@ -45,6 +45,49 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
+ * Un POST que responde con Server-Sent Events: llama a `onEvento` con cada
+ * evento a medida que llega. Va por fetch y no por EventSource porque
+ * EventSource sólo hace GET y no manda body. Un error antes de empezar llega
+ * como un error HTTP común (ApiError).
+ */
+export async function eventos(
+  path: string,
+  body: unknown,
+  onEvento: (evento: string, datos: unknown) => void,
+): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok || !res.body) throw await errorDe(res);
+
+  const lector = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let pendiente = '';
+  let terminado = false;
+  try {
+    for (;;) {
+      const { value, done } = await lector.read();
+      terminado = done;
+      if (done) break;
+      pendiente += value;
+      // Cada evento termina en una línea vacía; el último puede estar a medias.
+      const bloques = pendiente.split('\n\n');
+      pendiente = bloques.pop() ?? '';
+      for (const bloque of bloques) {
+        const evento = /^event: (.*)$/m.exec(bloque)?.[1] ?? 'message';
+        const datos = /^data: (.*)$/m.exec(bloque)?.[1];
+        if (datos !== undefined) onEvento(evento, JSON.parse(datos));
+      }
+    }
+  } finally {
+    // Si `onEvento` tiró, se corta la conexión en vez de dejarla abierta.
+    if (!terminado) await lector.cancel().catch(() => undefined);
+  }
+}
+
+/**
  * Arma el query string sin los valores vacíos: `{ estado: undefined, pagina: 2 }`
  * → `?pagina=2`. Para los filtros de los listados.
  */
