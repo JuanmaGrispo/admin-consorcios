@@ -3,6 +3,6 @@ import { IsUrl } from 'class-validator';
 
 export class CargarActaDto {
   @ApiProperty({ description: 'La URL que devolvió POST /archivos?destino=actas' })
-  @IsUrl()
+  @IsUrl({ require_tld: false })
   actaUrl: string;
 }

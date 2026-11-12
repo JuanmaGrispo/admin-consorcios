@@ -18,7 +18,7 @@ import { PrioridadReclamo } from '../../../database/entities';
 
 export class AdjuntoDto {
   @ApiProperty({ description: 'La URL que devolvió POST /archivos?destino=reclamos' })
-  @IsUrl({ require_protocol: true }, { message: 'La url del adjunto no es válida' })
+  @IsUrl({ require_protocol: true, require_tld: false }, { message: 'La url del adjunto no es válida' })
   url: string;
 
   @ApiPropertyOptional({ example: 'foto baño 3ºB' })

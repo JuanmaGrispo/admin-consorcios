@@ -70,7 +70,7 @@ export class CreateGastoDto {
 
   @ApiPropertyOptional({ description: 'La URL que devolvió POST /archivos?destino=comprobantes' })
   @IsOptional()
-  @IsUrl()
+  @IsUrl({ require_tld: false })
   comprobanteUrl?: string;
 
   @ApiPropertyOptional({ example: 'A-0001-00012345' })

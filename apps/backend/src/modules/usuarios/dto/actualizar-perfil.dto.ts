@@ -27,6 +27,6 @@ export class ActualizarPerfilDto {
     description: 'La URL que devolvió `POST /archivos?destino=avatares`; `null` lo saca',
   })
   @IsOptional()
-  @IsUrl()
+  @IsUrl({ require_tld: false })
   avatarUrl?: string | null;
 }

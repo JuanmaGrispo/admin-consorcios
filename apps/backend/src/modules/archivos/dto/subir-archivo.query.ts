@@ -15,6 +15,6 @@ export class BorrarArchivoQuery {
   @ApiProperty({ description: 'La URL que devolvió la subida' })
   @IsString()
   @MaxLength(500)
-  @IsUrl({ require_protocol: true }, { message: 'url no es una URL válida' })
+  @IsUrl({ require_protocol: true, require_tld: false }, { message: 'url no es una URL válida' })
   url: string;
 }

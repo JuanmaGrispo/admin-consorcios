@@ -55,7 +55,7 @@ export class CreateVotacionDto {
 
   @ApiPropertyOptional({ description: 'La URL que devolvió POST /archivos?destino=votaciones' })
   @IsOptional()
-  @IsUrl()
+  @IsUrl({ require_tld: false })
   adjuntoUrl?: string | null;
 
   @ApiPropertyOptional({ enum: PadronVotacion, default: PadronVotacion.SOLO_PROPIETARIOS })
