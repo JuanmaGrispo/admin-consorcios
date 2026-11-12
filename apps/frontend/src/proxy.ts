@@ -33,5 +33,5 @@ export default function proxy(request: NextRequest) {
 
 export const config = {
   // Todo salvo assets y archivos estáticos.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.png|logo-domus.png|login-paisaje.jpg).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.png|logo-domus.png|domot.png|login-paisaje.jpg).*)'],
 };

@@ -8,6 +8,7 @@ import { NotificacionesModule } from './core/notificaciones/notificaciones.modul
 import { DatabaseModule } from './database/database.module';
 import { ArchivosModule } from './modules/archivos/archivos.module';
 import { AsambleasModule } from './modules/asambleas/asambleas.module';
+import { AsistenteModule } from './modules/asistente/asistente.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CategoriasReclamoModule } from './modules/categorias-reclamo/categorias-reclamo.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -80,6 +81,8 @@ import { VotacionesModule } from './modules/votaciones/votaciones.module';
     InicioModule,
     // Lo mismo para el panel general del administrador.
     PanelModule,
+    // La ayuda: lee de expensas, reclamos y reservas, nunca escribe en ellos.
+    AsistenteModule,
   ],
   providers: [
     // Guards globales: todo pide token salvo lo marcado con @Public(), y el de

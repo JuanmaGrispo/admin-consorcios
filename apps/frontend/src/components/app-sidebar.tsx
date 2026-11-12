@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, LayoutDashboard, LogOut } from 'lucide-react';
+import { Building2, LayoutDashboard, LogOut, MessageCircleQuestionMark } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -21,7 +21,10 @@ import {
 } from '@/components/ui/sidebar';
 import { useSesion } from './session';
 
-const NAV = [{ href: '/', label: 'Consorcios', icono: Building2 }];
+const NAV = [
+  { href: '/', label: 'Consorcios', icono: Building2 },
+  { href: '/asistente', label: 'Asistente', icono: MessageCircleQuestionMark },
+];
 
 export function AppSidebar() {
   const pathname = usePathname();
