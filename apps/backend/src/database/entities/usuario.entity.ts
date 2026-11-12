@@ -6,6 +6,8 @@ import { RolUsuario } from './enums';
 import { AmenityBloqueo } from './amenity_bloqueo.entity';
 import { Asamblea } from './asamblea.entity';
 import { Asistencia } from './asistencia.entity';
+import { AsistenteInteraccion } from './asistente_interaccion.entity';
+import { ConfiguracionPlataforma } from './configuracion_plataforma.entity';
 import { Consorcio } from './consorcio.entity';
 import { Liquidacion } from './liquidacion.entity';
 import { Notificacion } from './notificacion.entity';
@@ -67,6 +69,12 @@ export class Usuario {
 
   @OneToMany(() => Asistencia, (row) => row.confirmadaPor)
   asistencias?: Asistencia[];
+
+  @OneToMany(() => AsistenteInteraccion, (row) => row.usuario)
+  asistenteInteracciones?: AsistenteInteraccion[];
+
+  @OneToMany(() => ConfiguracionPlataforma, (row) => row.actualizadoPor)
+  configuracionPlataformas?: ConfiguracionPlataforma[];
 
   @OneToMany(() => Consorcio, (row) => row.administrador)
   consorcios?: Consorcio[];
