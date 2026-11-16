@@ -36,6 +36,7 @@ export interface PayloadsEventos {
     reclamo_id: string;
     codigo: string;
     unidad_id: string;
+    /** Quien lo abrió, que puede ser el administrador: el aviso va a los vecinos de `unidad_id`. */
     usuario_id: string;
     categoria: string;
     resolucion: string | null;

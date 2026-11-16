@@ -102,8 +102,15 @@ export class EmailService {
           },
         }));
       }
-      case 'reclamo.cerrado':
-        return this.aUnaPersona(evento.payload.usuario_id);
+      case 'reclamo.cerrado': {
+        // A quienes viven en la unidad, no a quien lo abrió: puede haberlo
+        // cargado la administración.
+        const vecinos = await this.email.vecinosDeUnidades([evento.payload.unidad_id]);
+        return agruparPorEmail(vecinos).map(([destinatario]) => ({
+          destinatario,
+          contexto: { nombre: destinatario.nombre },
+        }));
+      }
       case 'aviso.directo':
         return this.aUnaPersona(evento.payload.destinatario_id);
       default: {
