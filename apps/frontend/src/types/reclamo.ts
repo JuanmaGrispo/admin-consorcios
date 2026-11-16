@@ -1,4 +1,5 @@
 import type { CategoriaReclamo, Proveedor } from './catalogo';
+import type { RolUsuario } from './usuario';
 
 export type EstadoReclamo = 'NUEVO' | 'EN_CURSO' | 'ESPERANDO_PROVEEDOR' | 'RESUELTO';
 export type PrioridadReclamo = 'BAJA' | 'MEDIA' | 'ALTA';
@@ -19,6 +20,8 @@ export interface PersonaReclamo {
   nombre: string;
   apellido: string;
   email?: string;
+  /** Distingue al vecino de la administración: el reclamo también lo puede abrir el administrador. */
+  rol: RolUsuario;
 }
 
 export interface ReclamoAdjunto {

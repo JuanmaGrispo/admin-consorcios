@@ -22,7 +22,7 @@ import { type EstadoReclamo, PRIORIDADES_RECLAMO, type PrioridadReclamo } from '
 import { DialogoAsignarProveedor } from './dialogo-asignar-proveedor';
 import { DialogoCambiarEstado } from './dialogo-cambiar-estado';
 import { FotosAdjuntas } from './fotos-adjuntas';
-import { LineaDeTiempo } from './linea-de-tiempo';
+import { esDelVecino, LineaDeTiempo } from './linea-de-tiempo';
 import { ResponderReclamo } from './responder-reclamo';
 
 const PRIORIDAD: Record<string, string> = { ALTA: 'alta', MEDIA: 'media', BAJA: 'baja' };
@@ -81,7 +81,9 @@ export function DetalleReclamoAdmin({ reclamoId, onCambio }: DetalleReclamoAdmin
   if (!reclamo) return <EsqueletoDetalle />;
 
   const resuelto = reclamo.estado === 'RESUELTO';
-  const autor = `${reclamo.creadoPor.nombre} ${reclamo.creadoPor.apellido}`;
+  const nombre = `${reclamo.creadoPor.nombre} ${reclamo.creadoPor.apellido}`;
+  // Si lo cargó la administración, que no parezca un reclamo del vecino.
+  const autor = esDelVecino(reclamo.creadoPor) ? nombre : `Cargado por la administración (${nombre})`;
   // Los estados a los que se puede mover a mano, además de "resuelto", que tiene su botón.
   const otrosEstados = (['NUEVO', 'EN_CURSO', 'ESPERANDO_PROVEEDOR'] as const).filter(
     (e) => e !== reclamo.estado && (e !== 'ESPERANDO_PROVEEDOR' || reclamo.proveedorId),
