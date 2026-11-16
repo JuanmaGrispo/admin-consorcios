@@ -80,6 +80,29 @@ export class ReclamosRepository {
     return vinculos.map((v) => v.unidadId);
   }
 
+  /**
+   * Los vecinos que hoy viven en la unidad y siguen activos: a ellos van los
+   * avisos del reclamo, lo haya abierto quien lo haya abierto. Son los mismos
+   * que pueden verlo.
+   */
+  async vecinosDeUnidad(unidadId: string): Promise<string[]> {
+    const vinculos = await this.vinculos
+      .createQueryBuilder('v')
+      .innerJoin('v.usuario', 'usuario')
+      .select('v.usuarioId', 'usuarioId')
+      .distinct(true)
+      .where('v.unidadId = :unidadId', { unidadId })
+      .andWhere('usuario.activo')
+      .andWhere(
+        new Brackets((qb) =>
+          qb.where('v.hasta IS NULL').orWhere('v.hasta > CURRENT_DATE'),
+        ),
+      )
+      .getRawMany<{ usuarioId: string }>();
+
+    return vinculos.map((v) => v.usuarioId);
+  }
+
   findUnidad(id: string): Promise<Unidad | null> {
     return this.unidades.createQueryBuilder('u').leftJoinAndSelect('u.consorcio', 'c')
       .where('u.id = :id', { id }).getOne();

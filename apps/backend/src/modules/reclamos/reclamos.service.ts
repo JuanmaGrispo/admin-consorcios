@@ -94,6 +94,10 @@ export class ReclamosService {
       ? (dto.prioridad ?? PrioridadReclamo.MEDIA)
       : PrioridadReclamo.MEDIA;
 
+    // Si lo carga la administración, el aviso es para quienes viven en la
+    // unidad; si lo abre el vecino, es la confirmación para él.
+    const vecinos = esGestor(usuario) ? await this.reclamos.vecinosDeUnidad(unidadId) : [];
+
     const reclamo = await this.reclamos.crear({
       // El consorcio sale de la unidad, no del pedido: son dos columnas que
       // tienen que coincidir y la unidad es la que manda.
@@ -106,12 +110,19 @@ export class ReclamosService {
       prioridad,
       adjuntos: dto.adjuntos ?? [],
     }, clave ? { usuarioId: usuario.id, clave, huella: huellaDe(dto) } : undefined,
-    (creado) => [crearSobre('aviso.directo', null, {
-      destinatario_id: creado.creadoPorId,
-      asunto: `Nuevo reclamo ${creado.codigo}: ${creado.titulo}`,
-      cuerpo: `Se registró el reclamo ${creado.codigo}: ${creado.descripcion}`,
-      origen: `reclamo:${creado.id}`,
-    })]);
+    (creado) => esGestor(usuario)
+      ? vecinos.map((id) => crearSobre('aviso.directo', null, {
+          destinatario_id: id,
+          asunto: `Nuevo reclamo ${creado.codigo}: ${creado.titulo}`,
+          cuerpo: `La administración abrió el reclamo ${creado.codigo} sobre tu unidad: ${creado.descripcion}`,
+          origen: `reclamo:${creado.id}`,
+        }))
+      : [crearSobre('aviso.directo', null, {
+          destinatario_id: creado.creadoPorId,
+          asunto: `Nuevo reclamo ${creado.codigo}: ${creado.titulo}`,
+          cuerpo: `Se registró el reclamo ${creado.codigo}: ${creado.descripcion}`,
+          origen: `reclamo:${creado.id}`,
+        })]);
 
     return reclamo;
   }
@@ -142,7 +153,7 @@ export class ReclamosService {
       tipo: interna ? TipoEventoReclamo.NOTA_INTERNA : TipoEventoReclamo.RESPUESTA,
       mensaje: dto.mensaje.trim(),
       visibleParaVecino: !interna,
-    }, !interna && esGestor(usuario) ? [this.aviso(reclamo, `Respuesta en tu reclamo ${reclamo.codigo}`, dto.mensaje.trim())] : []);
+    }, !interna && esGestor(usuario) ? await this.avisos(reclamo, `Respuesta en tu reclamo ${reclamo.codigo}`, dto.mensaje.trim()) : []);
 
     return evento;
   }
@@ -180,7 +191,7 @@ export class ReclamosService {
       estadoAnterior,
       estadoNuevo: reclamo.estado,
       visibleParaVecino: true,
-    }, [this.aviso(reclamo, `Tu reclamo ${reclamo.codigo} fue asignado`, dto.mensaje?.trim() ?? `Se asignó un proveedor para atender el reclamo ${reclamo.codigo}.`)]);
+    }, await this.avisos(reclamo, `Tu reclamo ${reclamo.codigo} fue asignado`, dto.mensaje?.trim() ?? `Se asignó un proveedor para atender el reclamo ${reclamo.codigo}.`));
 
     return actualizado;
   }
@@ -229,12 +240,12 @@ export class ReclamosService {
         usuario_id: reclamo.creadoPorId,
         categoria: reclamo.categoria?.nombre ?? 'Sin categoría',
         resolucion: dto.mensaje?.trim() || null,
-      })] : [this.aviso(
+      })] : await this.avisos(
         reclamo,
         `Tu reclamo ${reclamo.codigo} cambió de estado`,
         `Pasó de ${estadoAnterior} a ${dto.estado}.` +
           (dto.mensaje ? ` ${dto.mensaje.trim()}` : ''),
-      )]);
+      ));
 
     return actualizado;
   }
@@ -357,13 +368,16 @@ export class ReclamosService {
   }
 
   /**
-   * Avisa a quien abrió el reclamo. Nunca corta la operación: si el aviso
-   * falla, el reclamo ya quedó guardado igual (regla del alcance).
+   * Un aviso para cada vecino de la unidad, no para quien abrió el reclamo:
+   * si lo cargó la administración, quien abrió es el administrador. Nunca
+   * corta la operación: si el aviso falla, el reclamo ya quedó guardado igual
+   * (regla del alcance).
    */
-  private aviso(reclamo: Reclamo, asunto: string, cuerpo: string) {
-    return crearSobre('aviso.directo', null, {
-      destinatario_id: reclamo.creadoPorId, asunto, cuerpo,
+  private async avisos(reclamo: Reclamo, asunto: string, cuerpo: string) {
+    const vecinos = await this.reclamos.vecinosDeUnidad(reclamo.unidadId);
+    return vecinos.map((id) => crearSobre('aviso.directo', null, {
+      destinatario_id: id, asunto, cuerpo,
       origen: `reclamo:${reclamo.id}`,
-    });
+    }));
   }
 }
