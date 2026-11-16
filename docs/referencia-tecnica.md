@@ -362,7 +362,8 @@ pnpm back test
 ## Reclamos
 
 El vecino abre el reclamo con categoría, descripción y fotos; el administrador
-lo asigna a un proveedor, responde sobre la línea de tiempo y lo cierra.
+lo asigna a un proveedor, responde sobre la línea de tiempo y lo cierra. El
+administrador también puede abrirlo en nombre de una unidad.
 
 ### Endpoints
 
@@ -404,6 +405,12 @@ Las tres primeras las impone la base y el código las respeta, no las duplica:
 - La **categoría** tiene que ser del consorcio del reclamo o compartida, y el
   **proveedor** además tiene que estar activo. La FK sólo garantiza que
   existan; una categoría o un proveedor de otro edificio devuelve 400.
+- Los **avisos van a los vecinos vigentes de la unidad**, no a quien abrió el
+  reclamo: si lo cargó la administración, quien lo abrió es el administrador.
+  El alta que hace un vecino le confirma a él; la que hace el administrador
+  avisa a la unidad. Las respuestas de la administración, la asignación, los
+  cambios de estado y el cierre (`reclamo.cerrado`) llegan a toda la unidad.
+  Las respuestas del vecino y las notas internas no avisan a nadie.
 - Donde dice "administrador" vale también para el **superadmin**, que además
   ve los reclamos de todos los consorcios.
 
@@ -412,7 +419,9 @@ Las tres primeras las impone la base y el código las respeta, no las duplica:
 Cada movimiento deja un `reclamo_evento`: `CREACION`, `ASIGNACION`,
 `CAMBIO_ESTADO`, `RESPUESTA` y `NOTA_INTERNA`. Las notas internas
 (`visible_para_vecino = false`) sólo las escribe el administrador y sólo él las
-ve: al vecino se le devuelve la timeline recortada.
+ve: al vecino se le devuelve la timeline recortada. Cada evento trae su
+`autor` con `rol`: el front decide "vecino" o "administración" por ese rol,
+nunca comparando con quien abrió el reclamo.
 
 ### Fotos
 

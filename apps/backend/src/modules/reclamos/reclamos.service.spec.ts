@@ -121,6 +121,7 @@ describe('ReclamosService — asignación', () => {
     const reclamo = { id: 'r1', codigo: 'RC-1', consorcioId: 'c1', estado: EstadoReclamo.NUEVO } as Reclamo;
     const repo = {
       findById: async () => reclamo,
+      vecinosDeUnidad: async () => [],
       actualizarConEvento: async (r: Reclamo, evento: Partial<ReclamoEvento>) => {
         eventos.push(evento);
         return r;
@@ -196,5 +197,83 @@ describe('ReclamosService — prioridad', () => {
       service.cambiarPrioridad(adminAjeno, 'r1', { prioridad: PrioridadReclamo.ALTA }),
       NotFoundException,
     );
+  });
+});
+
+describe('ReclamosService — avisos', () => {
+  /** Anota los sobres que cada operación deja en el outbox. */
+  function conAvisos() {
+    const sobres: { tipo_evento: string; payload: Record<string, unknown> }[] = [];
+    const guardar = (lista: unknown[]) => sobres.push(...(lista as typeof sobres));
+    const reclamo = {
+      id: 'r1', codigo: 'RC-1', consorcioId: 'c1', unidadId: 'u1', creadoPorId: 's1', estado: EstadoReclamo.EN_CURSO,
+    } as Reclamo;
+    const repo = {
+      findById: async () => reclamo,
+      findUnidad: async (id: string) => ({ id, consorcioId: 'c1' }),
+      unidadesDelUsuario: async () => ['u1'],
+      vecinosDeUnidad: async (id: string) => (id === 'u1' ? ['v1', 'v2'] : []),
+      crear: async (datos: Partial<Reclamo>, _idem: unknown, eventos: (r: Reclamo) => unknown[]) => {
+        const creado = { ...datos, id: 'r2', codigo: 'RC-2' } as Reclamo;
+        guardar(eventos(creado));
+        return creado;
+      },
+      agregarEvento: async (evento: Partial<ReclamoEvento>, eventos: unknown[]) => {
+        guardar(eventos);
+        return evento;
+      },
+      actualizarConEvento: async (r: Reclamo, _e: unknown, eventos: unknown[]) => {
+        guardar(eventos);
+        return r;
+      },
+    } as unknown as ReclamosRepository;
+    const service = new ReclamosService(
+      repo,
+      {} as Notificador,
+      { exigirUsable: async () => undefined } as unknown as CategoriasReclamoService,
+      { exigirAsignable: async () => ({}) } as unknown as ProveedoresService,
+      {} as ArchivosService,
+      { publicar: () => undefined } as unknown as PublicadorEventos,
+    );
+    const destinatarios = () => sobres.map((s) => s.payload.destinatario_id);
+    return { service, destinatarios };
+  }
+  const alta = { unidadId: 'u1', categoriaId: 'k1', titulo: 'Gotera', descripcion: 'Gotera en el techo' };
+
+  it('si lo abre la administración, avisa a los vecinos de la unidad y no al admin', async () => {
+    const { service, destinatarios } = conAvisos();
+    await service.crear(superAdmin, alta);
+    assert.deepEqual(destinatarios(), ['v1', 'v2']);
+  });
+
+  it('si lo abre el vecino, la confirmación es para él', async () => {
+    const { service, destinatarios } = conAvisos();
+    await service.crear(vecino, alta);
+    assert.deepEqual(destinatarios(), ['v1']);
+  });
+
+  it('la respuesta del admin llega a los vecinos de la unidad, no a quien abrió el reclamo', async () => {
+    const { service, destinatarios } = conAvisos();
+    await service.agregarMensaje(superAdmin, 'r1', { mensaje: 'Mañana va el plomero' });
+    assert.deepEqual(destinatarios(), ['v1', 'v2']);
+  });
+
+  it('una nota interna no avisa a nadie', async () => {
+    const { service, destinatarios } = conAvisos();
+    await service.agregarMensaje(superAdmin, 'r1', { mensaje: 'Pedir presupuesto', interna: true });
+    assert.deepEqual(destinatarios(), []);
+  });
+
+  it('la respuesta del vecino no se la avisa a los vecinos', async () => {
+    const { service, destinatarios } = conAvisos();
+    await service.agregarMensaje(vecino, 'r1', { mensaje: 'Sigue goteando' });
+    assert.deepEqual(destinatarios(), []);
+  });
+
+  it('asignar y cambiar de estado avisan a la unidad', async () => {
+    const { service, destinatarios } = conAvisos();
+    await service.asignarProveedor(superAdmin, 'r1', { proveedorId: 'p1' });
+    await service.cambiarEstado(superAdmin, 'r1', { estado: EstadoReclamo.ESPERANDO_PROVEEDOR });
+    assert.deepEqual(destinatarios(), ['v1', 'v2', 'v1', 'v2']);
   });
 });

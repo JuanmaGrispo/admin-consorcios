@@ -47,11 +47,11 @@ describe('EmailService', () => {
         envio.ultimoError = 'ENTREGA_INCIERTA';
         return envio;
       },
-      vecinosDeUnidades: async () => [
+      vecinosDeUnidades: async (ids: string[]) => [
         vecino('ana@x', 'u1', '3º B'),
         vecino('ana@x', 'u2', 'Cochera 4'),
         vecino('beto@x', 'u2', 'Cochera 4'),
-      ],
+      ].filter((v) => ids.includes(v.unidadId)),
       vecinosDelConsorcio: async () => [vecino('ana@x', 'u1', '3º B')],
       sinMail: async (ids: string[], categoria: string) =>
         new Set(ids.filter((id) => (apagados.get(categoria) ?? []).includes(id))),
@@ -123,7 +123,19 @@ describe('EmailService', () => {
     assert.deepEqual(enviados.map((c) => [c.para, c.asunto]), [['v1@x', 'Se aprobó tu reserva']]);
   });
 
-  it('sin SMTP no manda ni registra nada', async () => {
+  it('un reclamo resuelto le escribe a los vecinos de la unidad, no a quien lo abrió', async () => {
+    await service.procesar(crearSobre('reclamo.cerrado', 'c1', {
+      reclamo_id: 'r1',
+      codigo: 'RC-1',
+      unidad_id: 'u2',
+      usuario_id: 'v1',
+      categoria: 'Plomería',
+      resolucion: null,
+    }) as EventoDomus);
+    assert.deepEqual(enviados.map((c) => c.para), ['ana@x', 'beto@x']);
+  });
+
+    it('sin SMTP no manda ni registra nada', async () => {
     smtp = false;
     await service.procesar(expensas());
     assert.equal(enviados.length, 0);

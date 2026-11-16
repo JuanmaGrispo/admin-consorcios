@@ -38,7 +38,15 @@ describe('BandejaService', () => {
     assert.deepEqual(guardados.map((g) => g.usuarioIds), [['v1'], []]);
   });
 
-  it('marcar una ajena da 404', async () => {
+  it('un reclamo resuelto llega a los vecinos de la unidad, no a quien lo abrió', async () => {
+    const { service, guardados } = crearService();
+    await service.procesar(crearSobre('reclamo.cerrado', 'c1', {
+      reclamo_id: 'r1', codigo: 'RC-1', unidad_id: 'u1', usuario_id: 'admin', categoria: 'Plomería', resolucion: null,
+    }));
+    assert.deepEqual(guardados[0].usuarioIds, ['v1']);
+  });
+
+    it('marcar una ajena da 404', async () => {
     const { service } = crearService();
     await service.marcarLeida('v1', 'n1');
     await assert.rejects(service.marcarLeida('v2', 'n1'), NotFoundException);

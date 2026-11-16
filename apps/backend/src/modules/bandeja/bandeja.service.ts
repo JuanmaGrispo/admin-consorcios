@@ -42,7 +42,8 @@ export class BandejaService {
       case 'expensas.emitidas':
         return this.bandeja.vecinosDeUnidades(evento.payload.unidades_afectadas);
       case 'reclamo.cerrado':
-        return this.unaPersona(evento.payload.usuario_id);
+        // Igual que el mail: a la unidad, no a quien lo abrió.
+        return this.bandeja.vecinosDeUnidades([evento.payload.unidad_id]);
       case 'aviso.directo':
         return this.unaPersona(evento.payload.destinatario_id);
       default:

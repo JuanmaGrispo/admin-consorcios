@@ -74,7 +74,7 @@ ReclamoService     ─┤ publica:              │──┘              ▼   
                                                    └────────────────────────────┘
 ```
 
-**Nota importante sobre el binding:** `reclamo.cerrado` **NO** llega al muro: es información personal del vecino que reclamó, no una novedad general del edificio. **Solo Email lo recibe**, como aviso directo al interesado.
+**Nota importante sobre el binding:** `reclamo.cerrado` **NO** llega al muro: es información de la unidad que reclamó, no una novedad general del edificio. **Solo Email (y la bandeja) lo reciben**, como aviso a los vecinos vigentes de `unidad_id`. No va a `usuario_id`: ese es quien abrió el reclamo, y puede ser el administrador.
 
 `asamblea.recordatorio` tampoco llega al muro: la citación ya se publicó ahí con `asamblea.creada`, y repetirla 48 h antes sería ruido. El recordatorio sale solo por mail.
 
@@ -122,7 +122,9 @@ ReclamoService     ─┤ publica:              │──┘              ▼   
 
 Respecto del diseño original, `votacion.cerrada` suma `titulo` y el resultado
 `sin_quorum` (una votación de asamblea sin quórum no decide nada), y
-`reclamo.cerrado` suma `codigo`: los dos los necesita el mail. En asambleas,
+`reclamo.cerrado` suma `codigo`: los dos los necesita el mail. En
+`reclamo.cerrado`, `usuario_id` es quien abrió el reclamo (vecino o
+administrador); los destinatarios salen de `unidad_id`. En asambleas,
 `fecha` va como `AAAA-MM-DD` y `hora` como `HH:mm`, en hora de Buenos Aires.
 
 ---

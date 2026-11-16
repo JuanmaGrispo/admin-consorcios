@@ -2,7 +2,7 @@ import { Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { fechaHora } from '@/lib/formato';
 import { cn } from '@/lib/utils';
-import type { EstadoReclamo, ReclamoDetalle, ReclamoEvento } from '@/types/reclamo';
+import type { EstadoReclamo, PersonaReclamo, ReclamoDetalle, ReclamoEvento } from '@/types/reclamo';
 
 const NOMBRE_ESTADO: Record<EstadoReclamo, string> = {
   NUEVO: 'Nuevo',
@@ -11,9 +11,15 @@ const NOMBRE_ESTADO: Record<EstadoReclamo, string> = {
   RESUELTO: 'Resuelto',
 };
 
+/**
+ * Quién habló sale del rol del autor, no de si abrió el reclamo: el
+ * administrador también abre reclamos, y ahí "quien lo abrió" es él.
+ */
+export const esDelVecino = (persona: PersonaReclamo | null | undefined) => persona?.rol === 'VECINO';
+
 /** El renglón principal de cada evento, como en el prototipo ("Asignado a Gasparini Servicios"). */
 function titulo(evento: ReclamoEvento, reclamo: ReclamoDetalle, esElUltimoProveedor: boolean): string {
-  const delVecino = evento.autorId === reclamo.creadoPorId;
+  const delVecino = esDelVecino(evento.autor);
   switch (evento.tipo) {
     case 'CREACION':
       return delVecino ? 'Reclamo creado por el vecino' : 'Reclamo creado por la administración';
