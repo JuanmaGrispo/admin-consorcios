@@ -3,8 +3,11 @@ run-name: CI de ${{ github.ref_name }}
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,9 +27,9 @@ jobs:
           - nombre: ESLint (frontend)
             id: lint
             comando: pnpm front lint
-          - nombre: Pruebas automatizadas
+          - nombre: Pruebas automatizadas con cobertura
             id: pruebas
-            comando: pnpm test
+            comando: pnpm back test:cobertura
           - nombre: Compilación (backend y frontend)
             id: build
             comando: pnpm build
@@ -46,7 +49,7 @@ jobs:
             id: integral
             comando: pnpm back test:aceptacion:integral --web --carga --newman --contrato
     steps:
-      - name: Descargar el código del tag
+      - name: Descargar el código
         uses: actions/checkout@v4
 
       - name: Configurar pnpm
@@ -78,6 +81,7 @@ jobs:
           name: resultados-${{ matrix.id }}
           path: |
             resultados/verificacion.log
+            apps/backend/coverage/**
             apps/backend/acceptance/resultados/integral.json
             apps/backend/acceptance/resultados/carga-resumen.json
             apps/backend/acceptance/resultados/newman.xml
