@@ -24,8 +24,17 @@ se validó localmente, pero falta obtener la ejecución del próximo tag como
 evidencia de GitHub Actions. API completa, web y carga se agregaron al job
 integral con fixtures automáticos; ver [`ci.md`](ci.md).
 
-SOAP queda fuera del alcance. Este documento define objetivos de aceptación;
-la existencia de código o de pruebas unitarias no acredita su cumplimiento.
+Actualización al 19/11/2026: el SOAP **NumberConversion** (importe en letras
+de boletas y recibos, el que prevé [`producto.md`](producto.md)) está
+implementado; ver «Importe en letras (SOAP)» en
+[`referencia-tecnica.md`](referencia-tecnica.md). Corta a los 3 segundos y, si
+el servicio no responde, las letras se escriben localmente sin frenar el PDF.
+La verificación de CUIT contra ARCA sigue fuera del alcance. Las menciones a
+«SOAP excluido» de las secciones fechadas de abajo reflejan la decisión de ese
+momento.
+
+Este documento define objetivos de aceptación; la existencia de código o de
+pruebas unitarias no acredita su cumplimiento.
 
 La especificación para cerrar los pendientes está en
 [`2026-10-30-cierre-integracion-resiliencia.md`](superpowers/specs/2026-10-30-cierre-integracion-resiliencia.md).

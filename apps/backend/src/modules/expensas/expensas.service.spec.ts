@@ -1,3 +1,4 @@
+import { NumerosEnLetrasService } from '../numeros-en-letras/numeros-en-letras.service';
 import type { EventoDomus } from '../../core/mensajeria/eventos';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import assert from 'node:assert/strict';
@@ -178,6 +179,8 @@ function crearEntorno() {
       },
     } as unknown as ArchivosService,
     eventos,
+    // El SOAP no se llama en los tests: las letras son cosméticas.
+    { importe: async () => 'SON PESOS CERO CON 00/100' } as unknown as NumerosEnLetrasService,
   );
 
   return { db, service, estadoCuenta: new EstadoCuentaService(repo), avisos, publicados };
