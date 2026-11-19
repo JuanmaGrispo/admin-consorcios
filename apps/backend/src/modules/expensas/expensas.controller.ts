@@ -55,6 +55,22 @@ export class ExpensasController {
   }
 
   @Roles(RolUsuario.ADMINISTRADOR)
+  @Get('liquidaciones/:id/exportar')
+  @ApiOperation({
+    summary: 'La liquidación en CSV',
+    description:
+      'Resumen, gastos con rubro y proveedor y, si ya se prorrateó, las boletas por unidad. CSV con `;` y BOM para Excel en español.',
+  })
+  @ApiProduces('text/csv')
+  async exportarLiquidacion(@UsuarioActual() usuario: Usuario, @Param('id', ParseUUIDPipe) id: string) {
+    const { csv, nombre } = await this.expensas.exportarLiquidacion(usuario, id);
+    return new StreamableFile(Buffer.from(csv, 'utf8'), {
+      type: 'text/csv; charset=utf-8',
+      disposition: `attachment; filename="${nombre}"`,
+    });
+  }
+
+  @Roles(RolUsuario.ADMINISTRADOR)
   @Post('liquidaciones')
   @ApiOperation({
     summary: 'Abre la liquidación de un período',

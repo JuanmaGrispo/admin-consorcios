@@ -27,6 +27,9 @@ export const expensasService = {
 
   obtenerLiquidacion: (id: string) => api<LiquidacionDetalle>(`/liquidaciones/${id}`),
 
+  /** CSV para Excel: resumen, gastos y, si ya se prorrateó, las boletas por unidad. */
+  exportarLiquidacion: (id: string) => descargar(`/liquidaciones/${id}/exportar`, 'liquidacion.csv'),
+
   /** Nace en borrador. Una por consorcio y período. */
   crearLiquidacion: (input: LiquidacionInput) =>
     api<LiquidacionDetalle>('/liquidaciones', { method: 'POST', body: JSON.stringify(input) }),

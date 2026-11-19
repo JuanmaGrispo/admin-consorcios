@@ -1,6 +1,6 @@
 'use client';
 
-import { Building, Plus } from 'lucide-react';
+import { Building, FileSpreadsheet, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useConsorcioActivo } from '@/components/admin/consorcio-activo';
@@ -85,11 +85,25 @@ function UnidadesDelConsorcio({ consorcio }: { consorcio: Consorcio }) {
     }
   }
 
+  async function exportarPadron() {
+    try {
+      await unidadesService.exportarPadron(consorcio.id);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'No se pudo exportar el padrón.');
+    }
+  }
+
   const nueva = (
-    <Button onClick={() => setEdicion({ modo: 'alta' })}>
-      <Plus data-icon="inline-start" />
-      Nueva unidad
-    </Button>
+    <>
+      <Button variant="outline" onClick={exportarPadron} disabled={!todas || todas.length === 0}>
+        <FileSpreadsheet data-icon="inline-start" />
+        Exportar padrón
+      </Button>
+      <Button onClick={() => setEdicion({ modo: 'alta' })}>
+        <Plus data-icon="inline-start" />
+        Nueva unidad
+      </Button>
+    </>
   );
 
   const completo = Math.abs(asignado - 100) < 0.0001;

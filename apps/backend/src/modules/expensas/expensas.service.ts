@@ -46,6 +46,7 @@ import {
 } from './cobranzas';
 import { buscarBoletaVisible, diasEntre } from './estado-cuenta.service';
 import { estadoDe } from './estado-liquidacion';
+import { aCsvLiquidacion } from './liquidacion-csv';
 import {
   ExpensasRepository,
   type AlcanceBoletas,
@@ -366,6 +367,20 @@ export class ExpensasService {
   }
 
   /** La grilla completa como CSV, con los filtros que se estén viendo. */
+  /** La liquidación en CSV para Excel: resumen, gastos y, si ya se prorrateó, las boletas. */
+  async exportarLiquidacion(usuario: UsuarioActual, id: string): Promise<{ csv: string; nombre: string }> {
+    const liquidacion = await this.findOne(usuario, id);
+    const boletas = await this.expensas.listarBoletasCompletas(
+      await this.alcanceDe(usuario, { liquidacionId: id }),
+      TOPE_EXPORTACION,
+    );
+    const filas = await this.aFilas(boletas, { conOcupantes: true });
+    return {
+      csv: aCsvLiquidacion(liquidacion, liquidacion.gastos ?? [], filas),
+      nombre: `liquidacion-${liquidacion.periodo.slice(0, 7)}.csv`,
+    };
+  }
+
   async exportarCobranzas(
     usuario: UsuarioActual,
     query: ListarBoletasQuery,

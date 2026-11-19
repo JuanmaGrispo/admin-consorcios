@@ -284,6 +284,7 @@ Dos criterios comunes:
 | Método | Ruta                                  | Quién |
 |--------|---------------------------------------|-------|
 | GET    | `/unidades`                           | admin: las de sus consorcios · vecino: las suyas |
+| GET    | `/unidades/exportar`                  | administrador: el padrón en CSV (`consorcioId`, `incluirInactivas`): unidades con propietarios e inquilinos vigentes y su contacto |
 | GET    | `/unidades/:id`                       | admin: de sus consorcios · vecino: sólo las suyas (404 si no) |
 | POST   | `/unidades`                           | administrador |
 | PATCH  | `/unidades/:id`                       | administrador (`activa: false` la da de baja) |
@@ -478,6 +479,7 @@ que no se emitió, tocar gastos de una emitida) responde **409 Conflict**.
 |--------|---------------------------------------------|-------|
 | GET    | `/liquidaciones`                            | administrador (filtros `consorcioId`, `estado`) |
 | GET    | `/liquidaciones/:id`                        | administrador: con sus gastos |
+| GET    | `/liquidaciones/:id/exportar`               | administrador: CSV con resumen, gastos y, si ya se prorrateó, boletas por unidad |
 | POST   | `/liquidaciones`                            | administrador: `{ consorcioId, periodo: "2026-09" }` |
 | PATCH  | `/liquidaciones/:id`                        | administrador: criterio de prorrateo o vencimiento |
 | DELETE | `/liquidaciones/:id`                        | administrador: sólo sin emitir |
