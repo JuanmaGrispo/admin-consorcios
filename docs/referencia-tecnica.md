@@ -632,11 +632,36 @@ período. Publicar no espera a nadie: la emisión no depende del mail.
 permisos que el detalle. No se guarda: así siempre muestra el estado y el
 saldo de hoy, y `pdf_url` queda sin usar.
 
+### Importe en letras (SOAP)
+
+La boleta y el recibo en PDF llevan el importe escrito como en un comprobante
+argentino: `SON PESOS CIENTO CUARENTA Y CINCO MIL TRESCIENTOS VEINTE CON 50/100`.
+En la boleta va lo que queda por pagar; en el recibo, lo que se pagó.
+
+Las letras salen del servicio SOAP público **NumberConversion** (operación
+`NumberToWords`, de DataAccess), encapsulado en `modules/numeros-en-letras`,
+como pide [producto.md](producto.md):
+
+- `NumberConversionClient` arma el sobre SOAP a mano —es una sola operación
+  con un parámetro: un cliente con WSDL sería una dependencia entera para
+  esto— y corta a los 3 segundos.
+- El servicio sólo contesta en inglés. `NumerosEnLetrasService` lee esa
+  respuesta como número, verifica que sea el importe pedido y la escribe en
+  español. Los centavos van como fracción (`CON 50/100`).
+- **Es cosmético y nunca corta el PDF**: si el servicio no contesta, contesta
+  un error o un número distinto, las letras se escriben localmente (el
+  respaldo que prevé producto.md) y queda un aviso en el log.
+- Lo que el servicio ya verificó se recuerda en memoria (hasta 500 importes):
+  las expensas de un edificio repiten montos todo el mes. Una caída no se
+  recuerda, así que el pedido siguiente vuelve a preguntar.
+
+`NUMBER_CONVERSION_URL` es opcional: por defecto apunta al servicio de
+DataAccess.
+
 ### Pendiente
 
 - Marca de envío (`enviada_at`): el registro de cada mail queda en
   `envio_notificacion`, pero la boleta todavía no se marca.
-- Importe en letras en el PDF (el servicio SOAP de [producto.md](producto.md)).
 
 ## Pagos
 
@@ -712,7 +737,8 @@ reintegra y después se vuelve a aprobar, conserva el suyo.
 
 `GET /pagos/:id/recibo` lo genera al vuelo con `pdfkit`, igual que la boleta
 y por el mismo motivo: así siempre refleja el estado de hoy. `recibo_url`
-queda sin usar.
+queda sin usar. Debajo del importe lleva el monto en letras (ver
+[Importe en letras (SOAP)](#importe-en-letras-soap)).
 
 Cuando cada administrador tenga su propio punto de venta, `0001` pasa a ser
 una columna del consorcio y la secuencia se vuelve una por punto de venta.
