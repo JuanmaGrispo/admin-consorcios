@@ -42,8 +42,13 @@ nuevo tiene que saber antes de tocar código.
 | [docs/producto.md](docs/producto.md) | Visión del producto: funcionalidades, roles, integraciones y flujos |
 | [docs/diseno-front.html](docs/diseno-front.html) | Prototipo visual del front: pantallas y flujos a implementar |
 | [docs/mensajeria.md](docs/mensajeria.md) | Diseño de notificaciones pub/sub con RabbitMQ: eventos, bindings, sobre del mensaje |
-| [docs/integracion-arca.md](docs/integracion-arca.md) | Diseño de la verificación de CUIT contra ARCA (SOAP): contratos, eventos, sync/async, timeouts |
 | [docs/asistente-ia.md](docs/asistente-ia.md) | Gobernanza del asistente de ayuda con IA: ficha, datos, apagado, riesgos y eval set |
+| [docs/ci.md](docs/ci.md) | Qué corre el CI, cuándo y cómo reproducirlo |
+
+La integración SOAP (importe en letras con NumberConversion) está en
+[referencia-tecnica.md](docs/referencia-tecnica.md#importe-en-letras-soap).
+La verificación de CUIT contra ARCA quedó fuera del alcance.
+
 ## Frontend
 
 Todo lo de UI está en [apps/frontend/CLAUDE.md](apps/frontend/CLAUDE.md):
