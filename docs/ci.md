@@ -1,11 +1,12 @@
 # Integración continua de versiones
 
-El workflow `.github/workflows/ci.yml` se ejecuta únicamente al subir un tag
-cuyo nombre empiece con `v`, por ejemplo `v1.0.0`. No se ejecuta por pushes
-a ramas ni por pull requests. Publicar una Release para un tag que ya existe
-no dispara otra ejecución: el disparador es el push del tag.
+El workflow `.github/workflows/ci.yml` se ejecuta en tres casos: en cada push
+a `main`, al subir un tag cuyo nombre empiece con `v` (por ejemplo `v1.0.0`) y
+a mano desde la pestaña Actions (`workflow_dispatch`). No se ejecuta por
+pushes a otras ramas ni por pull requests. Publicar una Release para un tag
+que ya existe no dispara otra ejecución: el disparador es el push del tag.
 
-Cada ejecución descarga el commit del tag, instala las dependencias con el
+Cada ejecución descarga el commit que la disparó, instala las dependencias con el
 lockfile y ejecuta nueve verificaciones de aplicación y un job independiente de escaneo de secretos, incorporado desde la
 rama principal remota:
 
@@ -13,7 +14,7 @@ rama principal remota:
 |---|---|
 | Tipos del backend y frontend | `pnpm typecheck` |
 | ESLint del frontend | `pnpm front lint` |
-| Pruebas habituales (`src/**/*.spec.ts` en backend) | `pnpm test` |
+| Pruebas del backend (`src/**/*.spec.ts`) con reporte de cobertura | `pnpm back test:cobertura` |
 | Compilación del backend y frontend | `pnpm build` |
 | Timeouts y cancelación de proveedores simulados | `pnpm back test:aceptacion:proveedores` |
 | Contrato de errores Problem Details | `pnpm back test:aceptacion:errores` |
@@ -26,10 +27,12 @@ Las pruebas web se ejecutan con Playwright desde el runner integral, con
 sesiones reales mediante cookie httpOnly. No se incorporan a `pnpm test`.
 El backend se analiza con TypeScript; no tiene ESLint configurado.
 
+La cobertura del backend se genera en cada ejecución (`lcov` en
+`apps/backend/coverage/`) y se publica dentro del artefacto `resultados-pruebas`.
+
 El análisis estático con SonarCloud no está en el workflow: el job se sacó el
 05/11 por decisión del grupo, así que no hay Quality Gate verificado.
-`sonar-project.properties` y `pnpm back test:cobertura` (cobertura `lcov` en
-`apps/backend/coverage/`) se conservan. Para reactivarlo: recuperar el job
+`sonar-project.properties` se conserva y puede tomar esa cobertura. Para reactivarlo: recuperar el job
 `analisis` del commit ae1d41f, importar el repositorio en sonarcloud.io (gratis
 para repositorios públicos), apagar "Automatic Analysis" y cargar el secret
 `SONAR_TOKEN`.
