@@ -44,6 +44,7 @@ nuevo tiene que saber antes de tocar código.
 | [docs/mensajeria.md](docs/mensajeria.md) | Diseño de notificaciones pub/sub con RabbitMQ: eventos, bindings, sobre del mensaje |
 | [docs/asistente-ia.md](docs/asistente-ia.md) | Gobernanza del asistente de ayuda con IA: ficha, datos, apagado, riesgos y eval set |
 | [docs/ci.md](docs/ci.md) | Qué corre el CI, cuándo y cómo reproducirlo |
+| [docs/qa-y-testing.docx](docs/qa-y-testing.docx) | Documentación de QA: plan, trazabilidad, ejecución, defectos, seguridad e IA (copia del Drive) |
 
 La integración SOAP (importe en letras con NumberConversion) está en
 [referencia-tecnica.md](docs/referencia-tecnica.md#importe-en-letras-soap).
