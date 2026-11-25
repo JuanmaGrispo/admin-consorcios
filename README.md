@@ -59,6 +59,7 @@ Detalles:
 - El backend corre con `NODE_ENV=development` (Swagger prendido, cookie sin `Secure`). Para probarlo como en producción: `NODE_ENV=production docker compose up --build`.
 - Las migraciones nuevas se aplican solas en cada arranque. El seed sólo corre con la base vacía.
 - Después de un `git pull` o de tocar código, volver a correr con `--build`.
+- El asistente Domot usa OpenAI si hay un `.env` en la raíz con `OPENAI_API_KEY`. Sin la clave responde con el manual de usuario.
 
 ### Contra la base compartida de Supabase (grupo)
 
