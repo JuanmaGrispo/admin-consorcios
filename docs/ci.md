@@ -34,11 +34,12 @@ El backend se analiza con TypeScript; no tiene ESLint configurado.
 La cobertura del backend se genera en cada ejecución (`lcov` en
 `apps/backend/coverage/`) y se publica dentro del artefacto `resultados-pruebas`.
 
-El análisis estático con SonarCloud no está en el workflow: el job se sacó el
-05/11 por decisión del grupo, así que no hay Quality Gate verificado.
-`sonar-project.properties` se conserva y puede tomar esa cobertura. Para reactivarlo: recuperar el job
-`analisis` del commit ae1d41f, importar el repositorio en sonarcloud.io (gratis
-para repositorios públicos), apagar "Automatic Analysis" y cargar el secret
+El job `analisis` corre SonarCloud con la cobertura del backend
+(`sonar-project.properties`) y espera el Quality Gate: si no aprueba, el job
+queda en rojo. Solo corre si el repositorio tiene el secret `SONAR_TOKEN`; sin
+él, los pasos se saltean y el job queda en verde con un aviso. Para activarlo,
+el dueño del repo importa el repositorio en sonarcloud.io (gratis para
+repositorios públicos), apaga "Automatic Analysis" y carga el secret
 `SONAR_TOKEN`.
 
 El mutation testing (`pnpm back test:mutacion`, Stryker) no está en el

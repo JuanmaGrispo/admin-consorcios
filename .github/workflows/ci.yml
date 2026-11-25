@@ -91,9 +91,63 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-  # El job "analisis" (SonarCloud) se sacó el 05/11 por decisión del grupo.
-  # Para volver a activarlo: recuperar el bloque del commit ae1d41f y cargar el
-  # secret SONAR_TOKEN (pasos en sonar-project.properties).
+  # Corre solo si el repo tiene el secret SONAR_TOKEN (pasos en
+  # sonar-project.properties). Sin el secret, los pasos se saltean y el job
+  # queda en verde con un aviso, para no romper el CI mientras no esté cargado.
+  analisis:
+    name: Análisis estático (SonarCloud)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Solo indica si el secret existe; el token en sí va únicamente al paso de Sonar.
+      HAY_TOKEN_SONAR: ${{ secrets.SONAR_TOKEN != '' }}
+    steps:
+      - name: Avisar si falta el token de SonarCloud
+        if: env.HAY_TOKEN_SONAR != 'true'
+        run: echo "::warning title=SonarCloud::Falta el secret SONAR_TOKEN; se saltea el análisis."
+
+      - name: Descargar el código con historial (blame y código nuevo)
+        if: env.HAY_TOKEN_SONAR == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar pnpm
+        if: env.HAY_TOKEN_SONAR == 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Configurar Node.js
+        if: env.HAY_TOKEN_SONAR == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Instalar dependencias del lockfile
+        if: env.HAY_TOKEN_SONAR == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Pruebas unitarias con cobertura (lcov)
+        if: env.HAY_TOKEN_SONAR == 'true'
+        shell: bash
+        run: |
+          pnpm back test:cobertura
+          # node:test escribe rutas relativas a apps/backend; Sonar las resuelve desde la raíz.
+          sed -i 's#^SF:src/#SF:apps/backend/src/#' apps/backend/coverage/lcov.info
+
+      - name: Análisis de SonarCloud y espera del Quality Gate
+        if: env.HAY_TOKEN_SONAR == 'true'
+        uses: SonarSource/sonarqube-scan-action@2f77a1ec69fb1d595b06f35ab27e97605bdef703 # v5.3.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          # El tag sale de main: se analiza como main. qualitygate.wait deja el job
+          # en rojo si el Quality Gate no aprueba.
+          args: >
+            -Dsonar.branch.name=main
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=600
 
   secretos:
     name: Escaneo de secretos (gitleaks)
