@@ -1,0 +1,8 @@
+{
+  "muestraMaxima": 10000,
+  "respuestasPorEstado": {
+    "200": 2
+  },
+  "sinRespuestaHTTP": 1,
+  "operacionesCon2xx": []
+}

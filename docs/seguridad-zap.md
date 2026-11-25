@@ -60,7 +60,12 @@ con cookies Secure sobre HTTPS requieren otro entorno.
 ## Evidencias y resultados
 
 Los reportes completos HTML/JSON, logs, pruebas de sesión y resumen quedan en
-`apps/backend/acceptance/resultados/zap/`, ignorado por git. El estado del
+`apps/backend/acceptance/resultados/zap/`, ignorado por git. Los de las
+corridas del 05/11 están versionados en
+[docs/evidencias/zap-2026-11-05/](evidencias/zap-2026-11-05/) (corrida inicial)
+y [docs/evidencias/zap-csp-2026-11-05/](evidencias/zap-csp-2026-11-05/)
+(después de corregir la CSP); sus SHA-256 coinciden con los registrados en
+`zap-2026-11-05.json` y `zap-csp-2026-11-05.json`. El estado del
 runner queda en `resultados/zap-entorno.json`, separado de `integral.json`
 para conservar la evidencia anterior de integración.
 

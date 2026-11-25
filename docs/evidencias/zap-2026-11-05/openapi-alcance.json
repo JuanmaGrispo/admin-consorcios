@@ -1,0 +1,2452 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Falta la sesión o no es válida"
+          }
+        },
+        "summary": "Devuelve el usuario de la sesión (cookie o bearer)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/usuarios": {
+      "get": {
+        "description": "Superadmin: todos (filtro `rol`). Administrador: los vecinos de sus consorcios. Con `email`, busca uno exacto.",
+        "operationId": "UsuariosController_listar",
+        "parameters": [
+          {
+            "name": "rol",
+            "required": false,
+            "in": "query",
+            "description": "Sólo superadmin",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ADMINISTRADOR",
+                "VECINO",
+                "SUPER_ADMIN"
+              ]
+            }
+          },
+          {
+            "name": "consorcioId",
+            "required": false,
+            "in": "query",
+            "description": "Vecinos de ese consorcio",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "abbd596a-2ec2-44cf-a986-e43afad971d2"
+              ]
+            },
+            "example": "abbd596a-2ec2-44cf-a986-e43afad971d2"
+          },
+          {
+            "name": "buscar",
+            "required": false,
+            "in": "query",
+            "description": "Busca en nombre, apellido y email",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "required": false,
+            "in": "query",
+            "description": "Email exacto: para encontrar a un vecino que ya existe y vincularlo",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Lista usuarios",
+        "tags": [
+          "usuarios"
+        ]
+      }
+    },
+    "/api/consorcios": {
+      "get": {
+        "operationId": "ConsorciosController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "consorcios"
+        ]
+      }
+    },
+    "/api/consorcios/{id}": {
+      "get": {
+        "operationId": "ConsorciosController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "abbd596a-2ec2-44cf-a986-e43afad971d2"
+              ]
+            },
+            "example": "abbd596a-2ec2-44cf-a986-e43afad971d2"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "consorcios"
+        ]
+      }
+    },
+    "/api/unidades": {
+      "get": {
+        "description": "Cada una con `cantidadVecinos` vigentes. El vecino recibe sólo las unidades a las que está vinculado.",
+        "operationId": "UnidadesController_listar",
+        "parameters": [
+          {
+            "name": "consorcioId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "abbd596a-2ec2-44cf-a986-e43afad971d2"
+              ]
+            },
+            "example": "abbd596a-2ec2-44cf-a986-e43afad971d2"
+          },
+          {
+            "name": "incluirInactivas",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Lista unidades",
+        "tags": [
+          "unidades"
+        ]
+      }
+    },
+    "/api/reclamos": {
+      "get": {
+        "description": "El administrador ve los del consorcio; el vecino, sólo los de sus unidades.",
+        "operationId": "ReclamosController_listar",
+        "parameters": [
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "NUEVO",
+                "EN_CURSO",
+                "ESPERANDO_PROVEEDOR",
+                "RESUELTO"
+              ]
+            }
+          },
+          {
+            "name": "situacion",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "abiertos",
+                "cerrados"
+              ]
+            }
+          },
+          {
+            "name": "prioridad",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BAJA",
+                "MEDIA",
+                "ALTA"
+              ]
+            }
+          },
+          {
+            "name": "categoriaId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "consorcioId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "abbd596a-2ec2-44cf-a986-e43afad971d2"
+              ]
+            },
+            "example": "abbd596a-2ec2-44cf-a986-e43afad971d2"
+          },
+          {
+            "name": "unidadId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "proveedorId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "buscar",
+            "required": false,
+            "in": "query",
+            "description": "Busca en la descripción y en el código",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limite",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Lista reclamos",
+        "tags": [
+          "reclamos"
+        ]
+      },
+      "post": {
+        "description": "El vecino lo abre sobre su unidad (se infiere si tiene una sola). La prioridad sólo la fija el administrador.",
+        "operationId": "ReclamosController_crear",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "unidadId",
+                  "categoriaId",
+                  "titulo",
+                  "descripcion"
+                ],
+                "properties": {
+                  "unidadId": {
+                    "type": "string",
+                    "enum": [
+                      "16993f70-cd71-485e-a822-818ee2d2b269"
+                    ]
+                  },
+                  "categoriaId": {
+                    "type": "string",
+                    "enum": [
+                      "cb83ca33-d994-422b-b28c-84afed836cd1"
+                    ]
+                  },
+                  "titulo": {
+                    "type": "string",
+                    "default": "Reclamo ZAP local"
+                  },
+                  "descripcion": {
+                    "type": "string",
+                    "default": "Datos descartables de seguridad"
+                  }
+                }
+              },
+              "example": {
+                "unidadId": "16993f70-cd71-485e-a822-818ee2d2b269",
+                "categoriaId": "cb83ca33-d994-422b-b28c-84afed836cd1",
+                "titulo": "Reclamo ZAP local",
+                "descripcion": "Datos descartables de seguridad"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Abre un reclamo",
+        "tags": [
+          "reclamos"
+        ]
+      }
+    },
+    "/api/reclamos/{id}": {
+      "get": {
+        "description": "Al vecino no se le devuelven las notas internas.",
+        "operationId": "ReclamosController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "007f26ce-d3f4-4b92-af30-b66dc45cba37"
+              ]
+            },
+            "example": "007f26ce-d3f4-4b92-af30-b66dc45cba37"
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "No existe o no es suyo"
+          }
+        },
+        "summary": "Detalle con adjuntos y línea de tiempo",
+        "tags": [
+          "reclamos"
+        ]
+      }
+    },
+    "/api/boletas": {
+      "get": {
+        "description": "Paginada. Cada fila trae lo pagado, el saldo, el medio del último pago y —para quien administra— los ocupantes de la unidad. El administrador ve todas las boletas; el vecino, las emitidas de sus unidades.",
+        "operationId": "ExpensasController_listarBoletas",
+        "parameters": [
+          {
+            "name": "liquidacionId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "consorcioId",
+            "required": false,
+            "in": "query",
+            "description": "Todas las boletas del consorcio",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "abbd596a-2ec2-44cf-a986-e43afad971d2"
+              ]
+            },
+            "example": "abbd596a-2ec2-44cf-a986-e43afad971d2"
+          },
+          {
+            "name": "unidadId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "periodo",
+            "required": false,
+            "in": "query",
+            "description": "Período de la liquidación (AAAA-MM)",
+            "schema": {
+              "example": "2026-08",
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDIENTE",
+                "PARCIAL",
+                "PAGADA",
+                "VENCIDA"
+              ]
+            }
+          },
+          {
+            "name": "situacion",
+            "required": false,
+            "in": "query",
+            "description": "`pendientes` incluye las parciales: lo que importa es que tienen saldo",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pagados",
+                "pendientes",
+                "vencidos"
+              ]
+            }
+          },
+          {
+            "name": "buscar",
+            "required": false,
+            "in": "query",
+            "description": "Busca por etiqueta de la unidad o nombre del vecino",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limite",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Grilla de cobranzas",
+        "tags": [
+          "expensas"
+        ]
+      }
+    },
+    "/api/boletas/{id}": {
+      "get": {
+        "operationId": "ExpensasController_findBoleta",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fdf0717a-7ced-4b5c-a4f8-d57a3783b704"
+              ]
+            },
+            "example": "fdf0717a-7ced-4b5c-a4f8-d57a3783b704"
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "No existe, no es suya o no se emitió"
+          }
+        },
+        "summary": "Boleta con su detalle",
+        "tags": [
+          "expensas"
+        ]
+      }
+    },
+    "/api/novedades": {
+      "get": {
+        "description": "Fijadas primero. El vecino ve las de donde vive con `leida`; el administrador, las de sus consorcios con `lecturas`.",
+        "operationId": "NovedadesController_listar",
+        "parameters": [
+          {
+            "name": "consorcioId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "abbd596a-2ec2-44cf-a986-e43afad971d2"
+              ]
+            },
+            "example": "abbd596a-2ec2-44cf-a986-e43afad971d2"
+          },
+          {
+            "name": "incluirInactivas",
+            "required": false,
+            "in": "query",
+            "description": "Sólo administrador: incluye las dadas de baja",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "pagina",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limite",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "El muro",
+        "tags": [
+          "novedades"
+        ]
+      }
+    },
+    "/api/panel": {
+      "get": {
+        "description": "Cobranza del período en todos sus consorcios (con el anterior para comparar), la serie de los últimos 6 meses, la actividad de hoy, lo que requiere atención y el estado de cada consorcio.",
+        "operationId": "PanelController_delAdministrador",
+        "parameters": [
+          {
+            "name": "periodo",
+            "required": false,
+            "in": "query",
+            "description": "Período (AAAA-MM). Sin esto, el último que emitió alguno de sus consorcios.",
+            "schema": {
+              "example": "2026-08",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "El panel general del administrador",
+        "tags": [
+          "panel"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Domus ZAP local",
+    "description": "",
+    "version": "1",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [
+    {
+      "url": "http://host.docker.internal:4400"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "admin@consorcios.test"
+          },
+          "password": {
+            "type": "string",
+            "example": "unaPasswordSegura"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "CreateUsuarioDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Carla"
+          },
+          "apellido": {
+            "type": "string",
+            "example": "Méndez"
+          },
+          "email": {
+            "type": "string",
+            "example": "carla.mendez@administracion.com"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8
+          },
+          "rol": {
+            "type": "string",
+            "enum": [
+              "ADMINISTRADOR",
+              "VECINO"
+            ],
+            "default": "ADMINISTRADOR"
+          }
+        },
+        "required": [
+          "nombre",
+          "apellido",
+          "email",
+          "password"
+        ]
+      },
+      "UpdateUsuarioDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "apellido": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "dni": {
+            "type": "string"
+          },
+          "telefono": {
+            "type": "string"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Sólo superadmin. `false` da de baja la cuenta."
+          }
+        }
+      },
+      "NuevaPasswordDto": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string",
+            "minLength": 8
+          }
+        },
+        "required": [
+          "password"
+        ]
+      },
+      "ActualizarPerfilDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "apellido": {
+            "type": "string"
+          },
+          "telefono": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "object",
+            "nullable": true,
+            "description": "La URL que devolvió `POST /archivos?destino=avatares`; `null` lo saca"
+          }
+        }
+      },
+      "PreferenciaDto": {
+        "type": "object",
+        "properties": {
+          "canal": {
+            "type": "string",
+            "enum": [
+              "EMAIL",
+              "WHATSAPP",
+              "PUSH"
+            ]
+          },
+          "categoria": {
+            "type": "string",
+            "enum": [
+              "BOLETAS",
+              "VENCIMIENTOS",
+              "RECLAMOS_RESERVAS",
+              "COMUNICADOS"
+            ]
+          },
+          "habilitado": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "canal",
+          "categoria",
+          "habilitado"
+        ]
+      },
+      "ActualizarPreferenciasDto": {
+        "type": "object",
+        "properties": {
+          "preferencias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreferenciaDto"
+            }
+          }
+        },
+        "required": [
+          "preferencias"
+        ]
+      },
+      "CambiarPasswordDto": {
+        "type": "object",
+        "properties": {
+          "actual": {
+            "type": "string"
+          },
+          "nueva": {
+            "type": "string",
+            "minLength": 8
+          }
+        },
+        "required": [
+          "actual",
+          "nueva"
+        ]
+      },
+      "CreateConsorcioDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Edificio Libertador 1234"
+          },
+          "administradorId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Usuario administrador del consorcio"
+          },
+          "calle": {
+            "type": "string",
+            "example": "Av. Libertador"
+          },
+          "numero": {
+            "type": "string",
+            "example": "1234"
+          },
+          "barrio": {
+            "type": "string",
+            "example": "Belgrano"
+          },
+          "ciudad": {
+            "type": "string",
+            "example": "CABA"
+          },
+          "provincia": {
+            "type": "string",
+            "example": "Buenos Aires"
+          },
+          "cp": {
+            "type": "string",
+            "example": "C1426"
+          },
+          "cuit": {
+            "type": "string",
+            "example": "30-12345678-9"
+          },
+          "cbu": {
+            "type": "string",
+            "example": "0170099220000067797888"
+          },
+          "diaVencimiento": {
+            "type": "number",
+            "example": 10,
+            "description": "Día de vencimiento de la expensa"
+          },
+          "tasaInteresMora": {
+            "type": "number",
+            "example": 2.5,
+            "description": "Tasa de interés por mora (%)"
+          },
+          "periodicidadMora": {
+            "type": "string",
+            "enum": [
+              "DIARIA",
+              "MENSUAL"
+            ],
+            "example": "MENSUAL"
+          },
+          "porcentajeFondoReserva": {
+            "type": "number",
+            "example": 5,
+            "description": "Porcentaje destinado al fondo de reserva"
+          },
+          "quorumDefault": {
+            "type": "number",
+            "example": 60,
+            "description": "Quórum por defecto para asambleas (%)"
+          },
+          "activo": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "nombre",
+          "administradorId"
+        ]
+      },
+      "UpdateConsorcioDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Edificio Libertador 1234"
+          },
+          "administradorId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Usuario administrador del consorcio"
+          },
+          "calle": {
+            "type": "string",
+            "example": "Av. Libertador"
+          },
+          "numero": {
+            "type": "string",
+            "example": "1234"
+          },
+          "barrio": {
+            "type": "string",
+            "example": "Belgrano"
+          },
+          "ciudad": {
+            "type": "string",
+            "example": "CABA"
+          },
+          "provincia": {
+            "type": "string",
+            "example": "Buenos Aires"
+          },
+          "cp": {
+            "type": "string",
+            "example": "C1426"
+          },
+          "cuit": {
+            "type": "string",
+            "example": "30-12345678-9"
+          },
+          "cbu": {
+            "type": "string",
+            "example": "0170099220000067797888"
+          },
+          "diaVencimiento": {
+            "type": "number",
+            "example": 10,
+            "description": "Día de vencimiento de la expensa"
+          },
+          "tasaInteresMora": {
+            "type": "number",
+            "example": 2.5,
+            "description": "Tasa de interés por mora (%)"
+          },
+          "periodicidadMora": {
+            "type": "string",
+            "enum": [
+              "DIARIA",
+              "MENSUAL"
+            ],
+            "example": "MENSUAL"
+          },
+          "porcentajeFondoReserva": {
+            "type": "number",
+            "example": 5,
+            "description": "Porcentaje destinado al fondo de reserva"
+          },
+          "quorumDefault": {
+            "type": "number",
+            "example": 60,
+            "description": "Quórum por defecto para asambleas (%)"
+          },
+          "activo": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "CreateUnidadDto": {
+        "type": "object",
+        "properties": {
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etiqueta": {
+            "type": "string",
+            "example": "3º B",
+            "description": "Única dentro del consorcio"
+          },
+          "piso": {
+            "type": "string",
+            "example": "3"
+          },
+          "departamento": {
+            "type": "string",
+            "example": "B"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "DEPARTAMENTO",
+              "LOCAL",
+              "COCHERA",
+              "BAULERA"
+            ],
+            "default": "DEPARTAMENTO"
+          },
+          "coeficiente": {
+            "type": "number",
+            "example": 4.5,
+            "description": "Porcentaje de participación en las expensas (0 < x ≤ 100)"
+          },
+          "metrosCuadrados": {
+            "type": "number",
+            "example": 62.5
+          }
+        },
+        "required": [
+          "consorcioId",
+          "etiqueta",
+          "coeficiente"
+        ]
+      },
+      "UpdateUnidadDto": {
+        "type": "object",
+        "properties": {
+          "etiqueta": {
+            "type": "string",
+            "example": "3º B",
+            "description": "Única dentro del consorcio"
+          },
+          "piso": {
+            "type": "string",
+            "example": "3"
+          },
+          "departamento": {
+            "type": "string",
+            "example": "B"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "DEPARTAMENTO",
+              "LOCAL",
+              "COCHERA",
+              "BAULERA"
+            ],
+            "default": "DEPARTAMENTO"
+          },
+          "coeficiente": {
+            "type": "number",
+            "example": 4.5,
+            "description": "Porcentaje de participación en las expensas (0 < x ≤ 100)"
+          },
+          "metrosCuadrados": {
+            "type": "number",
+            "example": 62.5
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "Dar de baja o reactivar. Las unidades no se borran: tienen historia."
+          }
+        }
+      },
+      "NuevoVecinoDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Julieta"
+          },
+          "apellido": {
+            "type": "string",
+            "example": "Sosa"
+          },
+          "email": {
+            "type": "string",
+            "example": "julieta.sosa@mail.com"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "description": "La inicial: el vecino la cambia desde su perfil"
+          },
+          "dni": {
+            "type": "string"
+          },
+          "telefono": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nombre",
+          "apellido",
+          "email",
+          "password"
+        ]
+      },
+      "VincularUsuarioDto": {
+        "type": "object",
+        "properties": {
+          "usuarioId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Vecino que ya tiene cuenta"
+          },
+          "nuevoUsuario": {
+            "description": "Lo da de alta y lo vincula en un paso",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NuevoVecinoDto"
+              }
+            ]
+          },
+          "vinculo": {
+            "type": "string",
+            "enum": [
+              "PROPIETARIO",
+              "INQUILINO"
+            ]
+          },
+          "esTitular": {
+            "type": "boolean",
+            "default": false,
+            "description": "Responsable principal de la unidad. Hay uno solo vigente por unidad."
+          },
+          "desde": {
+            "type": "string",
+            "example": "2026-03-01",
+            "description": "Si no viene, hoy"
+          }
+        },
+        "required": [
+          "vinculo"
+        ]
+      },
+      "CreateProveedorDto": {
+        "type": "object",
+        "properties": {
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Consorcio para el que trabaja. Sin él, el proveedor es compartido por todos y sólo lo puede crear el superadmin."
+          },
+          "razonSocial": {
+            "type": "string",
+            "example": "Plomería Rivas SRL"
+          },
+          "cuit": {
+            "type": "string",
+            "example": "30-71234567-9"
+          },
+          "rubro": {
+            "type": "string",
+            "example": "Plomería"
+          },
+          "email": {
+            "type": "string",
+            "example": "contacto@plomeriarivas.com"
+          },
+          "telefono": {
+            "type": "string",
+            "example": "+54 11 4567-8910"
+          }
+        },
+        "required": [
+          "razonSocial"
+        ]
+      },
+      "UpdateProveedorDto": {
+        "type": "object",
+        "properties": {
+          "razonSocial": {
+            "type": "string",
+            "example": "Plomería Rivas SRL"
+          },
+          "cuit": {
+            "type": "string",
+            "example": "30-71234567-9"
+          },
+          "rubro": {
+            "type": "string",
+            "example": "Plomería"
+          },
+          "email": {
+            "type": "string",
+            "example": "contacto@plomeriarivas.com"
+          },
+          "telefono": {
+            "type": "string",
+            "example": "+54 11 4567-8910"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Dar de baja o reactivar. No se borran: gastos y reclamos los referencian."
+          }
+        }
+      },
+      "CreateCategoriaReclamoDto": {
+        "type": "object",
+        "properties": {
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Consorcio al que pertenece. Sin él, la categoría es compartida por todos y sólo la puede crear el superadmin."
+          },
+          "nombre": {
+            "type": "string",
+            "example": "Gas"
+          },
+          "icono": {
+            "type": "string",
+            "example": "local_fire_department",
+            "description": "Nombre del ícono de Material Symbols"
+          }
+        },
+        "required": [
+          "nombre"
+        ]
+      },
+      "UpdateCategoriaReclamoDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Gas"
+          },
+          "icono": {
+            "type": "string",
+            "example": "local_fire_department",
+            "description": "Nombre del ícono de Material Symbols"
+          }
+        }
+      },
+      "AdjuntoDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "La URL que devolvió POST /archivos?destino=reclamos"
+          },
+          "nombre": {
+            "type": "string",
+            "example": "foto baño 3ºB"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "CrearReclamoDto": {
+        "type": "object",
+        "properties": {
+          "categoriaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Categoría del reclamo"
+          },
+          "titulo": {
+            "type": "string",
+            "example": "Pérdida de agua en el baño",
+            "maxLength": 80
+          },
+          "descripcion": {
+            "type": "string",
+            "example": "Hay una pérdida en la canilla del baño desde el domingo.",
+            "minLength": 10
+          },
+          "unidadId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "prioridad": {
+            "type": "string",
+            "enum": [
+              "BAJA",
+              "MEDIA",
+              "ALTA"
+            ]
+          },
+          "adjuntos": {
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdjuntoDto"
+            }
+          }
+        },
+        "required": [
+          "categoriaId",
+          "titulo",
+          "descripcion"
+        ]
+      },
+      "MensajeReclamoDto": {
+        "type": "object",
+        "properties": {
+          "mensaje": {
+            "type": "string",
+            "example": "Visita del plomero coordinada para el jueves de 9 a 12."
+          },
+          "interna": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "mensaje"
+        ]
+      },
+      "AsignarProveedorDto": {
+        "type": "object",
+        "properties": {
+          "proveedorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mensaje": {
+            "type": "string",
+            "example": "Coordinan la visita para el jueves."
+          }
+        },
+        "required": [
+          "proveedorId"
+        ]
+      },
+      "CambiarEstadoDto": {
+        "type": "object",
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "NUEVO",
+              "EN_CURSO",
+              "ESPERANDO_PROVEEDOR",
+              "RESUELTO"
+            ]
+          },
+          "mensaje": {
+            "type": "string",
+            "example": "Se cambió el flotante y no pierde más."
+          }
+        },
+        "required": [
+          "estado"
+        ]
+      },
+      "CambiarPrioridadDto": {
+        "type": "object",
+        "properties": {
+          "prioridad": {
+            "type": "string",
+            "enum": [
+              "BAJA",
+              "MEDIA",
+              "ALTA"
+            ]
+          }
+        },
+        "required": [
+          "prioridad"
+        ]
+      },
+      "CreateRubroGastoDto": {
+        "type": "object",
+        "properties": {
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Consorcio al que pertenece. Sin él, el rubro es compartido por todos y sólo lo puede crear el superadmin."
+          },
+          "nombre": {
+            "type": "string",
+            "example": "Sueldos y cargas sociales"
+          },
+          "icono": {
+            "type": "string",
+            "example": "badge",
+            "description": "Nombre del ícono de Material Symbols"
+          },
+          "naturaleza": {
+            "type": "string",
+            "enum": [
+              "ORDINARIO",
+              "EXTRAORDINARIO",
+              "FONDO_RESERVA"
+            ],
+            "default": "ORDINARIO",
+            "description": "La que toman por defecto los gastos de este rubro"
+          }
+        },
+        "required": [
+          "nombre"
+        ]
+      },
+      "UpdateRubroGastoDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "Sueldos y cargas sociales"
+          },
+          "icono": {
+            "type": "string",
+            "example": "badge",
+            "description": "Nombre del ícono de Material Symbols"
+          },
+          "naturaleza": {
+            "type": "string",
+            "enum": [
+              "ORDINARIO",
+              "EXTRAORDINARIO",
+              "FONDO_RESERVA"
+            ],
+            "default": "ORDINARIO",
+            "description": "La que toman por defecto los gastos de este rubro"
+          }
+        }
+      },
+      "CreateLiquidacionDto": {
+        "type": "object",
+        "properties": {
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "periodo": {
+            "type": "string",
+            "example": "2026-09",
+            "description": "Mes de los gastos (AAAA-MM)"
+          },
+          "criterioProrrateo": {
+            "type": "string",
+            "enum": [
+              "COEFICIENTE",
+              "PARTES_IGUALES"
+            ],
+            "default": "COEFICIENTE"
+          },
+          "fechaVencimiento": {
+            "type": "string",
+            "example": "2026-10-10",
+            "description": "Si no viene: el día de vencimiento del consorcio en el mes siguiente al período"
+          }
+        },
+        "required": [
+          "consorcioId",
+          "periodo"
+        ]
+      },
+      "UpdateLiquidacionDto": {
+        "type": "object",
+        "properties": {
+          "criterioProrrateo": {
+            "type": "string",
+            "enum": [
+              "COEFICIENTE",
+              "PARTES_IGUALES"
+            ],
+            "default": "COEFICIENTE"
+          },
+          "fechaVencimiento": {
+            "type": "string",
+            "example": "2026-10-10",
+            "description": "Si no viene: el día de vencimiento del consorcio en el mes siguiente al período"
+          }
+        }
+      },
+      "CreateGastoDto": {
+        "type": "object",
+        "properties": {
+          "rubroId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "proveedorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reclamoId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Reclamo que originó el gasto"
+          },
+          "votacionId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Votación que aprobó el gasto"
+          },
+          "descripcion": {
+            "type": "string",
+            "example": "Abono mensual ascensores"
+          },
+          "monto": {
+            "type": "number",
+            "example": 185000
+          },
+          "naturaleza": {
+            "type": "string",
+            "enum": [
+              "ORDINARIO",
+              "EXTRAORDINARIO",
+              "FONDO_RESERVA"
+            ],
+            "description": "Si no viene, la del rubro"
+          },
+          "comprobanteUrl": {
+            "type": "string",
+            "description": "La URL que devolvió POST /archivos?destino=comprobantes"
+          },
+          "comprobanteNumero": {
+            "type": "string",
+            "example": "A-0001-00012345"
+          },
+          "cuotaNumero": {
+            "type": "number",
+            "example": 2,
+            "description": "Para un gasto en cuotas: cuál es esta"
+          },
+          "cuotaTotal": {
+            "type": "number",
+            "example": 6,
+            "description": "Para un gasto en cuotas: cuántas son"
+          }
+        },
+        "required": [
+          "rubroId",
+          "descripcion",
+          "monto"
+        ]
+      },
+      "UpdateGastoDto": {
+        "type": "object",
+        "properties": {
+          "rubroId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "proveedorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reclamoId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Reclamo que originó el gasto"
+          },
+          "votacionId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Votación que aprobó el gasto"
+          },
+          "descripcion": {
+            "type": "string",
+            "example": "Abono mensual ascensores"
+          },
+          "monto": {
+            "type": "number",
+            "example": 185000
+          },
+          "naturaleza": {
+            "type": "string",
+            "enum": [
+              "ORDINARIO",
+              "EXTRAORDINARIO",
+              "FONDO_RESERVA"
+            ],
+            "description": "Si no viene, la del rubro"
+          },
+          "comprobanteUrl": {
+            "type": "string",
+            "description": "La URL que devolvió POST /archivos?destino=comprobantes"
+          },
+          "comprobanteNumero": {
+            "type": "string",
+            "example": "A-0001-00012345"
+          },
+          "cuotaNumero": {
+            "type": "number",
+            "example": 2,
+            "description": "Para un gasto en cuotas: cuál es esta"
+          },
+          "cuotaTotal": {
+            "type": "number",
+            "example": 6,
+            "description": "Para un gasto en cuotas: cuántas son"
+          }
+        }
+      },
+      "EnviarRecordatoriosDto": {
+        "type": "object",
+        "properties": {
+          "boletaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Una sola boleta: el botón de enviar de cada fila de la grilla"
+          },
+          "liquidacionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "periodo": {
+            "type": "string",
+            "example": "2026-08"
+          },
+          "situacion": {
+            "type": "string",
+            "enum": [
+              "pendientes",
+              "vencidos"
+            ],
+            "description": "Si no viene, a todas las que tengan saldo"
+          },
+          "mensaje": {
+            "type": "string",
+            "description": "Se agrega al final del aviso",
+            "example": "Recordá que a partir del 15 corren intereses."
+          }
+        }
+      },
+      "AjustarBoletaDto": {
+        "type": "object",
+        "properties": {
+          "ajusteManual": {
+            "type": "number",
+            "example": -1500,
+            "description": "Positivo suma, negativo descuenta. 0 quita el ajuste."
+          },
+          "motivoAjuste": {
+            "type": "string",
+            "example": "Bonificación por arreglo a cargo del vecino",
+            "description": "Obligatorio si el ajuste no es 0"
+          }
+        },
+        "required": [
+          "ajusteManual"
+        ]
+      },
+      "RegistrarPagoDto": {
+        "type": "object",
+        "properties": {
+          "boletaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La boleta de expensas"
+          },
+          "reservaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La reserva cuya seña se paga"
+          },
+          "monto": {
+            "type": "number",
+            "example": 45000
+          },
+          "medio": {
+            "type": "string",
+            "enum": [
+              "TRANSFERENCIA",
+              "EFECTIVO",
+              "OTRO"
+            ]
+          },
+          "fechaPago": {
+            "type": "string",
+            "example": "2026-10-05",
+            "description": "Si no viene, ahora"
+          }
+        },
+        "required": [
+          "monto",
+          "medio"
+        ]
+      },
+      "CrearPreferenciaDto": {
+        "type": "object",
+        "properties": {
+          "boletaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La boleta de expensas"
+          },
+          "reservaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "La reserva cuya seña se paga"
+          }
+        }
+      },
+      "CreateAmenityDto": {
+        "type": "object",
+        "properties": {
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string",
+            "example": "SUM",
+            "description": "Único dentro del consorcio"
+          },
+          "icono": {
+            "type": "string",
+            "example": "celebration",
+            "description": "Nombre de un Material Symbol"
+          },
+          "cupoPersonas": {
+            "type": "number",
+            "example": 30
+          },
+          "lugares": {
+            "type": "number",
+            "example": 2,
+            "default": 1,
+            "description": "Cuántas reservas simultáneas admite (la cochera de visitas tiene 2 lugares)"
+          },
+          "reglamento": {
+            "type": "object",
+            "example": "Música hasta las 01:00. Devolver el SUM limpio.",
+            "description": "Las reglas en texto libre: el vecino las ve antes de confirmar"
+          },
+          "horaApertura": {
+            "type": "string",
+            "example": "08:00",
+            "default": "08:00:00"
+          },
+          "horaCierre": {
+            "type": "string",
+            "example": "22:00",
+            "default": "22:00:00"
+          },
+          "horarioSemanal": {
+            "type": "object",
+            "example": {
+              "5": {
+                "apertura": "10:00",
+                "cierre": "02:00"
+              },
+              "7": null
+            },
+            "description": "Excepciones al horario general por día de la semana (1 lunes … 7 domingo): otro horario, o null si ese día está cerrado. Los días que no figuran usan horaApertura y horaCierre. El servicio valida cada día."
+          },
+          "anticipacionMinimaHoras": {
+            "type": "number",
+            "example": 24,
+            "default": 0,
+            "maximum": 720
+          },
+          "cancelacionMinimaHoras": {
+            "type": "number",
+            "example": 24,
+            "default": 0,
+            "maximum": 720,
+            "description": "Hasta cuántas horas antes el vecino puede cancelar. 0: hasta que empieza."
+          },
+          "duracionFranjaMinutos": {
+            "type": "object",
+            "example": 240,
+            "description": "Turnos fijos desde la apertura, en minutos (\"franjas de 4 horas\"). Sin esto (o null), el horario es libre."
+          },
+          "duracionMaximaHoras": {
+            "type": "number",
+            "example": 6,
+            "description": "Sin tope si no se indica"
+          },
+          "requiereAprobacion": {
+            "type": "boolean",
+            "default": true
+          },
+          "montoSena": {
+            "type": "number",
+            "example": 15000,
+            "default": 0
+          },
+          "diasDevolucionSena": {
+            "type": "number",
+            "example": 7,
+            "default": 0
+          },
+          "bloqueaConDeuda": {
+            "type": "boolean",
+            "default": false,
+            "description": "Si está en true, el vecino con expensas vencidas no puede reservar"
+          }
+        },
+        "required": [
+          "consorcioId",
+          "nombre"
+        ]
+      },
+      "UpdateAmenityDto": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "example": "SUM",
+            "description": "Único dentro del consorcio"
+          },
+          "icono": {
+            "type": "string",
+            "example": "celebration",
+            "description": "Nombre de un Material Symbol"
+          },
+          "cupoPersonas": {
+            "type": "number",
+            "example": 30
+          },
+          "lugares": {
+            "type": "number",
+            "example": 2,
+            "default": 1,
+            "description": "Cuántas reservas simultáneas admite (la cochera de visitas tiene 2 lugares)"
+          },
+          "reglamento": {
+            "type": "object",
+            "example": "Música hasta las 01:00. Devolver el SUM limpio.",
+            "description": "Las reglas en texto libre: el vecino las ve antes de confirmar"
+          },
+          "horaApertura": {
+            "type": "string",
+            "example": "08:00",
+            "default": "08:00:00"
+          },
+          "horaCierre": {
+            "type": "string",
+            "example": "22:00",
+            "default": "22:00:00"
+          },
+          "horarioSemanal": {
+            "type": "object",
+            "example": {
+              "5": {
+                "apertura": "10:00",
+                "cierre": "02:00"
+              },
+              "7": null
+            },
+            "description": "Excepciones al horario general por día de la semana (1 lunes … 7 domingo): otro horario, o null si ese día está cerrado. Los días que no figuran usan horaApertura y horaCierre. El servicio valida cada día."
+          },
+          "anticipacionMinimaHoras": {
+            "type": "number",
+            "example": 24,
+            "default": 0,
+            "maximum": 720
+          },
+          "cancelacionMinimaHoras": {
+            "type": "number",
+            "example": 24,
+            "default": 0,
+            "maximum": 720,
+            "description": "Hasta cuántas horas antes el vecino puede cancelar. 0: hasta que empieza."
+          },
+          "duracionFranjaMinutos": {
+            "type": "object",
+            "example": 240,
+            "description": "Turnos fijos desde la apertura, en minutos (\"franjas de 4 horas\"). Sin esto (o null), el horario es libre."
+          },
+          "duracionMaximaHoras": {
+            "type": "number",
+            "example": 6,
+            "description": "Sin tope si no se indica"
+          },
+          "requiereAprobacion": {
+            "type": "boolean",
+            "default": true
+          },
+          "montoSena": {
+            "type": "number",
+            "example": 15000,
+            "default": 0
+          },
+          "diasDevolucionSena": {
+            "type": "number",
+            "example": 7,
+            "default": 0
+          },
+          "bloqueaConDeuda": {
+            "type": "boolean",
+            "default": false,
+            "description": "Si está en true, el vecino con expensas vencidas no puede reservar"
+          },
+          "activo": {
+            "type": "boolean",
+            "description": "Dar de baja o reactivar. No se borran: las reservas los referencian."
+          }
+        }
+      },
+      "CrearBloqueoDto": {
+        "type": "object",
+        "properties": {
+          "desde": {
+            "type": "string",
+            "example": "2026-10-10T00:00"
+          },
+          "hasta": {
+            "type": "string",
+            "example": "2026-10-12T23:59"
+          },
+          "motivo": {
+            "type": "string",
+            "example": "Pintura del salón"
+          },
+          "cancelarReservas": {
+            "type": "boolean",
+            "default": false,
+            "description": "Cancela las reservas que el bloqueo pisa en vez de rechazar el alta"
+          }
+        },
+        "required": [
+          "desde",
+          "hasta"
+        ]
+      },
+      "CrearReservaDto": {
+        "type": "object",
+        "properties": {
+          "amenityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "unidadId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Obligatorio para quien administra. El vecino con una sola unidad puede omitirlo."
+          },
+          "fecha": {
+            "type": "string",
+            "example": "2026-10-05"
+          },
+          "horaInicio": {
+            "type": "string",
+            "example": "12:00"
+          },
+          "horaFin": {
+            "type": "string",
+            "example": "16:00"
+          },
+          "motivo": {
+            "type": "string",
+            "example": "Cumpleaños"
+          }
+        },
+        "required": [
+          "amenityId",
+          "fecha",
+          "horaInicio",
+          "horaFin"
+        ]
+      },
+      "RechazarReservaDto": {
+        "type": "object",
+        "properties": {
+          "motivoRechazo": {
+            "type": "string",
+            "example": "El SUM está reservado para la asamblea de ese día"
+          }
+        },
+        "required": [
+          "motivoRechazo"
+        ]
+      },
+      "PuntoOrdenDiaDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "example": "Cambio de la bomba de agua"
+          },
+          "descripcion": {
+            "type": "string",
+            "example": "Presupuesto de $ 3.480.000"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "INFORMATIVO",
+              "CON_VOTACION"
+            ],
+            "default": "INFORMATIVO"
+          }
+        },
+        "required": [
+          "titulo"
+        ]
+      },
+      "CreateAsambleaDto": {
+        "type": "object",
+        "properties": {
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "titulo": {
+            "type": "string",
+            "example": "Asamblea ordinaria · 2º semestre 2026"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "ORDINARIA",
+              "EXTRAORDINARIA"
+            ],
+            "default": "ORDINARIA"
+          },
+          "modalidad": {
+            "type": "string",
+            "enum": [
+              "PRESENCIAL",
+              "HIBRIDA",
+              "DIGITAL"
+            ],
+            "default": "PRESENCIAL"
+          },
+          "fechaHora": {
+            "type": "string",
+            "example": "2026-11-12T19:00:00-03:00",
+            "description": "Fecha y hora, tiene que ser futura"
+          },
+          "lugar": {
+            "type": "object",
+            "example": "SUM del edificio",
+            "description": "Obligatorio si es presencial o híbrida"
+          },
+          "linkVideollamada": {
+            "type": "object",
+            "example": "https://meet.example.com/abc",
+            "description": "Obligatorio si es digital o híbrida"
+          },
+          "quorumRequerido": {
+            "type": "number",
+            "example": 60,
+            "default": 60,
+            "description": "Porcentaje de coeficientes para sesionar"
+          },
+          "puntos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PuntoOrdenDiaDto"
+            }
+          }
+        },
+        "required": [
+          "consorcioId",
+          "titulo",
+          "fechaHora"
+        ]
+      },
+      "UpdateAsambleaDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "example": "Asamblea ordinaria · 2º semestre 2026"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "ORDINARIA",
+              "EXTRAORDINARIA"
+            ],
+            "default": "ORDINARIA"
+          },
+          "modalidad": {
+            "type": "string",
+            "enum": [
+              "PRESENCIAL",
+              "HIBRIDA",
+              "DIGITAL"
+            ],
+            "default": "PRESENCIAL"
+          },
+          "fechaHora": {
+            "type": "string",
+            "example": "2026-11-12T19:00:00-03:00",
+            "description": "Fecha y hora, tiene que ser futura"
+          },
+          "lugar": {
+            "type": "object",
+            "example": "SUM del edificio",
+            "description": "Obligatorio si es presencial o híbrida"
+          },
+          "linkVideollamada": {
+            "type": "object",
+            "example": "https://meet.example.com/abc",
+            "description": "Obligatorio si es digital o híbrida"
+          },
+          "quorumRequerido": {
+            "type": "number",
+            "example": 60,
+            "default": 60,
+            "description": "Porcentaje de coeficientes para sesionar"
+          }
+        }
+      },
+      "ReemplazarOrdenDiaDto": {
+        "type": "object",
+        "properties": {
+          "puntos": {
+            "description": "La lista completa, en orden",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PuntoOrdenDiaDto"
+            }
+          }
+        },
+        "required": [
+          "puntos"
+        ]
+      },
+      "CargarActaDto": {
+        "type": "object",
+        "properties": {
+          "actaUrl": {
+            "type": "string",
+            "description": "La URL que devolvió POST /archivos?destino=actas"
+          }
+        },
+        "required": [
+          "actaUrl"
+        ]
+      },
+      "RegistrarAsistenciaDto": {
+        "type": "object",
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ASISTE",
+              "NO_ASISTE",
+              "SIN_RESPONDER",
+              "CON_PODER"
+            ]
+          },
+          "apoderadoUnidadId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Obligatorio con CON_PODER: la unidad que la representa"
+          }
+        },
+        "required": [
+          "estado"
+        ]
+      },
+      "ConfirmarAsistenciaDto": {
+        "type": "object",
+        "properties": {
+          "estado": {
+            "type": "string",
+            "enum": [
+              "ASISTE",
+              "NO_ASISTE"
+            ]
+          },
+          "unidadId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Sólo si tiene más de una unidad en el consorcio"
+          }
+        },
+        "required": [
+          "estado"
+        ]
+      },
+      "CreateVotacionDto": {
+        "type": "object",
+        "properties": {
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "puntoOrdenDiaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Punto CON_VOTACION del orden del día. Sin esto, la votación es independiente."
+          },
+          "asambleaId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Asamblea a la que se suma como un punto nuevo del orden del día (aunque ya esté convocada). No va junto con puntoOrdenDiaId."
+          },
+          "titulo": {
+            "type": "string",
+            "example": "Cambio de la bomba de agua"
+          },
+          "descripcion": {
+            "type": "object",
+            "example": "Presupuesto de $ 3.480.000 en 3 cuotas."
+          },
+          "adjuntoUrl": {
+            "type": "object",
+            "description": "La URL que devolvió POST /archivos?destino=votaciones"
+          },
+          "padron": {
+            "type": "string",
+            "enum": [
+              "SOLO_PROPIETARIOS",
+              "TODAS_LAS_UNIDADES"
+            ],
+            "default": "SOLO_PROPIETARIOS"
+          },
+          "formaConteo": {
+            "type": "string",
+            "enum": [
+              "POR_COEFICIENTE",
+              "POR_UNIDAD"
+            ],
+            "default": "POR_COEFICIENTE"
+          },
+          "mayoria": {
+            "type": "string",
+            "enum": [
+              "SIMPLE_PRESENTES",
+              "ABSOLUTA",
+              "DOS_TERCIOS"
+            ],
+            "default": "SIMPLE_PRESENTES"
+          },
+          "desempate": {
+            "type": "string",
+            "enum": [
+              "RECHAZADA",
+              "APROBADA"
+            ],
+            "default": "RECHAZADA"
+          },
+          "permiteVotoAnticipado": {
+            "type": "boolean",
+            "default": false,
+            "description": "Sólo de asamblea: votar desde la app antes de que empiece"
+          },
+          "mostrarParcial": {
+            "type": "boolean",
+            "default": false,
+            "description": "El vecino ve el parcial antes del cierre"
+          },
+          "bloqueaConDeuda": {
+            "type": "boolean",
+            "default": false,
+            "description": "Una unidad con expensas vencidas no vota"
+          },
+          "apertura": {
+            "type": "string",
+            "example": "2026-11-01T09:00:00-03:00",
+            "description": "Obligatoria si es independiente"
+          },
+          "cierre": {
+            "type": "string",
+            "example": "2026-11-08T21:00:00-03:00",
+            "description": "Obligatorio si es independiente"
+          },
+          "opciones": {
+            "example": [
+              "Abstención"
+            ],
+            "description": "Opciones además de \"A favor\" y \"En contra\", que siempre están",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "consorcioId",
+          "titulo"
+        ]
+      },
+      "UpdateVotacionDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string",
+            "example": "Cambio de la bomba de agua"
+          },
+          "descripcion": {
+            "type": "object",
+            "example": "Presupuesto de $ 3.480.000 en 3 cuotas."
+          },
+          "adjuntoUrl": {
+            "type": "object",
+            "description": "La URL que devolvió POST /archivos?destino=votaciones"
+          },
+          "padron": {
+            "type": "string",
+            "enum": [
+              "SOLO_PROPIETARIOS",
+              "TODAS_LAS_UNIDADES"
+            ],
+            "default": "SOLO_PROPIETARIOS"
+          },
+          "formaConteo": {
+            "type": "string",
+            "enum": [
+              "POR_COEFICIENTE",
+              "POR_UNIDAD"
+            ],
+            "default": "POR_COEFICIENTE"
+          },
+          "mayoria": {
+            "type": "string",
+            "enum": [
+              "SIMPLE_PRESENTES",
+              "ABSOLUTA",
+              "DOS_TERCIOS"
+            ],
+            "default": "SIMPLE_PRESENTES"
+          },
+          "desempate": {
+            "type": "string",
+            "enum": [
+              "RECHAZADA",
+              "APROBADA"
+            ],
+            "default": "RECHAZADA"
+          },
+          "permiteVotoAnticipado": {
+            "type": "boolean",
+            "default": false,
+            "description": "Sólo de asamblea: votar desde la app antes de que empiece"
+          },
+          "mostrarParcial": {
+            "type": "boolean",
+            "default": false,
+            "description": "El vecino ve el parcial antes del cierre"
+          },
+          "bloqueaConDeuda": {
+            "type": "boolean",
+            "default": false,
+            "description": "Una unidad con expensas vencidas no vota"
+          },
+          "apertura": {
+            "type": "string",
+            "example": "2026-11-01T09:00:00-03:00",
+            "description": "Obligatoria si es independiente"
+          },
+          "cierre": {
+            "type": "string",
+            "example": "2026-11-08T21:00:00-03:00",
+            "description": "Obligatorio si es independiente"
+          }
+        }
+      },
+      "ReemplazarOpcionesDto": {
+        "type": "object",
+        "properties": {
+          "opciones": {
+            "example": [
+              "Abstención"
+            ],
+            "description": "Las opciones no fijas, en orden",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "opciones"
+        ]
+      },
+      "VotoPresencialDto": {
+        "type": "object",
+        "properties": {
+          "opcionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "opcionId"
+        ]
+      },
+      "VotarDto": {
+        "type": "object",
+        "properties": {
+          "opcionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "unidadId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Sólo si vota por más de una unidad"
+          }
+        },
+        "required": [
+          "opcionId"
+        ]
+      },
+      "AdjuntoNovedadDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "La URL que devolvió POST /archivos?destino=novedades"
+          },
+          "nombre": {
+            "type": "string",
+            "example": "Presupuesto pintura.pdf"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "CrearNovedadDto": {
+        "type": "object",
+        "properties": {
+          "consorcioId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "titulo": {
+            "type": "string",
+            "example": "Corte de agua el martes"
+          },
+          "cuerpo": {
+            "type": "string",
+            "example": "AySA corta el suministro de 9 a 13 por obras en la calle."
+          },
+          "fijada": {
+            "type": "boolean",
+            "default": false,
+            "description": "Queda arriba del muro"
+          },
+          "adjuntos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdjuntoNovedadDto"
+            }
+          }
+        },
+        "required": [
+          "consorcioId",
+          "titulo",
+          "cuerpo"
+        ]
+      },
+      "ActualizarNovedadDto": {
+        "type": "object",
+        "properties": {
+          "titulo": {
+            "type": "string"
+          },
+          "cuerpo": {
+            "type": "string"
+          },
+          "fijada": {
+            "type": "boolean"
+          },
+          "activa": {
+            "type": "boolean",
+            "description": "`false` la saca del muro"
+          }
+        }
+      }
+    }
+  }
+}

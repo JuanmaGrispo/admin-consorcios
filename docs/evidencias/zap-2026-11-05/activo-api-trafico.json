@@ -1,0 +1,35 @@
+{
+  "muestraMaxima": 10000,
+  "respuestasPorEstado": {
+    "200": 453,
+    "400": 3621,
+    "201": 1,
+    "404": 27
+  },
+  "sinRespuestaHTTP": 5,
+  "operacionesCon2xx": [
+    "GET http://host.docker.internal:4400/api/boletas",
+    "GET http://host.docker.internal:4400/api/boletas/",
+    "GET http://host.docker.internal:4400/api/boletas/fdf0717a-7ced-4b5c-a4f8-d57a3783b704",
+    "GET http://host.docker.internal:4400/api/boletas/fdf0717a-7ced-4b5c-a4f8-d57a3783b704/",
+    "GET http://host.docker.internal:4400/api/consorcios",
+    "GET http://host.docker.internal:4400/api/consorcios/",
+    "GET http://host.docker.internal:4400/api/consorcios/abbd596a-2ec2-44cf-a986-e43afad971d2",
+    "GET http://host.docker.internal:4400/api/consorcios/abbd596a-2ec2-44cf-a986-e43afad971d2/",
+    "GET http://host.docker.internal:4400/api/health",
+    "GET http://host.docker.internal:4400/api/health/",
+    "GET http://host.docker.internal:4400/api/novedades",
+    "GET http://host.docker.internal:4400/api/novedades/",
+    "GET http://host.docker.internal:4400/api/panel",
+    "GET http://host.docker.internal:4400/api/panel/",
+    "GET http://host.docker.internal:4400/api/reclamos",
+    "GET http://host.docker.internal:4400/api/reclamos/",
+    "GET http://host.docker.internal:4400/api/reclamos/007f26ce-d3f4-4b92-af30-b66dc45cba37",
+    "GET http://host.docker.internal:4400/api/reclamos/007f26ce-d3f4-4b92-af30-b66dc45cba37/",
+    "GET http://host.docker.internal:4400/api/unidades",
+    "GET http://host.docker.internal:4400/api/unidades/",
+    "GET http://host.docker.internal:4400/api/usuarios",
+    "GET http://host.docker.internal:4400/api/usuarios/",
+    "POST http://host.docker.internal:4400/api/reclamos"
+  ]
+}

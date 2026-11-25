@@ -43,7 +43,9 @@ para repositorios públicos), apagar "Automatic Analysis" y cargar el secret
 
 El mutation testing (`pnpm back test:mutacion`, Stryker) no está en el
 workflow: tarda unos 34 minutos y el pipeline tiene que quedar en 15. Se corre
-aparte y su reporte HTML queda en `apps/backend/reports/mutation/`.
+aparte y su reporte HTML queda en `apps/backend/reports/mutation/` (ignorado
+por git). El reporte de la corrida del 05/11 (81,2 %) está versionado en
+[docs/evidencias/stryker-2026-11-05/mutation.html](evidencias/stryker-2026-11-05/mutation.html).
 
 El job de secretos conserva la versión y el SHA256 fijados en el workflow
 remoto. Descarga todo el historial con `fetch-depth: 0` y analiza los commits

@@ -72,7 +72,8 @@ deben pasar antes de iniciar los escaneos. La imagen de Storage es un PNG
 servido por el proveedor local; no requiere acceder al Storage compartido.
 
 Las evidencias nuevas quedan en `acceptance/resultados/zap-csp/`, separadas
-de la corrida original de ZAP. El reporte de Playwright queda en
+de la corrida original de ZAP. Las del 05/11 están versionadas en
+[docs/evidencias/zap-csp-2026-11-05/](evidencias/zap-csp-2026-11-05/). El reporte de Playwright queda en
 `acceptance/resultados/web/`. Los resultados se consolidan al completar la
 corrida; las tres alertas bajas de aislamiento del navegador son un pendiente
 separado de esta corrección de CSP. No se repite ni se acredita carga k6 por

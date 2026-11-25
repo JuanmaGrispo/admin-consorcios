@@ -1,0 +1,3 @@
+# Reportes de evidencia (Stryker, ZAP): se guardan byte a byte, sin convertir
+# finales de línea, para que coincidan con los SHA-256 registrados en docs/evidencias/*.json.
+docs/evidencias/*/** -text
