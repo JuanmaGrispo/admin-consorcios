@@ -143,5 +143,5 @@ Atajos: `pnpm back <script>` y `pnpm front <script>` corren scripts de cada app
 | [Mensajería](docs/mensajeria.md) | Eventos, consumidores y topología RabbitMQ |
 | [CI](docs/ci.md) | Validaciones automatizadas |
 | [Operación y resiliencia](docs/operacion-resiliencia.md) | Procedimientos de diagnóstico y recuperación |
-| [QA y testing](docs/qa-y-testing.docx) | Plan de pruebas, trazabilidad, ejecución, defectos, seguridad e IA (copia del Drive) |
+| [Domus - Documentacion](https://docs.google.com/document/d/1wkKXFamLStn9kIv_WIBYFhEKJTWsuIBTAGT9kvbUwc8/edit) | Documento de la entrega en Drive: alcance, BRD, documentación funcional, QA y testing, e IA |
 | [Manual de usuario](docs/checkpoint-3/pdf/manual-usuario.pdf) | Uso de los portales del vecino, la administración y la plataforma |
