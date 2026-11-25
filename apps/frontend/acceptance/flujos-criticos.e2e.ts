@@ -10,6 +10,7 @@ import { test, expect, type Browser, type Page } from '@playwright/test';
  *   3. HU 15  Administración registra una transferencia y el vecino ve la boleta pagada.
  *   4. HU 04/05  Vecino abre un reclamo; la administración lo toma; el vecino ve el cambio.
  *   5. HU 13  Superadministrador da de alta un consorcio y queda en el listado.
+ *   DEF-07  Vecino cierra el checkout sin volver al sitio y en Mis expensas ve la boleta pagada.
  *
  * Usan unidades propias (carga40 a carga49) para no pisar otras pruebas.
  */
@@ -43,6 +44,41 @@ async function enConsorcioDeAceptacion(page: Page) {
   await page.addInitScript((valor) => localStorage.setItem('domus.consorcioActivo', valor), id!);
 }
 
+/** Desde Mis expensas hasta el checkout de Mercado Pago, que se intercepta. Devuelve el id del pago. */
+async function pagarConMercadoPago(page: Page): Promise<string> {
+  await page.goto('/vecino/expensas');
+  await page.getByRole('link', { name: /^Pagar \$/ }).click();
+  await expect(page.getByRole('heading', { name: 'Pagar expensas' })).toBeVisible();
+
+  // El checkout real es externo: se intercepta la redirección.
+  await page.route('http://checkout.example.test/**', (ruta) => ruta.fulfill({ body: 'checkout simulado' }));
+  // La página redirige apenas recibe la preferencia: se lee la respuesta al pasar.
+  let preferencia: { status: number; pagoId?: string } | undefined;
+  await page.route('**/api/pagos/mercadopago/preferencia', async (ruta) => {
+    const respuesta = await ruta.fetch();
+    preferencia = { status: respuesta.status(), ...(await respuesta.json()) };
+    await ruta.fulfill({ response: respuesta });
+  });
+  await page.getByRole('button', { name: /^Pagar \$/ }).click();
+  await expect.poll(() => preferencia?.status).toBe(201);
+  await expect(page).toHaveURL(/checkout\.example\.test/);
+  return preferencia!.pagoId!;
+}
+
+/** El simulador de Mercado Pago pasa a responder ese pago como aprobado. */
+async function aprobarEnMercadoPago(page: Page, pagoId: string) {
+  const pago = await (await page.request.get(`${api}/pagos/${pagoId}`)).json();
+  const aprobado = { id: 990000000 + Math.floor(Math.random() * 1_000_000), status: 'approved', status_detail: 'accredited', external_reference: pagoId,
+    transaction_amount: Number(pago.monto), date_approved: new Date().toISOString(), payment_method_id: 'visa',
+    card: { last_four_digits: '4242' } };
+  const busqueda = `search?external_reference=${encodeURIComponent(pagoId)}&sort=date_created&criteria=desc`;
+  const control = await page.request.post(`${proveedorUrl}/__control`, {
+    data: { modo: 'ok', pagos: { [busqueda]: { results: [aprobado] }, [String(aprobado.id)]: aprobado } },
+  });
+  expect(control.ok()).toBeTruthy();
+  return aprobado;
+}
+
 test.describe('flujos críticos', () => {
   test('HU 09: cada rol entra a su portal, el error no distingue y no hay acceso cruzado', async ({ page, browser }) => {
     await ingresar(page, 'carga40@example.test');
@@ -69,33 +105,8 @@ test.describe('flujos críticos', () => {
   test('HU 01: el vecino paga con Mercado Pago y vuelve con la boleta pagada', async ({ page }) => {
     test.skip(!proveedorUrl, 'Falta ACEPTACION_PROVEEDOR_URL (simulador de Mercado Pago)');
     await ingresar(page, 'carga41@example.test');
-    await page.goto('/vecino/expensas');
-    await page.getByRole('link', { name: /^Pagar \$/ }).click();
-    await expect(page.getByRole('heading', { name: 'Pagar expensas' })).toBeVisible();
-
-    // El checkout real es externo: se intercepta la redirección y se simula el pago aprobado.
-    await page.route('http://checkout.example.test/**', (ruta) => ruta.fulfill({ body: 'checkout simulado' }));
-    // La página redirige apenas recibe la preferencia: se lee la respuesta al pasar.
-    let preferencia: { status: number; pagoId?: string } | undefined;
-    await page.route('**/api/pagos/mercadopago/preferencia', async (ruta) => {
-      const respuesta = await ruta.fetch();
-      preferencia = { status: respuesta.status(), ...(await respuesta.json()) };
-      await ruta.fulfill({ response: respuesta });
-    });
-    await page.getByRole('button', { name: /^Pagar \$/ }).click();
-    await expect.poll(() => preferencia?.status).toBe(201);
-    const pagoId = preferencia!.pagoId!;
-    await expect(page).toHaveURL(/checkout\.example\.test/);
-    const pago = await (await page.request.get(`${api}/pagos/${pagoId}`)).json();
-
-    const aprobado = { id: 990000001, status: 'approved', status_detail: 'accredited', external_reference: pagoId,
-      transaction_amount: Number(pago.monto), date_approved: new Date().toISOString(), payment_method_id: 'visa',
-      card: { last_four_digits: '4242' } };
-    const busqueda = `search?external_reference=${encodeURIComponent(pagoId)}&sort=date_created&criteria=desc`;
-    const control = await page.request.post(`${proveedorUrl}/__control`, {
-      data: { modo: 'ok', pagos: { [busqueda]: { results: [aprobado] }, [String(aprobado.id)]: aprobado } },
-    });
-    expect(control.ok()).toBeTruthy();
+    const pagoId = await pagarConMercadoPago(page);
+    const aprobado = await aprobarEnMercadoPago(page, pagoId);
 
     // Vuelta del checkout, como la arma Mercado Pago.
     await page.goto(`/vecino/expensas/pago?pago=aprobado&external_reference=${pagoId}&payment_id=${aprobado.id}`);
@@ -103,6 +114,20 @@ test.describe('flujos críticos', () => {
 
     const boleta = await (await page.request.get(`${api}/pagos/${pagoId}`)).json();
     expect(boleta.estado).toBe('APROBADO');
+    await page.request.post(`${proveedorUrl}/__control`, { data: { modo: 'ok', pagos: {} } });
+  });
+
+  test('DEF-07: el vecino cierra el checkout sin volver al sitio y en Mis expensas la boleta figura pagada', async ({ page }) => {
+    test.skip(!proveedorUrl, 'Falta ACEPTACION_PROVEEDOR_URL (simulador de Mercado Pago)');
+    await ingresar(page, 'carga44@example.test');
+    const pagoId = await pagarConMercadoPago(page);
+    await aprobarEnMercadoPago(page, pagoId);
+
+    // Sin la vuelta del checkout y sin webhook: sólo entra a Mis expensas.
+    await page.goto('/vecino/expensas');
+    await expect(page.getByRole('link', { name: /^Pagar \$/ })).toHaveCount(0);
+    const pago = await (await page.request.get(`${api}/pagos/${pagoId}`)).json();
+    expect(pago.estado).toBe('APROBADO');
     await page.request.post(`${proveedorUrl}/__control`, { data: { modo: 'ok', pagos: {} } });
   });
 

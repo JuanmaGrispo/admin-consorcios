@@ -17,7 +17,19 @@ import { usePedido } from '@/hooks/use-pedido';
 import { ApiError } from '@/lib/api';
 import { fecha, pesos } from '@/lib/formato';
 import { expensasService } from '@/services/expensas';
+import { pagosService } from '@/services/pagos';
 import type { FilaCobranza } from '@/types/expensa';
+
+/** Le pregunta a Mercado Pago por los pagos pendientes de la unidad y devuelve cuántos dejaron de estarlo. */
+async function confirmarPagosPendientes(unidadId: string): Promise<number> {
+  const pendientes = await pagosService.listar({ unidadId, estado: 'PENDIENTE' });
+  const pagos = await Promise.all(
+    pendientes
+      .filter((p) => p.medio === 'MERCADO_PAGO')
+      .map((p) => pagosService.sincronizar(p.id).catch(() => p)),
+  );
+  return pagos.filter((p) => p.estado !== 'PENDIENTE').length;
+}
 
 const POR_PAGINA = 12;
 /** El backend no devuelve más de 100 por pedido. */
@@ -33,13 +45,16 @@ export default function VecinoExpensasPage() {
 function MisExpensas({ unidadId, etiqueta }: { unidadId: string; etiqueta: string }) {
   const [limite, setLimite] = useState(POR_PAGINA);
   const [descargando, setDescargando] = useState(false);
+  // Quien cerró el checkout sin "Volver al sitio" deja el pago pendiente hasta que avise Mercado Pago.
+  const confirmados =
+    usePedido(`pagos-pendientes:${unidadId}`, () => confirmarPagosPendientes(unidadId)).datos ?? 0;
   const pedido = usePedido(
-    `mis-expensas:${unidadId}:${limite}`,
+    `mis-expensas:${unidadId}:${limite}:${confirmados}`,
     () => expensasService.listarBoletas({ unidadId, limite }),
     'No se pudieron cargar tus expensas.',
   );
-  // "Ver anteriores" pide una página más larga: mientras llega, sigue la lista de antes.
-  const datos = pedido.datos ?? (limite > POR_PAGINA ? pedido.ultimo : undefined);
+  // "Ver anteriores" pide una página más larga, y un pago confirmado recarga: mientras llega, sigue la lista de antes.
+  const datos = pedido.datos ?? (limite > POR_PAGINA || confirmados > 0 ? pedido.ultimo : undefined);
   // La más reciente es la única que se paga: las anteriores ya viajan en ella como saldo anterior.
   const ultima = datos?.items[0];
   const debe = ultima && ultima.saldo > 0;
