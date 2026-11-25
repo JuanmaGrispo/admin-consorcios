@@ -96,33 +96,38 @@ endpoints ni todos los payloads, roles o flujos de la aplicación.
 
 La [evidencia resumida versionada](evidencias/zap-2026-11-05.json) conserva
 los resultados, pruebas de sesión/POST y hashes SHA-256 de reportes y fuentes.
-Los reportes completos deben conservarse aparte si se necesita un expediente
-de auditoría: su carpeta local está ignorada por git.
+Los reportes completos de las dos corridas del 05/11 están versionados en
+`docs/evidencias/`.
 
-### Hallazgos abiertos de la web
+### Hallazgos de la web
 
 | ID ZAP | Alerta | Riesgo | Estado |
 |---|---|---|---|
-| 10055 | CSP: Wildcard Directive (`img-src ... https:`) | Medio | Pendiente de restringir orígenes sin romper imágenes legítimas |
-| 10055 | CSP: script-src unsafe-inline | Medio | Pendiente de diseñar y verificar nonces u otra política compatible con Next |
-| 10055 | CSP: style-src unsafe-inline | Medio | Pendiente de revisar estilos e integración con los componentes |
-| 90004 | Cross-Origin-Embedder-Policy ausente | Bajo | Pendiente de evaluar compatibilidad con recursos externos |
-| 90004 | Cross-Origin-Opener-Policy ausente | Bajo | Pendiente de evaluar compatibilidad con ventanas de pagos |
-| 90004 | Cross-Origin-Resource-Policy ausente | Bajo | Pendiente de definir la política por recurso |
+| 10055 | CSP: Wildcard Directive (`img-src ... https:`) | Medio | Corregido el 05/11: orígenes de imágenes restringidos |
+| 10055 | CSP: script-src unsafe-inline | Medio | Corregido el 05/11: nonce por respuesta |
+| 10055 | CSP: style-src unsafe-inline | Medio | Corregido el 05/11: nonce y hashes de los estilos fijos |
+| 90004 | Cross-Origin-Embedder-Policy ausente | Bajo | Aceptado sin corregir |
+| 90004 | Cross-Origin-Opener-Policy ausente | Bajo | Aceptado sin corregir |
+| 90004 | Cross-Origin-Resource-Policy ausente | Bajo | Aceptado sin corregir |
 
 Las alertas son observaciones del escáner, no pruebas de explotación. No se
-suprimieron reglas para obtener un reporte sin advertencias. Este punto queda
-**ejecutado con hallazgos abiertos**; la remediación y su nueva verificación
-requieren un paso posterior. No está agregado al CI ni se marca como
-acreditación de los 85 criterios. DEF-09 (contraseña demo) se omite por decisión
-del usuario y no se considera resuelto.
+suprimieron reglas para obtener un reporte sin advertencias.
+
+La segunda corrida del 05/11, posterior a la corrección de la CSP, no tuvo
+alertas altas ni medias: quedaron las tres bajas de aislamiento, que el grupo
+aceptó sin corregir. El escaneo no está agregado al CI y no reemplaza la
+revisión por criterio de [matriz-seguridad.md](matriz-seguridad.md).
+
+La contraseña de las cuentas de demo (DEF-09) no la detecta este escaneo. Se
+retiró del código en el commit `f56a4a7` y ahora sale de `SEED_PASSWORD`; sigue
+en el historial anterior al 29/10.
 
 ## Referencias
 
 La corrección posterior de las tres alertas CSP, sus controles de navegador y
 la comparación con una nueva corrida están en
-[`seguridad-csp.md`](seguridad-csp.md). La tabla anterior conserva el resultado
-original como antecedente; las tres alertas bajas de aislamiento siguen abiertas.
+[`seguridad-csp.md`](seguridad-csp.md). La tabla anterior conserva las alertas
+de la corrida inicial; las tres bajas de aislamiento quedaron aceptadas.
 
 - [Baseline oficial](https://www.zaproxy.org/docs/docker/baseline-scan/).
 - [Escaneo de API y códigos de salida](https://www.zaproxy.org/docs/docker/api-scan/).
