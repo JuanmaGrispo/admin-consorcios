@@ -1,6 +1,6 @@
 # Matriz de seguridad — revisión del 05/11/2026
 
-Resultado: **18 Pasa, 9 Falla y 58 Pendiente** sobre los 85 criterios originales (actualizado el 05/11 por la tarde: AUT05 y CFG07 pasan a Pasa; la revisión inicial del día dio 16, 10 y 59).
+Resultado: **20 Pasa, 7 Falla y 58 Pendiente** sobre los 85 criterios originales (actualizado el 25/11: AUT10 y DIS01 pasan a Pasa. El 05/11 por la tarde había quedado en 18, 9 y 58, tras pasar AUT05 y CFG07; la revisión inicial de ese día dio 16, 10 y 59).
 
 Revisión del código de trabajo (base `0309d8f`, con cambios sin commit) y de evidencia local. No equivale a una auditoría exhaustiva de todos los endpoints ni a una aprobación de seguridad. `Pendiente` significa que falta evidencia completa, aunque exista parte de la implementación. `Falla` significa un incumplimiento observado del requisito escrito; ACC01 es una discrepancia del inventario documental, no un acceso indebido demostrado.
 
@@ -12,13 +12,13 @@ La regresión ejecutada para esta revisión aprobó **506/506 pruebas, 126 suite
 
 - **AUT06:** JWT con duración por defecto 1d; no hay refresh token ni revocación al logout. Borrar la cookie no invalida una copia del JWT.
 - **AUT09:** Reset recibe una contraseña elegida y guarda el hash; no genera clave temporal aleatoria ni exige cambio al primer ingreso.
-- **AUT10:** Cambio de contraseña sólo modifica hash; validarPayload no compara versión de sesión ni fecha de cambio.
 - **ACC01:** Hay logout marcado Public además del inventario exigido. Es una discrepancia documental de alcance: logout público es intencional, no demuestra acceso indebido a datos.
 - **ARC05:** Cliente genera URLs object/public sin firma ni vencimiento. No cumple el modelo de bucket privado con URLs temporales; no se inspeccionó política real del proveedor.
 - **ARC06:** El buffer original se envía directamente a Storage; no hay transformación ni eliminación de metadatos GPS.
 - **DAT01:** Hay retornos de entidades y de usuario completo salvo hash. No se cumple la exigencia literal de DTOs mínimos en todas las respuestas; no implica que se haya demostrado fuga de hash.
 - **DAT05:** Reset de contraseña guarda el hash sin registrar actor, fecha y acción en un registro de auditoría. Basta este flujo para incumplir el requisito conjunto; no se afirma que todos los módulos carezcan de registros.
-- **DIS01:** Sólo se encontró limitador de login; no hay límite por usuario para subida, creación de reclamo y exportación exigidos por este criterio.
+
+Corregidos el 25/11: **AUT10** (las sesiones abiertas antes de un cambio de contraseña responden 401) y **DIS01** (límite por usuario con 429 en subidas, alta de reclamos, exportaciones y recordatorios). El detalle está en cada criterio.
 
 Las correcciones se realizan de a una, previa confirmación del usuario. No se cambió lógica de aplicación durante este relevamiento. Las bajas COEP/COOP/CORP fueron aceptadas sin corregir; DEF-09 y CI fueron omitidos por decisión del usuario; el resto de dependencias se corrigió el 05/11 por la tarde (CFG07). Omitir una corrección no convierte un requisito en cumplido.
 
@@ -116,13 +116,13 @@ Las rutas abreviadas se interpretan según el campo `fuentes` del JSON. Las prue
 
 **Verificación prevista originalmente:** Prueba manual del reseteo y revisión de los logs.
 
-### AUT10 — Falla
+### AUT10 — Pasa (25/11)
 
 **Requisito original:** Dado un usuario que cambia su contraseña, cuando alguien usa una sesión abierta antes del cambio, entonces la API responde 401.
 
-**Resultado:** Cambio de contraseña sólo modifica hash; validarPayload no compara versión de sesión ni fecha de cambio.
+**Resultado:** El JWT lleva el claim `pwd`, una huella (SHA-256 recortado) del hash de la contraseña vigente al firmar. `validarPayload` la compara en cada pedido con la del hash actual: si la contraseña cambió —por el usuario o por un reseteo del administrador—, las sesiones anteriores responden 401. `PUT /perfil/password` emite una cookie nueva para la sesión que hizo el cambio, así que esa persona sigue dentro. Tests: `auth.service.spec.ts` (4 casos; sin la comparación fallan 2) y `http.test.cjs` (token sin huella y con huella anterior → 401). Verificado el 25/11 en Docker con dos sesiones: tras el cambio, la otra sesión y la cookie vieja dan 401 y la renovada 200. También desde la web: el vecino cambia la contraseña en Perfil y sigue navegando.
 
-**Fuentes:** `usuarios/usuarios.service.ts:174; auth/auth.service.ts:69`.
+**Fuentes:** `auth/huella-sesion.ts; auth/auth.service.ts (validarPayload, renovarSesion); usuarios/perfil.controller.ts (cambiarPassword)`.
 
 **Verificación prevista originalmente:** Prueba manual con dos navegadores.
 
@@ -856,13 +856,13 @@ Las rutas abreviadas se interpretan según el campo `fuentes` del JSON. Las prue
 
 **Verificación prevista originalmente:** Test de concurrencia o dos pedidos en paralelo desde Postman.
 
-### DIS01 — Falla
+### DIS01 — Pasa (25/11)
 
 **Requisito original:** Dado un mismo usuario que repite pedidos en endpoints costosos (subir archivos, crear reclamos, exportar), cuando supera el límite, entonces la API responde 429.
 
-**Resultado:** Sólo se encontró limitador de login; no hay límite por usuario para subida, creación de reclamo y exportación exigidos por este criterio.
+**Resultado:** `@LimitarPorUsuario(grupo)` cuenta pedidos por usuario en una ventana deslizante y responde 429 en Problem Details con `Retry-After`. Límites: alta de reclamos 20 cada 10 s, subida de archivos 20 por minuto, exportaciones (padrón, liquidación y cobranzas) 10 por minuto y recordatorios de deuda 3 por minuto. La ventana del alta de reclamos deja pasar la prueba de carga (un reclamo por segundo por usuario) y frena un script en ráfaga. Corre antes de la validación y de multer, así que los pedidos inválidos también cuentan y un archivo rechazado no se procesa. Vive en memoria, como el limitador de login. Tests: `limite-por-usuario.spec.ts` (12 casos, incluido uno por endpoint; al sacar el decorador del alta de reclamos fallan 2). Verificado el 25/11 en Docker: 23 altas seguidas → 429 desde la 21.ª con `Retry-After: 10`; 12 exportaciones del padrón → 429 desde la 11.ª, y los demás endpoints del mismo usuario siguen respondiendo.
 
-**Fuentes:** `archivos/archivos.controller.ts; reclamos/reclamos.controller.ts; expensas/expensas.controller.ts; auth/limitador-login.ts`.
+**Fuentes:** `core/http/limite-por-usuario.ts; reclamos/reclamos.controller.ts; archivos/archivos.controller.ts; expensas/expensas.controller.ts; unidades/unidades.controller.ts`.
 
 **Verificación prevista originalmente:** Prueba manual repitiendo pedidos con un script.
 

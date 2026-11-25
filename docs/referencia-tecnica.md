@@ -135,6 +135,19 @@ si no, el 429 revelaría cuáles sí. Un login correcto perdona los fallos de la
 cuenta. Vive en memoria (`limitador-login.ts`): cada instancia del backend
 cuenta por su lado y un reinicio lo pone en cero.
 
+**Cambio de contraseña corta las sesiones.** El JWT lleva el claim `pwd`, una
+huella del hash de la contraseña vigente (`huella-sesion.ts`). Cada request la
+compara con la del hash actual: si la contraseña cambió —la cambió el usuario o
+la reseteó un administrador—, las sesiones anteriores responden 401.
+`PUT /perfil/password` emite una cookie nueva para la sesión que hizo el
+cambio, así que esa persona sigue dentro.
+
+**Límite en endpoints costosos.** `@LimitarPorUsuario(grupo)`
+(`core/http/limite-por-usuario.ts`) responde 429 con `Retry-After` cuando un
+mismo usuario se pasa: alta de reclamos 20 cada 10 s, subida de archivos 20 por
+minuto, exportaciones 10 por minuto y recordatorios de deuda 3 por minuto. Como
+el de login, vive en memoria.
+
 ### Roles
 
 | Rol | Qué es |
