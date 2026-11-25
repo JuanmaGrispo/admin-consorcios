@@ -133,6 +133,8 @@ services:
       # SOAP simulado del importe en letras. Se elige cómo responde en
       # http://localhost:4010/soap (bien, Fault de negocio o técnico, lento, caído).
       NUMBER_CONVERSION_URL: http://simuladores:4010/webservicesserver/NumberConversion.wso
+      # Sale del .env de la raíz. Sin clave, Domot responde con el manual.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       - config:/config:ro
     ports:
