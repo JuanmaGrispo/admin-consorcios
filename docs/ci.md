@@ -25,6 +25,10 @@ rama principal remota:
 
 Las pruebas web se ejecutan con Playwright desde el runner integral, con
 sesiones reales mediante cookie httpOnly. No se incorporan a `pnpm test`.
+Incluyen la accesibilidad (`apps/frontend/acceptance/accesibilidad.e2e.ts`):
+axe revisa las 25 pantallas de los tres portales con las reglas de WCAG 2.2
+AA (y el login y el vecino también a 360 px), y cualquier violación deja el
+job en rojo.
 El backend se analiza con TypeScript; no tiene ESLint configurado.
 
 La cobertura del backend se genera en cada ejecución (`lcov` en
