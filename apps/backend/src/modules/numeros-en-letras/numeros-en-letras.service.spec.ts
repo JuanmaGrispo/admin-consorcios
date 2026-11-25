@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { NumberConversionError, type NumberConversionClient } from './number-conversion.client';
+import { NumberConversionError, NumberConversionFault, type NumberConversionClient } from './number-conversion.client';
 import { NumerosEnLetrasService } from './numeros-en-letras.service';
 
 /** Un cliente que contesta lo que se le diga y cuenta las llamadas. */
@@ -31,6 +31,18 @@ describe('NumerosEnLetrasService', () => {
     });
     assert.equal(await new NumerosEnLetrasService(client).importe(145_320.5), SON);
   });
+
+  // Eje C: el Fault se mapea a una respuesta correcta y no se filtra al usuario.
+  for (const [tipo, codigo] of [['negocio', 'soap:Client'], ['tecnico', 'soap:Server']] as const) {
+    it(`un Fault ${tipo} escribe localmente, sin rastros del Fault en el importe`, async () => {
+      const { client } = clienteQue(async () => {
+        throw new NumberConversionFault(tipo, codigo, 'detalle interno del servicio');
+      });
+      const importe = await new NumerosEnLetrasService(client).importe(145_320.5);
+      assert.equal(importe, SON);
+      assert.doesNotMatch(importe, /fault|soap|detalle/i);
+    });
+  }
 
   it('si el servicio contesta otro número, escribe localmente', async () => {
     const { client } = clienteQue(async () => 'one thousand');

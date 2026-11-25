@@ -15,6 +15,31 @@ const TIMEOUT_MS = 3_000;
 export class NumberConversionError extends Error {}
 
 /**
+ * El servicio contestó un `soap:Fault`. `negocio` es un `soap:Client` (el
+ * pedido no es válido para el servicio); `tecnico`, un `soap:Server` o
+ * cualquier otro código (falló el servicio). En los dos casos las letras se
+ * escriben localmente: el Fault queda en el log y nunca llega al usuario.
+ */
+export class NumberConversionFault extends NumberConversionError {
+  constructor(
+    readonly tipo: 'negocio' | 'tecnico',
+    readonly codigo: string,
+    readonly detalle: string,
+  ) {
+    super(`Fault ${tipo === 'negocio' ? 'de negocio' : 'técnico'} (${codigo}): ${detalle}`);
+  }
+}
+
+/** Lee un `soap:Fault` de la respuesta, si lo hay. Es SOAP 1.1, como el servicio. */
+export function leerFault(xml: string): NumberConversionFault | null {
+  if (!/<(?:\w+:)?Fault[\s>]/.test(xml)) return null;
+  const codigo = /<faultcode>\s*([^<]*?)\s*<\/faultcode>/.exec(xml)?.[1] ?? 'desconocido';
+  const detalle = (/<faultstring>([^<]*)<\/faultstring>/.exec(xml)?.[1] ?? '').trim().slice(0, 200);
+  const tipo = /(^|:)Client$/.test(codigo) ? 'negocio' : 'tecnico';
+  return new NumberConversionFault(tipo, codigo, detalle);
+}
+
+/**
  * Única puerta al servicio SOAP NumberConversion. Se arma el sobre a mano
  * porque es una sola operación con un solo parámetro: un cliente SOAP con
  * WSDL sería una dependencia entera para esto.
@@ -44,6 +69,9 @@ export class NumberConversionClient {
     }
 
     const xml = await respuesta.text();
+    // SOAP 1.1 manda el Fault con HTTP 500, pero algunos servicios lo mandan con 200.
+    const fault = leerFault(xml);
+    if (fault) throw fault;
     if (!respuesta.ok) {
       throw new NumberConversionError(`Respondió ${respuesta.status}`);
     }
