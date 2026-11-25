@@ -17,9 +17,9 @@ export class AuthRepository {
   ) {}
 
   /**
-   * Busca por email para el login. Trae `passwordHash` a propósito — es el
-   * único lugar del sistema que lo necesita, y por eso está acá y no en un
-   * repositorio de uso general.
+   * Busca por email para el login. Trae `passwordHash` a propósito — junto con
+   * `findParaSesion`, es lo único de autenticación que lo necesita, y por eso
+   * está acá y no en un repositorio de uso general.
    *
    * El email se normaliza a minúsculas: la columna es UNIQUE pero Postgres
    * compara con case sensitivity, así que `Juan@x.com` y `juan@x.com` serían
@@ -34,8 +34,18 @@ export class AuthRepository {
       .getOne();
   }
 
-  findById(id: string): Promise<Usuario | null> {
-    return this.usuarios.findOne({ where: { id }, select: { id: true, nombre: true, apellido: true, email: true, rol: true, activo: true } });
+  /**
+   * Busca el usuario de una sesión. Trae `passwordHash` sólo para comparar la
+   * huella del JWT con la contraseña vigente (ver huella-sesion.ts); el hash
+   * nunca sale del AuthService.
+   */
+  findParaSesion(id: string): Promise<Usuario | null> {
+    return this.usuarios
+      .createQueryBuilder('u')
+      .select(['u.id', 'u.nombre', 'u.apellido', 'u.email', 'u.rol', 'u.activo'])
+      .addSelect('u.passwordHash')
+      .where('u.id = :id', { id })
+      .getOne();
   }
 
   async consorciosAdministrados(usuarioId: string): Promise<string[]> {

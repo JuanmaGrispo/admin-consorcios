@@ -16,8 +16,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { COOKIE_MAX_AGE_MS, COOKIE_SESION } from './auth.constants';
+import { COOKIE_SESION } from './auth.constants';
 import { AuthService, type SesionIniciada } from './auth.service';
+import { ponerCookieSesion } from './cookie-sesion';
 import type { UsuarioActual as Usuario } from './auth.types';
 import { Public } from './decorators/public.decorator';
 import { UsuarioActual } from './decorators/usuario-actual.decorator';
@@ -47,15 +48,7 @@ export class AuthController {
   ): Promise<SesionIniciada> {
     const sesion = await this.auth.login(dto, ip);
 
-    res.cookie(COOKIE_SESION, sesion.accessToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      // En prod la cookie solo viaja por HTTPS. En dev (http://localhost) no
-      // puede ser secure o el navegador la descarta.
-      secure: this.config.get('NODE_ENV') === 'production',
-      maxAge: COOKIE_MAX_AGE_MS,
-      path: '/',
-    });
+    ponerCookieSesion(res, sesion.accessToken, this.config);
 
     // El token también va en el body para Swagger, scripts y clientes que no
     // usan cookies. El frontend web lo ignora: su sesión es la cookie.

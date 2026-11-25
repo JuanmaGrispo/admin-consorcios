@@ -5,6 +5,7 @@ import { RolUsuario, Usuario } from '../../database/entities';
 import { AuthRepository } from './auth.repository';
 import type { JwtPayload, UsuarioActual } from './auth.types';
 import { LoginDto } from './dto/login.dto';
+import { coincideHuella, huellaPassword } from './huella-sesion';
 import { LimitadorLogin } from './limitador-login';
 import { BCRYPT_ROUNDS } from './password';
 
@@ -59,13 +60,28 @@ export class AuthService {
    * dice el token: si lo dieron de baja o le cambiaron el rol, el cambio pega
    * al instante y no cuando venza el token. Lo mismo con los consorcios de un
    * administrador: reasignarle uno le cambia el alcance en el próximo request.
+   *
+   * También compara la huella de la contraseña: si cambió después de firmar
+   * el token, la sesión ya no vale (AUT10).
    */
   async validarPayload(payload: JwtPayload): Promise<UsuarioActual> {
-    const usuario = await this.usuarios.findById(payload.sub);
-    if (!usuario || !usuario.activo) {
+    const usuario = await this.usuarios.findParaSesion(payload.sub);
+    if (!usuario || !usuario.activo || !coincideHuella(payload.pwd, usuario.passwordHash)) {
       throw new UnauthorizedException('La sesión ya no es válida');
     }
     return this.aUsuarioActual(usuario);
+  }
+
+  /**
+   * Token nuevo para quien acaba de cambiar su contraseña: sus otras sesiones
+   * quedan cortadas, pero la del pedido que hizo el cambio sigue.
+   */
+  async renovarSesion(usuarioId: string): Promise<string> {
+    const usuario = await this.usuarios.findParaSesion(usuarioId);
+    if (!usuario || !usuario.activo) {
+      throw new UnauthorizedException('La sesión ya no es válida');
+    }
+    return this.firmarToken(usuario);
   }
 
   private firmarToken(usuario: Usuario): Promise<string> {
@@ -73,6 +89,7 @@ export class AuthService {
       sub: usuario.id,
       email: usuario.email,
       rol: usuario.rol,
+      pwd: huellaPassword(usuario.passwordHash),
     };
     return this.jwt.signAsync(payload);
   }

@@ -6,6 +6,8 @@ export interface JwtPayload {
   sub: string;
   email: string;
   rol: RolUsuario;
+  /** Huella de la contraseña vigente al firmar (ver huella-sesion.ts). */
+  pwd: string;
 }
 
 /** Lo que el guard deja colgado del request una vez validado el token. */

@@ -252,8 +252,10 @@ test('seguridad: JWT vencido, alterado, alg=none, otro algoritmo u otro emisor r
   assert.ok(process.env.JWT_SECRET, 'Falta JWT_SECRET del backend de aceptación');
   assert.ok(process.env.ACEPTACION_SUPER_ID, 'Falta ACEPTACION_SUPER_ID');
   const ahora = Math.floor(Date.now() / 1000);
+  // La huella de la contraseña (claim pwd, AUT10) se copia del token real del superadministrador.
+  const { pwd } = JSON.parse(Buffer.from(process.env.ACEPTACION_TOKEN.split('.')[1], 'base64url').toString());
   const carga = (extra = {}) => ({ sub: process.env.ACEPTACION_SUPER_ID, email: 'super@example.test', rol: 'SUPER_ADMIN',
-    iat: ahora, exp: ahora + 600, iss: process.env.JWT_ISSUER || 'domus', ...extra });
+    iat: ahora, exp: ahora + 600, iss: process.env.JWT_ISSUER || 'domus', pwd, ...extra });
 
   // Control: el mismo armado con todo correcto entra. Así un 401 de abajo no es un token mal hecho.
   assert.equal((await pedir('/consorcios', { token: jwtFalso(carga()) })).status, 200);
@@ -270,6 +272,8 @@ test('seguridad: JWT vencido, alterado, alg=none, otro algoritmo u otro emisor r
     'HS512 con el secreto correcto': jwtFalso(carga(), { alg: 'HS512' }),
     'otro emisor': jwtFalso(carga({ iss: 'emisor-ajeno' })),
     'sin emisor': jwtFalso(sinEmisor),
+    'sin huella de contraseña': jwtFalso(carga({ pwd: undefined })),
+    'huella de una contraseña anterior': jwtFalso(carga({ pwd: 'A'.repeat(22) })),
     'basura': 'no.es.un-jwt',
   };
   for (const [caso, token] of Object.entries(casos)) {
