@@ -26,6 +26,12 @@ export function BarraVecino() {
   const { unidades, unidad, consorcio, cambiar } = useUnidadActiva();
   const { cerrarSesion } = useSesion();
   const noLeidas = useNoLeidas();
+  const contador = noLeidas > 9 ? '9+' : String(noLeidas);
+  // El nombre accesible empieza por lo que muestra la campana ("9+ notificaciones
+  // sin leer"): WCAG 2.5.3 pide que el texto visible forme parte del nombre, y axe
+  // exige que vaya al principio.
+  const nombreCampana =
+    noLeidas === 0 ? 'Notificaciones' : `${contador} ${noLeidas === 1 ? 'notificación' : 'notificaciones'} sin leer`;
   const edificio = domicilio(consorcio.calle, consorcio.numero) || consorcio.nombre;
 
   const etiqueta = (
@@ -64,11 +70,11 @@ export function BarraVecino() {
           </DropdownMenu>
 
         <Button asChild variant="ghost" size="icon" className="relative shrink-0">
-          <Link href="/vecino/notificaciones" aria-label={`Notificaciones (${noLeidas} sin leer)`}>
+          <Link href="/vecino/notificaciones" aria-label={nombreCampana}>
             <Bell />
             {noLeidas > 0 && (
               <Badge className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 text-[10px] tabular-nums">
-                {noLeidas > 9 ? '9+' : noLeidas}
+                {contador}
               </Badge>
             )}
           </Link>
