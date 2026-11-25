@@ -89,7 +89,8 @@
   --secondary: #fbfaf8;
   --secondary-foreground: #4a463f;
   --muted: #fbfaf8;
-  --muted-foreground: #7a746b;
+  /* #6e6860 y no #7a746b: el original daba 4,0–4,4:1 sobre los fondos y WCAG AA pide 4,5:1. */
+  --muted-foreground: #6e6860;
 
   /* Accent = el azul en versión suave: item activo del menú, hover, chips. */
   --accent: oklch(0.95 0.02 254);
@@ -97,9 +98,11 @@
 
   --destructive: oklch(0.53 0.16 25);
   --destructive-foreground: #ffffff;
-  --success: oklch(0.52 0.11 155);
+  /* Éxito y advertencia, un poco más oscuros para llegar a 4,5:1 como texto
+     sobre su fondo suave (badges) y con texto blanco encima (botones). */
+  --success: oklch(0.49 0.11 155);
   --success-foreground: #ffffff;
-  --warning: oklch(0.62 0.12 72);
+  --warning: oklch(0.51 0.12 72);
   --warning-foreground: #ffffff;
 
   --border: #e6e3dd;

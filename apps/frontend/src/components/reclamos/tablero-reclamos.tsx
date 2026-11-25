@@ -25,7 +25,13 @@ interface TableroReclamosProps {
 /** El tablero de la pantalla 04: una columna por estado, la tarjeta abre el detalle. */
 export function TableroReclamos({ columnas, totales, seleccionado, onSeleccionar }: TableroReclamosProps) {
   return (
-    <div className="-mx-4 grid snap-x auto-cols-[minmax(15rem,1fr)] grid-flow-col gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+    <div
+      // Enfocable para desplazar el tablero con el teclado cuando no entra en la pantalla.
+      tabIndex={0}
+      role="region"
+      aria-label="Tablero de reclamos por estado"
+      className="-mx-4 grid snap-x auto-cols-[minmax(15rem,1fr)] grid-flow-col gap-3 overflow-x-auto rounded-md px-4 pb-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:mx-0 sm:px-0"
+    >
       {ESTADOS_RECLAMO.map((estado) => {
         const reclamos = columnas?.[estado];
         const total = totales?.[estado] ?? reclamos?.length;

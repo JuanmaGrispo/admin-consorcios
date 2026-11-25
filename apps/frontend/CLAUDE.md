@@ -50,12 +50,12 @@ mapeado ahí. **No existen tokens paralelos**: no hay `--color-ink`,
 | `primary-foreground` | `#ffffff` | Texto sobre primary |
 | `secondary` / `muted` | `#fbfaf8` | Superficie secundaria, fondos de inputs |
 | `secondary-foreground` | `#4a463f` | Texto secundario |
-| `muted-foreground` | `#7a746b` | Texto atenuado, labels, descripciones |
+| `muted-foreground` | `#6e6860` | Texto atenuado, labels, descripciones (4,5:1 sobre todos los fondos: no aclararlo) |
 | `accent` | `oklch(0.95 0.02 254)` (azul suave) | Item activo del menú, hover, chips |
 | `accent-foreground` | azul Domus | Texto sobre accent |
 | `destructive` | `oklch(0.53 0.16 25)` | Error, inactivo, borrar |
-| `success` | `oklch(0.52 0.11 155)` | Activo, cobrado, resuelto |
-| `warning` | `oklch(0.62 0.12 72)` | Pendiente, vencido, atención |
+| `success` | `oklch(0.49 0.11 155)` | Activo, cobrado, resuelto |
+| `warning` | `oklch(0.51 0.12 72)` | Pendiente, vencido, atención |
 | `border` / `input` | `#e6e3dd` | Líneas |
 | `ring` | azul Domus | Anillo de focus |
 | `chart-1` / `chart-1-claro` | azul Domus / `oklch(0.7 0.12 254)` | Gráficos: el valor (cobrado) y el total detrás (emitido) |
@@ -76,6 +76,12 @@ mapeado ahí. **No existen tokens paralelos**: no hay `--color-ink`,
 <div className="bg-white text-black">…</div> // colores literales
 <div className="bg-blue-600">…</div>         // "casi" el primary
 ```
+
+Los valores de `muted-foreground`, `success` y `warning` están ajustados para
+dar al menos 4,5:1 (WCAG 2.2 AA) como texto sobre los fondos de la app y sobre
+su propio fondo suave; `acceptance/accesibilidad.e2e.ts` lo controla con axe
+en el CI. No los aclares ni bajes la opacidad del texto (`opacity-50`): para
+atenuar algo, cambiá el fondo o el borde.
 
 Regla práctica: si escribís un color que no es uno de los tokens de la tabla,
 está mal. Si un color nuevo hace falta de verdad, se agrega **una vez** en

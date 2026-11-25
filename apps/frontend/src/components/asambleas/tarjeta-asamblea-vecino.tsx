@@ -86,7 +86,7 @@ export function TarjetaAsambleaVecino({ asamblea, detalle, unidadId, onResponder
                     {porcentaje(quorum.porcentaje)} de {porcentaje(quorum.requerido, 2)}
                   </span>
                 </div>
-                <Progress value={quorum.porcentaje} className="mt-1.5 h-1.5" />
+                <Progress value={Math.min(quorum.porcentaje, 100)} aria-label="Quórum" className="mt-1.5 h-1.5" />
               </>
             ) : detalle ? (
               <p className="text-sm text-muted-foreground">Todavía no hay quórum registrado.</p>

@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnidadActiva } from '@/components/vecino/unidad-activa';
 import { usePedido } from '@/hooks/use-pedido';
 import { fecha, haceCuanto } from '@/lib/formato';
@@ -62,53 +62,56 @@ export default function VecinoReclamosPage() {
           <TabsTrigger value="abiertos">Abiertos</TabsTrigger>
           <TabsTrigger value="cerrados">Cerrados</TabsTrigger>
         </TabsList>
+
+        {/* El listado es el panel de la solapa activa: así su aria-controls apunta a algo que existe. */}
+        <TabsContent value={solapa} className="flex flex-col gap-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {!datos && !error && <EsqueletoLista />}
+
+          {datos && datos.items.length === 0 && (
+            <EmptyState
+              icono={CircleCheck}
+              titulo={solapa === 'cerrados' ? 'Todavía no hay reclamos cerrados' : 'No tenés reclamos'}
+              descripcion={
+                solapa === 'cerrados'
+                  ? 'Cuando la administración resuelva un reclamo tuyo, lo vas a ver acá.'
+                  : 'Si hay algo roto o algo que molesta en el edificio, avisale a la administración y seguí el estado desde acá.'
+              }
+              accion={
+                solapa !== 'cerrados' && (
+                  <Button asChild className="w-full sm:w-auto">
+                    <Link href="/vecino/reclamos/nuevo">
+                      <Plus />
+                      Crear un reclamo
+                    </Link>
+                  </Button>
+                )
+              }
+            />
+          )}
+
+          {datos && datos.items.length > 0 && (
+            <ul className="flex flex-col gap-3">
+              {datos.items.map((reclamo) => (
+                <li key={reclamo.id}>
+                  <TarjetaReclamo reclamo={reclamo} />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {datos && datos.total > datos.items.length && (
+            <Button variant="outline" disabled={cargando} onClick={() => setLimite((l) => l + POR_PAGINA)}>
+              {cargando ? 'Cargando…' : 'Ver más'}
+            </Button>
+          )}
+        </TabsContent>
       </Tabs>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {!datos && !error && <EsqueletoLista />}
-
-      {datos && datos.items.length === 0 && (
-        <EmptyState
-          icono={CircleCheck}
-          titulo={solapa === 'cerrados' ? 'Todavía no hay reclamos cerrados' : 'No tenés reclamos'}
-          descripcion={
-            solapa === 'cerrados'
-              ? 'Cuando la administración resuelva un reclamo tuyo, lo vas a ver acá.'
-              : 'Si hay algo roto o algo que molesta en el edificio, avisale a la administración y seguí el estado desde acá.'
-          }
-          accion={
-            solapa !== 'cerrados' && (
-              <Button asChild className="w-full sm:w-auto">
-                <Link href="/vecino/reclamos/nuevo">
-                  <Plus />
-                  Crear un reclamo
-                </Link>
-              </Button>
-            )
-          }
-        />
-      )}
-
-      {datos && datos.items.length > 0 && (
-        <ul className="flex flex-col gap-3">
-          {datos.items.map((reclamo) => (
-            <li key={reclamo.id}>
-              <TarjetaReclamo reclamo={reclamo} />
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {datos && datos.total > datos.items.length && (
-        <Button variant="outline" disabled={cargando} onClick={() => setLimite((l) => l + POR_PAGINA)}>
-          {cargando ? 'Cargando…' : 'Ver más'}
-        </Button>
-      )}
     </div>
   );
 }

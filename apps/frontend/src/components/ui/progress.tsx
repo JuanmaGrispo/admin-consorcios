@@ -16,6 +16,8 @@ function Progress({
         "relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-muted",
         className
       )}
+      // Sin value, Radix la anuncia como "indeterminada" a los lectores de pantalla.
+      value={value}
       {...props}
     >
       <ProgressPrimitive.Indicator

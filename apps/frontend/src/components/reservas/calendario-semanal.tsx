@@ -155,7 +155,12 @@ export function CalendarioSemanal({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      <CardContent
+        tabIndex={0}
+        role="region"
+        aria-label="Turnos de la semana"
+        className="overflow-x-auto outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
         <div className="grid min-w-[42rem] grid-cols-[4.5rem_repeat(7,minmax(0,1fr))] gap-1.5">
           <div />
           {dias.map((d) => (
@@ -212,7 +217,9 @@ function CeldaSemana({ celda: c, onBloqueo, onAprobar, onRechazar, onCancelar }:
   }
 
   if (c.tipo === 'libre') {
-    return <div className={cn(BASE, 'text-muted-foreground', c.pasada && 'opacity-50')}>Libre</div>;
+    // Un turno que ya pasó se distingue por el fondo y el borde, no bajando la opacidad:
+    // con opacity-50 el texto quedaba en 2:1 y WCAG AA pide 4,5:1.
+    return <div className={cn(BASE, 'text-muted-foreground', c.pasada && 'border-dashed bg-muted')}>Libre</div>;
   }
 
   if (c.tipo === 'bloqueo') {

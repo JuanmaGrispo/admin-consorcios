@@ -7,7 +7,9 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      // Enfocable para poder desplazar con el teclado una tabla más ancha que la pantalla (WCAG 2.1.1).
+      tabIndex={0}
+      className="relative w-full overflow-x-auto rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       <table
         data-slot="table"

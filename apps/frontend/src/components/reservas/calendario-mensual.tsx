@@ -71,7 +71,8 @@ export function CalendarioMensual({ mes, onCambiarMes, dias, elegido, onElegir }
               disabled={!elegible}
               onClick={() => onElegir(fecha)}
               aria-pressed={esElegido}
-              aria-label={`${fechaLarga(fecha)}${elegible ? '' : estado === 'CERRADO' ? ', cerrado' : ', sin lugar'}`}
+              // El nombre accesible empieza por el número visible (WCAG 2.5.3, etiqueta en el nombre).
+              aria-label={`${Number(fecha.slice(8, 10))}, ${fechaLarga(fecha)}${elegible ? '' : estado === 'CERRADO' ? ', cerrado' : ', sin lugar'}`}
               className={cn(
                 'flex aspect-square items-center justify-center rounded-lg border text-sm tabular-nums transition-colors',
                 !delMes && 'border-transparent text-muted-foreground/50',
