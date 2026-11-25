@@ -1,7 +1,7 @@
-import { Injectable, PreconditionFailedException } from '@nestjs/common';
+import { ConflictException, Injectable, PreconditionFailedException } from '@nestjs/common';
 import { etagDe } from '../../core/http/contratos-rest';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { Consorcio } from '../../database/entities';
 
 /**
@@ -70,7 +70,16 @@ export class ConsorciosRepository {
   }
 
   async remove(id: string): Promise<boolean> {
-    const result = await this.repo.delete({ id });
-    return (result.affected ?? 0) > 0;
+    try {
+      const result = await this.repo.delete({ id });
+      return (result.affected ?? 0) > 0;
+    } catch (error) {
+      if (error instanceof QueryFailedError && (error.driverError as { code?: string }).code === '23503') {
+        throw new ConflictException(
+          'El consorcio tiene unidades, liquidaciones u otros datos y no se puede borrar. Dalo de baja.',
+        );
+      }
+      throw error;
+    }
   }
 }

@@ -449,6 +449,7 @@ const carpetas = [
   { nombre: '20 Cierre', casos: [
     error('DELETE /consorcios/:id', 'Baja de consorcio inexistente', `/consorcios/${NADA}`, 'super', 404),
     error('DELETE /consorcios/:id', 'Baja por un administrador', '/consorcios/{{consorcioNuevoId}}', 'admin', 403),
+    error('DELETE /consorcios/:id', 'Baja de un consorcio con datos', '/consorcios/{{consorcioId}}', 'super', 409),
     ok('POST /consorcios', 'Alta de consorcio para borrar', '/consorcios', 'super', 201,
       { body: { nombre: 'Borrar {{run}}', administradorId: '{{adminId}}' }, guardar: set('consorcioBorrarId', 'j.id') }),
     ok('DELETE /consorcios/:id', 'Baja del consorcio vacío', '/consorcios/{{consorcioBorrarId}}', 'super', [200, 204]),

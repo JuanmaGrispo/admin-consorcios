@@ -12298,6 +12298,41 @@
           ]
         },
         {
+          "name": "[error] Baja de un consorcio con datos",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenSuper}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consorcios/{{consorcioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consorcios",
+                "{{consorcioId}}"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Error: responde 409', () => pm.expect(pm.response.code).to.be.oneOf([409]));",
+                  "pm.test('Error en formato Problem Details', () => pm.expect(pm.response.headers.get('Content-Type') || '').to.include('application/problem+json'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "[éxito] Alta de consorcio para borrar",
           "request": {
             "method": "POST",
