@@ -30,6 +30,7 @@ import { ListarUnidadesQuery } from './dto/listar-unidades.query';
 import { UpdateUnidadDto } from './dto/update-unidad.dto';
 import { VincularUsuarioDto } from './dto/vincular-usuario.dto';
 import { UnidadesService } from './unidades.service';
+import { LimitarPorUsuario } from '../../core/http/limite-por-usuario';
 
 /**
  * Unidades funcionales y quién vive en cada una. Leer está abierto a cualquier
@@ -54,6 +55,7 @@ export class UnidadesController {
   // Antes de `:id`: si no, "exportar" se tomaría como un id y fallaría el ParseUUIDPipe.
   @Roles(RolUsuario.ADMINISTRADOR)
   @Get('exportar')
+  @LimitarPorUsuario('exportaciones')
   @ApiOperation({
     summary: 'El padrón en CSV',
     description:

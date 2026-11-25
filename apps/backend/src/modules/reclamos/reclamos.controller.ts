@@ -27,6 +27,7 @@ import { CrearReclamoDto } from './dto/crear-reclamo.dto';
 import { ListarReclamosQuery } from './dto/listar-reclamos.query';
 import { MensajeReclamoDto } from './dto/mensaje-reclamo.dto';
 import { ReclamosService } from './reclamos.service';
+import { LimitarPorUsuario } from '../../core/http/limite-por-usuario';
 
 /**
  * Un solo controller para los dos portales: el administrador y el vecino
@@ -73,6 +74,7 @@ export class ReclamosController {
   }
 
   @Post()
+  @LimitarPorUsuario('reclamos')
   @ApiOperation({
     summary: 'Abre un reclamo',
     description:

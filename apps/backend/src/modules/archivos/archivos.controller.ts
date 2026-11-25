@@ -22,6 +22,7 @@ import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import { ArchivosService, type ArchivoSubido } from './archivos.service';
 import { BorrarArchivoQuery, SubirArchivoQuery } from './dto/subir-archivo.query';
 import { TAMANIO_MAXIMO_ABSOLUTO } from './tipos-archivo';
+import { LimitarPorUsuario } from '../../core/http/limite-por-usuario';
 
 /**
  * La única forma de meter un archivo en el sistema. Todo lo demás —las fotos
@@ -35,6 +36,7 @@ export class ArchivosController {
   constructor(private readonly archivos: ArchivosService) {}
 
   @Post()
+  @LimitarPorUsuario('archivos')
   // El tope de multer es el más grande de todos los destinos: corta lo
   // desmedido antes de leerlo entero. El límite fino lo pone el service, que
   // ya sabe a qué destino va.

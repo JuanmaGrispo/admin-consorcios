@@ -26,6 +26,7 @@ import { ListarLiquidacionesQuery } from './dto/listar-liquidaciones.query';
 import { UpdateGastoDto } from './dto/update-gasto.dto';
 import { UpdateLiquidacionDto } from './dto/update-liquidacion.dto';
 import { ExpensasService } from './expensas.service';
+import { LimitarPorUsuario } from '../../core/http/limite-por-usuario';
 
 /**
  * Dos recursos de un mismo módulo: las liquidaciones (con sus gastos), que
@@ -56,6 +57,7 @@ export class ExpensasController {
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Get('liquidaciones/:id/exportar')
+  @LimitarPorUsuario('exportaciones')
   @ApiOperation({
     summary: 'La liquidación en CSV',
     description:
@@ -189,6 +191,7 @@ export class ExpensasController {
   }
 
   @Get('boletas/exportar')
+  @LimitarPorUsuario('exportaciones')
   @ApiOperation({
     summary: 'La grilla en CSV',
     description:
@@ -208,6 +211,7 @@ export class ExpensasController {
 
   @Roles(RolUsuario.ADMINISTRADOR)
   @Post('boletas/recordatorios')
+  @LimitarPorUsuario('recordatorios')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Avisa a quienes deben',
