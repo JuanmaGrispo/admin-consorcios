@@ -34,7 +34,7 @@ La primera vez tarda unos minutos en construir las imágenes. Levanta, todo en c
 | `backend` | NestJS (Swagger en `/docs`) | http://localhost:4000/api |
 | `postgres` | PostgreSQL 17 con el esquema, las migraciones y los datos de demo | interno |
 | `rabbitmq` | Broker de mensajería | panel en http://localhost:15672 |
-| `simuladores` | Mercado Pago, Storage y SMTP simulados | mails enviados en http://localhost:4010/correos |
+| `simuladores` | Mercado Pago, Storage, SMTP y SOAP (importe en letras) simulados | mails enviados en http://localhost:4010/correos · modo del SOAP en http://localhost:4010/soap |
 | `inicializador` | Prepara la base y los secretos locales, y termina | — |
 
 **Entrar.** El entorno local genera cuentas de demostración durante la inicialización. Los datos de acceso se consultan con:

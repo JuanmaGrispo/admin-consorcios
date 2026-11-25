@@ -671,7 +671,18 @@ como pide [producto.md](producto.md):
   recuerda, así que el pedido siguiente vuelve a preguntar.
 
 `NUMBER_CONVERSION_URL` es opcional: por defecto apunta al servicio de
-DataAccess.
+DataAccess. Con `docker compose up` apunta al **simulador SOAP** del
+contenedor `simuladores` (`docker/simuladores.cjs`), que contesta el mismo
+sobre y las mismas palabras en inglés. En http://localhost:4010/soap se elige
+cómo responde: bien, Fault de negocio (`soap:Client`), Fault técnico
+(`soap:Server`), lento (6 s) o caído. Sirve para mostrar en vivo que la boleta
+sale igual. El modo Supabase sigue usando el servicio real.
+
+El cliente distingue los `soap:Fault` (`NumberConversionFault`, con `tipo`
+`negocio` o `tecnico`), aunque lleguen con HTTP 200. Los dos terminan en las
+letras locales: el Fault queda en el log y nunca llega al usuario. Como el
+servicio recuerda los importes ya verificados, para ver una falla en la demo
+hay que usar un importe que no se haya pedido antes (o reiniciar el backend).
 
 ### Pendiente
 

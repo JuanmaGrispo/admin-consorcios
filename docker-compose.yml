@@ -6,11 +6,12 @@
 #   Frontend          → http://localhost:3000
 #   Backend           → http://localhost:4000/api   (Swagger en /docs)
 #   Mails enviados    → http://localhost:4010/correos
+#   SOAP simulado     → http://localhost:4010/soap
 #   Panel de RabbitMQ → http://localhost:15672
 #
 # Todo corre en contenedores: PostgreSQL, RabbitMQ y simuladores de Mercado
-# Pago, Storage y SMTP. No usa Supabase ni cuentas de terceros. La primera vez
-# el servicio `inicializador` carga el esquema, las migraciones y los datos de
+# Pago, Storage, SMTP y el SOAP del importe en letras. No usa Supabase ni
+# cuentas de terceros. La primera vez el servicio `inicializador` carga el esquema, las migraciones y los datos de
 # demo, y genera los secretos locales (JWT y contraseña de demo) en un volumen.
 # La contraseña de las cuentas de demo se ve con:
 #
@@ -129,6 +130,9 @@ services:
       SUPABASE_PUBLIC_URL: http://localhost:4010
       SUPABASE_SERVICE_ROLE_KEY: simulado
       SUPABASE_STORAGE_BUCKET: domus
+      # SOAP simulado del importe en letras. Se elige cómo responde en
+      # http://localhost:4010/soap (bien, Fault de negocio o técnico, lento, caído).
+      NUMBER_CONVERSION_URL: http://simuladores:4010/webservicesserver/NumberConversion.wso
     volumes:
       - config:/config:ro
     ports:

@@ -9,6 +9,9 @@
  *                   GET /checkout/:id  → checkout simulado para aprobar o rechazar
  *     Storage       POST|DELETE /storage/v1/object/:bucket/:ruta
  *                   GET /storage/v1/object/public/:bucket/:ruta
+ *     SOAP          POST /webservicesserver/NumberConversion.wso  → NumberToWords
+ *                   GET /soap  → elegir cómo responde: bien, Fault de negocio,
+ *                                Fault técnico, lento (6 s) o caído
  *     Bandeja       GET /correos  → los mails que mandó el backend
  *   SMTP :2525      acepta cualquier usuario y guarda los mensajes en memoria
  *
@@ -26,6 +29,65 @@ const PUERTO_SMTP = Number(process.env.PUERTO_SMTP || 2525);
 // Lo que ve el navegador (el checkout y las imágenes se abren desde ahí).
 const PUBLICO = (process.env.URL_PUBLICA || `http://localhost:${PUERTO_HTTP}`).replace(/\/$/, '');
 const CARPETA = path.resolve(process.env.CARPETA_STORAGE || '/datos/storage');
+
+// ── SOAP NumberConversion ─────────────────────────────────────────────────
+// Imita al servicio público de DataAccess: mismo sobre, mismo namespace y las
+// palabras en inglés con el mismo formato ("one hundred and forty five ...").
+const NS_SOAP = 'http://www.dataaccess.com/webservicesserver/';
+const MODOS_SOAP = {
+  ok: 'Responde bien',
+  'fault-negocio': 'Fault de negocio (soap:Client: el pedido no es válido)',
+  'fault-tecnico': 'Fault técnico (soap:Server: falla del servicio)',
+  lento: 'Lento: tarda 6 s en contestar',
+  caido: 'Caído: corta la conexión sin responder',
+};
+let modoSoap = 'ok';
+let pedidosSoap = 0;
+
+const UNO_A_19 = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const DECENAS_EN = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const ESCALAS_EN = [[1e12, 'trillion'], [1e9, 'billion'], [1e6, 'million'], [1e3, 'thousand']];
+
+function menosDeMil(n) {
+  const partes = [];
+  if (n >= 100) partes.push(`${UNO_A_19[Math.floor(n / 100)]} hundred`);
+  const resto = n % 100;
+  if (resto) {
+    if (partes.length) partes.push('and');
+    partes.push(resto < 20 ? UNO_A_19[resto] : DECENAS_EN[Math.floor(resto / 10)] + (resto % 10 ? ` ${UNO_A_19[resto % 10]}` : ''));
+  }
+  return partes.join(' ');
+}
+
+function enIngles(n) {
+  if (n === 0) return 'zero';
+  const partes = [];
+  for (const [valor, nombre] of ESCALAS_EN) {
+    if (n >= valor) { partes.push(`${menosDeMil(Math.floor(n / valor))} ${nombre}`); n %= valor; }
+  }
+  if (n) partes.push(menosDeMil(n));
+  return partes.join(' ');
+}
+
+const sobreSoap = (cuerpo) => `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>${cuerpo}</soap:Body></soap:Envelope>`;
+const faultSoap = (codigo, texto) => sobreSoap(`<soap:Fault><faultcode>soap:${codigo}</faultcode><faultstring>${html(texto)}</faultstring></soap:Fault>`);
+
+async function responderSoap(req, res) {
+  pedidosSoap++;
+  const xml = (await leer(req)).toString();
+  const escribir = (status, cuerpo) => { res.writeHead(status, { 'Content-Type': 'text/xml; charset=utf-8' }); res.end(cuerpo); };
+  if (modoSoap === 'caido') return req.socket.destroy();
+  if (modoSoap === 'lento') await new Promise((r) => setTimeout(r, 6_000));
+  if (modoSoap === 'fault-tecnico') return escribir(500, faultSoap('Server', 'Servicio no disponible (simulado)'));
+  const numero = /<(?:\w+:)?ubiNum>\s*(\d{1,15})\s*<\/(?:\w+:)?ubiNum>/.exec(xml)?.[1];
+  if (modoSoap === 'fault-negocio' || numero === undefined) {
+    return escribir(500, faultSoap('Client', numero === undefined ? 'Falta ubiNum o no es un entero' : 'Número rechazado (simulado)'));
+  }
+  // Como el servicio real, con un espacio al final.
+  escribir(200, sobreSoap(`<m:NumberToWordsResponse xmlns:m="${NS_SOAP}"><m:NumberToWordsResult>${enIngles(Number(numero))} </m:NumberToWordsResult></m:NumberToWordsResponse>`));
+}
 
 const preferencias = new Map();
 const pagos = new Map();
@@ -139,6 +201,25 @@ const servidor = createServer(async (req, res) => {
       fs.writeFileSync(destino, await leer(req));
       fs.writeFileSync(destino + '.tipo', req.headers['content-type'] || 'application/octet-stream');
       return json(res, 200, { Key: `${m[1]}/${m[2]}` });
+    }
+
+    // ── SOAP NumberConversion ─────────────────────────────────────────────
+    if (req.method === 'POST' && p === '/webservicesserver/NumberConversion.wso') return await responderSoap(req, res);
+    if (req.method === 'GET' && p === '/soap') {
+      const botones = Object.entries(MODOS_SOAP).map(([modo, texto]) => `<form method="post" action="/soap/${modo}">
+<button${modo === modoSoap ? ' class="ok"' : ''}>${html(texto)}</button></form>`).join('');
+      return pagina(res, 'Simulador SOAP NumberConversion', `
+<p class="aviso">Importe en letras de boletas y recibos. Modo actual: <strong>${html(MODOS_SOAP[modoSoap])}</strong>.
+Pedidos recibidos: ${pedidosSoap}. Si falla, el backend escribe las letras localmente y el PDF sale igual.
+El backend recuerda los importes que ya verificó: para ver la falla, probá con un importe nuevo.</p>${botones}`);
+    }
+    m = p.match(/^\/soap\/([\w-]+)$/);
+    if (req.method === 'POST' && m) {
+      if (!(m[1] in MODOS_SOAP)) return json(res, 400, { message: 'modo desconocido', modos: Object.keys(MODOS_SOAP) });
+      modoSoap = m[1];
+      console.log(`SOAP: modo ${modoSoap}`);
+      res.writeHead(303, { Location: '/soap' });
+      return res.end();
     }
 
     // ── Bandeja de mails ──────────────────────────────────────────────────
