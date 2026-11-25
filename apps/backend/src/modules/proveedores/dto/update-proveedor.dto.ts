@@ -1,6 +1,7 @@
 import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsOptional } from 'class-validator';
 import { CreateProveedorDto } from './create-proveedor.dto';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 /**
  * El alcance (de un consorcio o compartido) no se cambia: pasar un proveedor
@@ -14,6 +15,6 @@ export class UpdateProveedorDto extends PartialType(
     description: 'Dar de baja o reactivar. No se borran: gastos y reclamos los referencian.',
   })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   activo?: boolean;
 }

@@ -426,6 +426,8 @@ const carpetas = [
     ok('GET /novedades/:id', 'Detalle de novedad', '/novedades/{{novedadId}}', 'vecino', 200),
     error('GET /novedades/:id', 'Novedad inexistente', `/novedades/${NADA}`, 'vecino', 404),
     ok('PATCH /novedades/:id', 'Fijar novedad', '/novedades/{{novedadId}}', 'admin', 200, { body: { fijada: true } }),
+    // DEF-15: con la conversión implícita, "false" se guardaba como true.
+    error('PATCH /novedades/:id', 'Booleano enviado como texto', '/novedades/{{novedadId}}', 'admin', 400, { body: { fijada: 'false' } }),
     error('PATCH /novedades/:id', 'Intento de cambiar el autor', '/novedades/{{novedadId}}', 'admin', 400, { body: { autorId: '{{vecinoId}}' } }),
     ok('PUT /novedades/:id/lectura', 'Marca de lectura', '/novedades/{{novedadId}}/lectura', 'vecino', [200, 204]),
     error('PUT /novedades/:id/lectura', 'Marca de lectura por un administrador', '/novedades/{{novedadId}}/lectura', 'admin', 403),

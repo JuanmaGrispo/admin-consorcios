@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 export class MensajeReclamoDto {
   @ApiProperty({ example: 'Visita del plomero coordinada para el jueves de 9 a 12.' })
@@ -15,6 +16,6 @@ export class MensajeReclamoDto {
    */
   @ApiPropertyOptional({ default: false })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   interna?: boolean;
 }

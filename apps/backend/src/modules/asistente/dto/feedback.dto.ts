@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 export class FeedbackDto {
   @ApiProperty({ format: 'uuid' })
@@ -7,7 +8,7 @@ export class FeedbackDto {
   interaccion_id: string;
 
   @ApiProperty({ description: 'Pulgar arriba (true) o abajo (false)' })
-  @IsBoolean()
+  @BooleanoEstricto()
   util: boolean;
 
   @ApiPropertyOptional({ maxLength: 500 })

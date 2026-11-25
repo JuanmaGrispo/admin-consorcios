@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
-  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -16,6 +15,7 @@ import {
 } from 'class-validator';
 import type { HorarioSemanal } from '../horario';
 import { MaxDecimales } from '../../../core/max-decimales';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 const recortar = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -127,7 +127,7 @@ export class CreateAmenityDto {
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   requiereAprobacion?: boolean;
 
   // `ck_amenity_sena` en la base exige >= 0, y 0 es el default: sin seña.
@@ -150,6 +150,6 @@ export class CreateAmenityDto {
     description: 'Si está en true, el vecino con expensas vencidas no puede reservar',
   })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   bloqueaConDeuda?: boolean;
 }

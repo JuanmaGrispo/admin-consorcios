@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean } from 'class-validator';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 export class HabilitadoDto {
   @ApiProperty()
-  @IsBoolean()
+  @BooleanoEstricto()
   habilitado: boolean;
 }

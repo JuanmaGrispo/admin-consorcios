@@ -11709,6 +11709,54 @@
           ]
         },
         {
+          "name": "[error] Booleano enviado como texto",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenAdmin}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/novedades/{{novedadId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "novedades",
+                "{{novedadId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fijada\": \"false\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Error: responde 400', () => pm.expect(pm.response.code).to.be.oneOf([400]));",
+                  "pm.test('Error en formato Problem Details', () => pm.expect(pm.response.headers.get('Content-Type') || '').to.include('application/problem+json'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "[error] Intento de cambiar el autor",
           "request": {
             "method": "PATCH",

@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 export class ActualizarNovedadDto {
   @ApiPropertyOptional()
@@ -18,11 +19,11 @@ export class ActualizarNovedadDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   fijada?: boolean;
 
   @ApiPropertyOptional({ description: '`false` la saca del muro' })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   activa?: boolean;
 }

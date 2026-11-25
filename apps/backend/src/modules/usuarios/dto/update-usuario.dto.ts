@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 export class UpdateUsuarioDto {
   @ApiPropertyOptional()
@@ -35,6 +36,6 @@ export class UpdateUsuarioDto {
 
   @ApiPropertyOptional({ description: 'Sólo superadmin. `false` da de baja la cuenta.' })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   activo?: boolean;
 }

@@ -1,7 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEnum, ValidateNested } from 'class-validator';
 import { CanalNotificacion, CategoriaNotificacion } from '../../../database/entities';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 export class PreferenciaDto {
   @ApiProperty({ enum: CanalNotificacion })
@@ -13,7 +14,7 @@ export class PreferenciaDto {
   categoria: CategoriaNotificacion;
 
   @ApiProperty()
-  @IsBoolean()
+  @BooleanoEstricto()
   habilitado: boolean;
 }
 

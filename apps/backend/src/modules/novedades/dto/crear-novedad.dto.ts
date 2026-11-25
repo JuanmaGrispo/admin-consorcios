@@ -3,7 +3,6 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
-  IsBoolean,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -12,6 +11,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 export class AdjuntoNovedadDto {
   @ApiProperty({ description: 'La URL que devolvió POST /archivos?destino=novedades' })
@@ -44,7 +44,7 @@ export class CrearNovedadDto {
 
   @ApiPropertyOptional({ default: false, description: 'Queda arriba del muro' })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   fijada?: boolean;
 
   @ApiPropertyOptional({ type: [AdjuntoNovedadDto] })

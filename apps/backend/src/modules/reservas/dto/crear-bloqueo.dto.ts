@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 /** Fecha y hora de pared del edificio, sin offset: el instante lo arma la base. */
 export const FECHA_HORA = /^\d{4}-\d{2}-\d{2}[T ]([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
@@ -26,6 +27,6 @@ export class CrearBloqueoDto {
     description: 'Cancela las reservas que el bloqueo pisa en vez de rechazar el alta',
   })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   cancelarReservas?: boolean;
 }

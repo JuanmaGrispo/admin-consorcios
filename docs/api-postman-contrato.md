@@ -96,6 +96,13 @@ resultado (unos 35 s cada una).
   `true`. `PATCH /novedades/:id` con `{"fijada": "false"}` deja la novedad
   fijada. Causa: `enableImplicitConversion` del `ValidationPipe`. En los filtros
   de query no pasa porque usan `booleanoDeQuery`. La web manda booleanos reales.
+  **Corregido el 25/11:** los booleanos de los cuerpos usan `@BooleanoEstricto()`
+  (`core/booleano-estricto.ts`), que valida el valor crudo del pedido, así que
+  un texto responde 400 y no se guarda. Se aplicó a los 19 campos de 15 DTO.
+  Tests en `booleano-estricto.spec.ts` (14 casos; sin la corrección fallan 11),
+  y la colección suma el caso "Booleano enviado como texto" (297 pedidos).
+  Verificado contra la API en Docker: `{"fijada": "false"}` → 400 y la novedad
+  queda como estaba.
 - Observación sin defecto registrado: reservas y reclamos responden 400 a una
   transición de estado inválida (aprobar dos veces, cancelar una rechazada,
   pasar al mismo estado), mientras que liquidaciones, asambleas y votaciones

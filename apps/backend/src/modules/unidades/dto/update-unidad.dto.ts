@@ -1,6 +1,7 @@
 import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsOptional } from 'class-validator';
 import { CreateUnidadDto } from './create-unidad.dto';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 /**
  * El consorcio no se cambia: una unidad no se muda de edificio, y moverla
@@ -13,6 +14,6 @@ export class UpdateUnidadDto extends PartialType(
     description: 'Dar de baja o reactivar. Las unidades no se borran: tienen historia.',
   })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   activa?: boolean;
 }

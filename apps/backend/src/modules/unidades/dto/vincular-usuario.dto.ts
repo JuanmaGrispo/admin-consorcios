@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  IsBoolean,
   IsDateString,
   IsEnum,
   IsOptional,
@@ -10,6 +9,7 @@ import {
 } from 'class-validator';
 import { VinculoUnidad } from '../../../database/entities';
 import { NuevoVecinoDto } from '../../usuarios/dto/nuevo-vecino.dto';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 /** Va `usuarioId` o `nuevoUsuario`, uno de los dos. */
 export class VincularUsuarioDto {
@@ -33,7 +33,7 @@ export class VincularUsuarioDto {
     description: 'Responsable principal de la unidad. Hay uno solo vigente por unidad.',
   })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   esTitular?: boolean;
 
   @ApiPropertyOptional({ example: '2026-03-01', description: 'Si no viene, hoy' })

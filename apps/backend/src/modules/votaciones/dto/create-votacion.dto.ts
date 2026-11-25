@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   IsArray,
-  IsBoolean,
   IsDateString,
   IsEnum,
   IsNotEmpty,
@@ -18,6 +17,7 @@ import {
   MayoriaRequerida,
   PadronVotacion,
 } from '../../../database/entities';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 export class CreateVotacionDto {
   @ApiProperty({ format: 'uuid' })
@@ -80,17 +80,17 @@ export class CreateVotacionDto {
 
   @ApiPropertyOptional({ default: false, description: 'Sólo de asamblea: votar desde la app antes de que empiece' })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   permiteVotoAnticipado?: boolean;
 
   @ApiPropertyOptional({ default: false, description: 'El vecino ve el parcial antes del cierre' })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   mostrarParcial?: boolean;
 
   @ApiPropertyOptional({ default: false, description: 'Una unidad con expensas vencidas no vota' })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   bloqueaConDeuda?: boolean;
 
   @ApiPropertyOptional({ example: '2026-11-01T09:00:00-03:00', description: 'Obligatoria si es independiente' })

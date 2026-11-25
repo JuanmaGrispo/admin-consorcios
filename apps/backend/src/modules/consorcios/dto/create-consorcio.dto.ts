@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -12,6 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { PeriodicidadMora } from '../../../database/entities';
+import { BooleanoEstricto } from '../../../core/booleano-estricto';
 
 /**
  * Espeja las columnas de la tabla `consorcio`. Lo que la base marca NOT NULL y
@@ -105,6 +105,6 @@ export class CreateConsorcioDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
-  @IsBoolean()
+  @BooleanoEstricto()
   activo?: boolean;
 }
