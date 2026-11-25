@@ -125,6 +125,7 @@ test.describe('flujos críticos', () => {
 
     // Sin la vuelta del checkout y sin webhook: sólo entra a Mis expensas.
     await page.goto('/vecino/expensas');
+    await expect(page.getByText('Estás al día.')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('link', { name: /^Pagar \$/ })).toHaveCount(0);
     const pago = await (await page.request.get(`${api}/pagos/${pagoId}`)).json();
     expect(pago.estado).toBe('APROBADO');
