@@ -44,7 +44,7 @@ nuevo tiene que saber antes de tocar código.
 | [docs/mensajeria.md](docs/mensajeria.md) | Diseño de notificaciones pub/sub con RabbitMQ: eventos, bindings, sobre del mensaje |
 | [docs/asistente-ia.md](docs/asistente-ia.md) | Gobernanza del asistente de ayuda con IA: ficha, datos, apagado, riesgos y eval set |
 | [docs/ci.md](docs/ci.md) | Qué corre el CI, cuándo y cómo reproducirlo |
-| [Clase15_Grupo_Domus_Testing](docs/documentacion-final/Clase15_Grupo_Domus_Testing.pdf) | Documento de la entrega: alcance, BRD, documentación funcional, QA y testing, e IA ([en Drive](https://docs.google.com/document/d/1wkKXFamLStn9kIv_WIBYFhEKJTWsuIBTAGT9kvbUwc8/edit)) |
+| [Clase15_Grupo_Domus_Testing](docs/documentacion-final/Clase15_Grupo_Domus_Testing.pdf) | Documento de la entrega: alcance, BRD, documentación funcional, QA y testing, e IA |
 
 La integración SOAP (importe en letras con NumberConversion) está en
 [referencia-tecnica.md](docs/referencia-tecnica.md#importe-en-letras-soap).

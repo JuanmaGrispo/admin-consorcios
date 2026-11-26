@@ -8,7 +8,7 @@ Revisión del código de trabajo (base `0309d8f`, con cambios sin commit) y de e
 
 La regresión ejecutada para esta revisión aprobó **506/506 pruebas, 126 suites**, sin omisiones, en 87,02 s (`pnpm back test`). Con las pruebas del JWT sumadas por la tarde, la suite quedó en **517/517 pruebas, 128 suites**. Se reutiliza la corrida integral local del 05/11 documentada en [seguridad-dependencias.md](seguridad-dependencias.md) y las [evidencias CSP/ZAP](evidencias/zap-csp-2026-11-05.json). Los reportes completos de ZAP y de Stryker de esa fecha están versionados en `docs/evidencias/` (`zap-2026-11-05/`, `zap-csp-2026-11-05/` y `stryker-2026-11-05/`); el resumen estructurado de esta revisión está en [matriz-seguridad-2026-11-05.json](evidencias/matriz-seguridad-2026-11-05.json).
 
-[Documento original y matriz](https://docs.google.com/document/d/1wkKXFamLStn9kIv_WIBYFhEKJTWsuIBTAGT9kvbUwc8/edit). Se mantienen los requisitos y métodos originales; no se rebajan para adecuarlos al código. En el documento se conservan los controles desplegables existentes.
+[Documento de la entrega](documentacion-final/Clase15_Grupo_Domus_Testing.pdf). Se mantienen los requisitos y métodos originales; no se rebajan para adecuarlos al código. En el documento se conservan los controles desplegables existentes.
 
 ## Correcciones
 
