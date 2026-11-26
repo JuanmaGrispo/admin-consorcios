@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { RolUsuario } from '../../database/entities';
 import type { UsuarioActual } from '../auth/auth.types';
 import { ArchivosClient } from './archivos.client';
+import { quitarMetadatos } from './metadatos-imagen';
 import {
   DestinoArchivo,
   REGLAS,
@@ -75,14 +76,17 @@ export class ArchivosService {
     // barras, "..", o pisar un archivo ajeno. El uuid además hace que la URL
     // pública no se pueda adivinar.
     const ruta = `${destino}/${usuario.id}/${randomUUID()}.${extensionDe(tipo)}`;
+    // El bucket publica lo que se sube: sin esto, la foto de un reclamo
+    // llevaría la posición GPS de quien la sacó (ARC06).
+    const contenido = quitarMetadatos(archivo.buffer, tipo);
     let url: string;
-    try { url = await this.storage.subir(ruta, archivo.buffer, tipo); }
+    try { url = await this.storage.subir(ruta, contenido, tipo); }
     catch (error) {
       this.logger.warn(`Subida sin confirmación; conciliar por ruta estable: ${ruta}`);
       throw error;
     }
 
-    return { url, ruta, tipo, tamanio: archivo.buffer.length };
+    return { url, ruta, tipo, tamanio: contenido.length };
   }
 
   /**
