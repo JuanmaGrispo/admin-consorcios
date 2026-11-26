@@ -1,8 +1,8 @@
 # Matriz de seguridad — revisión del 25/11/2026
 
-Resultado al 25/11: **76 Pasa** sobre los 76 criterios de la entrega. De la lista original de 85, otros 7 no se cumplen y están declarados en [Limitaciones conocidas](#limitaciones-conocidas), y MSJ02 (no implementado) y CFG05 (sin sitio publicado para medirlo) se sacaron de la matriz el 25/11.
+Resultado al 26/11: **77 Pasa** sobre los 77 criterios de la entrega. De la lista original de 85, otros 6 no se cumplen y están declarados en [Limitaciones conocidas](#limitaciones-conocidas), y MSJ02 (no implementado) y CFG05 (sin sitio publicado para medirlo) se sacaron de la matriz el 25/11.
 
-De los 76, 20 tienen evidencia en esta matriz, 55 los registró el QA responsable el 25/11 como probados a mano, sin captura ni log archivado, y CFG06 se verificó ese día. La revisión del 05/11 había dado 18 Pasa, 9 Falla y 58 Pendiente; el 25/11 AUT10 y DIS01 pasaron a Pasa.
+De los 77, 21 tienen evidencia en esta matriz, 55 los registró el QA responsable el 25/11 como probados a mano, sin captura ni log archivado, y CFG06 se verificó ese día. ARC06 pasó el 26/11. La revisión del 05/11 había dado 18 Pasa, 9 Falla y 58 Pendiente; el 25/11 AUT10 y DIS01 pasaron a Pasa.
 
 Revisión del código de trabajo (base `0309d8f`, con cambios sin commit) y de evidencia local. No equivale a una auditoría exhaustiva de todos los endpoints ni a una aprobación de seguridad. `Pendiente` significa que falta evidencia completa, aunque exista parte de la implementación. En los criterios probados a mano, el resultado es el de la revisión del 05/11 y el registro del 25/11 va debajo. `No cumple` significa un incumplimiento observado del requisito escrito; ACC01 es una discrepancia del inventario documental, no un acceso indebido demostrado.
 
@@ -12,7 +12,7 @@ La regresión ejecutada para esta revisión aprobó **506/506 pruebas, 126 suite
 
 ## Correcciones
 
-Corregidos el 25/11: **AUT10** (las sesiones abiertas antes de un cambio de contraseña responden 401) y **DIS01** (límite por usuario con 429 en subidas, alta de reclamos, exportaciones y recordatorios). El detalle está en cada criterio.
+Corregido el 26/11: **ARC06** (las fotos se guardan sin metadatos GPS). Corregidos el 25/11: **AUT10** (las sesiones abiertas antes de un cambio de contraseña responden 401) y **DIS01** (límite por usuario con 429 en subidas, alta de reclamos, exportaciones y recordatorios). El detalle está en cada criterio.
 
 Las correcciones se realizan de a una, previa confirmación del usuario. No se cambió lógica de aplicación durante este relevamiento. Las bajas COEP/COOP/CORP fueron aceptadas sin corregir; DEF-09 y CI fueron omitidos por decisión del usuario; el resto de dependencias se corrigió el 05/11 por la tarde (CFG07). Omitir una corrección no convierte un requisito en cumplido.
 
@@ -381,6 +381,16 @@ Las rutas abreviadas se interpretan según el campo `fuentes` del JSON. Las prue
 **Fuentes:** `archivos/archivos.service.spec.ts — exigirPropia`.
 
 **Verificación prevista originalmente:** Test automático: cada módulo sólo acepta archivos de su destino.
+
+### ARC06 — Pasa (26/11)
+
+**Requisito original:** Dada una foto con ubicación GPS en sus metadatos, cuando se sube a un reclamo, entonces los metadatos se eliminan antes de guardarla.
+
+**Resultado:** Pasa desde el 26/11 (commit `9df3389`). `metadatos-imagen.ts` reescribe las fotos JPEG y PNG antes de guardarlas sin la posición GPS, el EXIF, el XMP ni los comentarios, y sin recomprimirlas: de los metadatos sólo conserva la orientación. Una imagen con la estructura rota se guarda como llegó. `metadatos-imagen.spec.ts` lo prueba. Al 05/11 el buffer original iba directo a Storage.
+
+**Fuentes:** `archivos/metadatos-imagen.ts; archivos/metadatos-imagen.spec.ts; archivos/archivos.service.ts`.
+
+**Verificación prevista originalmente:** Subir una foto con GPS y revisar el archivo guardado.
 
 ### PAG01 — Pasa
 
@@ -892,13 +902,12 @@ Las rutas abreviadas se interpretan según el campo `fuentes` del JSON. Las prue
 
 ## Limitaciones conocidas
 
-Estos 7 criterios de la lista original no se cumplen hoy y no forman parte de los 76 de la entrega. Quedan declarados para que se sepa qué falta:
+Estos 6 criterios de la lista original no se cumplen hoy y no forman parte de los 77 de la entrega. Quedan declarados para que se sepa qué falta:
 
 - **AUT06:** JWT con duración por defecto 1d; no hay refresh token ni revocación al logout. Borrar la cookie no invalida una copia del JWT.
 - **AUT09:** Reset recibe una contraseña elegida y guarda el hash; no genera clave temporal aleatoria ni exige cambio al primer ingreso.
 - **ACC01:** Hay logout marcado Public además del inventario exigido. Es una discrepancia documental de alcance: logout público es intencional, no demuestra acceso indebido a datos.
 - **ARC05:** Cliente genera URLs object/public sin firma ni vencimiento. No cumple el modelo de bucket privado con URLs temporales; no se inspeccionó política real del proveedor.
-- **ARC06:** El buffer original se envía directamente a Storage; no hay transformación ni eliminación de metadatos GPS.
 - **DAT01:** Hay retornos de entidades y de usuario completo salvo hash. No se cumple la exigencia literal de DTOs mínimos en todas las respuestas; no implica que se haya demostrado fuga de hash.
 - **DAT05:** Reset de contraseña guarda el hash sin registrar actor, fecha y acción en un registro de auditoría. Basta este flujo para incumplir el requisito conjunto; no se afirma que todos los módulos carezcan de registros.
 
@@ -941,16 +950,6 @@ Estos 7 criterios de la lista original no se cumplen hoy y no forman parte de lo
 **Fuentes:** `archivos/archivos.client.ts:51; archivos/archivos.service.ts:29`.
 
 **Verificación prevista originalmente:** Prueba manual: abrir una URL firmada vencida. Revisión de la política del bucket.
-
-### ARC06 — No cumple
-
-**Requisito original:** Dada una foto con ubicación GPS en sus metadatos, cuando se sube a un reclamo, entonces los metadatos se eliminan antes de guardarla.
-
-**Resultado:** El buffer original se envía directamente a Storage; no hay transformación ni eliminación de metadatos GPS.
-
-**Fuentes:** `archivos/archivos.service.ts:93`.
-
-**Verificación prevista originalmente:** Subir una foto con GPS y revisar el archivo guardado.
 
 ### DAT01 — No cumple
 
