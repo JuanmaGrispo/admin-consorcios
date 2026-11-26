@@ -187,3 +187,117 @@ describe('quitarMetadatos — otros tipos', () => {
     assert.deepEqual(quitarMetadatos(pdf, TipoArchivo.PDF), pdf);
   });
 });
+
+// ── Bordes: archivos raros o cortados ──────────────────────────────────────
+
+describe('quitarMetadatos — JPEG con estructuras poco comunes', () => {
+  const sos = () => segmento(0xda, Buffer.from([0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]));
+  const eoi = Buffer.from([0xff, 0xd9]);
+
+  it('lee la orientación de un EXIF little-endian («II»)', () => {
+    const tiff = Buffer.alloc(8 + 2 + 12 + 4);
+    tiff.write('II', 0, 'latin1');
+    tiff.writeUInt16LE(42, 2);
+    tiff.writeUInt32LE(8, 4);
+    tiff.writeUInt16LE(1, 8);
+    tiff.writeUInt16LE(0x0112, 10);
+    tiff.writeUInt16LE(3, 12);
+    tiff.writeUInt32LE(1, 14);
+    tiff.writeUInt16LE(8, 18);
+    const exifLe = Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), tiff, Buffer.from(GPS, 'latin1')]);
+    const foto = Buffer.concat([Buffer.from([0xff, 0xd8]), segmento(0xe1, exifLe), sos(), PIXELES, eoi]);
+    const limpio = quitarMetadatos(foto, TipoArchivo.JPEG);
+    assert.equal(contiene(limpio, GPS), false);
+    const app1 = limpio.indexOf(Buffer.from('Exif\0\0', 'latin1'));
+    assert.equal(limpio.subarray(app1 + 6).readUInt16BE(18), 8);
+  });
+
+  it('descarta un EXIF con la cabecera TIFF inválida y no inventa una orientación', () => {
+    const casos = [
+      Buffer.from('Exif\0\0MM', 'latin1'), // TIFF demasiado corto
+      Buffer.concat([Buffer.from('Exif\0\0XX\0*\0\0\0\x08', 'latin1'), Buffer.alloc(10)]), // orden de bytes desconocido
+      Buffer.concat([Buffer.from('Exif\0\0MM\0\x2b\0\0\0\x08', 'latin1'), Buffer.alloc(10)]), // no es 42
+      Buffer.concat([Buffer.from('Exif\0\0MM\0*\0\0\0\xf0', 'latin1'), Buffer.alloc(4)]), // IFD fuera del bloque
+      Buffer.concat([Buffer.from('Exif\0\0MM\0*\0\0\0\x08\0\x05', 'latin1'), Buffer.alloc(6)]), // entradas cortadas
+    ];
+    for (const exifRoto of casos) {
+      const foto = Buffer.concat([Buffer.from([0xff, 0xd8]), segmento(0xe1, exifRoto), sos(), PIXELES, eoi]);
+      const limpio = quitarMetadatos(foto, TipoArchivo.JPEG);
+      assert.equal(contiene(limpio, 'Exif'), false);
+      assert.deepEqual(limpio, Buffer.concat([Buffer.from([0xff, 0xd8]), sos(), PIXELES, eoi]));
+    }
+  });
+
+  it('una orientación fuera de rango (por ejemplo 9) no se conserva', () => {
+    const foto = Buffer.concat([Buffer.from([0xff, 0xd8]), segmento(0xe1, exif(9)), sos(), PIXELES, eoi]);
+    assert.equal(contiene(quitarMetadatos(foto, TipoArchivo.JPEG), 'Exif'), false);
+  });
+
+  it('copia los marcadores sin longitud (RST) y los bytes de relleno 0xFF', () => {
+    const foto = Buffer.concat([
+      Buffer.from([0xff, 0xd8]),
+      Buffer.from([0xff, 0xff, 0xd0]), // relleno + RST0
+      segmento(0xfe, Buffer.from(`comentario ${GPS}`, 'latin1')),
+      sos(),
+      PIXELES,
+      eoi,
+    ]);
+    const limpio = quitarMetadatos(foto, TipoArchivo.JPEG);
+    assert.equal(contiene(limpio, GPS), false);
+    assert.deepEqual(limpio.subarray(2, 4), Buffer.from([0xff, 0xd0]));
+  });
+
+  it('un JPEG que termina (EOI) sin datos de imagen se copia hasta el final', () => {
+    const foto = Buffer.concat([
+      Buffer.from([0xff, 0xd8]),
+      segmento(0xe1, exif(3)),
+      eoi,
+      Buffer.from('cola', 'latin1'),
+    ]);
+    const limpio = quitarMetadatos(foto, TipoArchivo.JPEG);
+    assert.equal(contiene(limpio, GPS), false);
+    assert.equal(contiene(limpio, 'cola'), true);
+    assert.equal(limpio.indexOf(Buffer.from('Exif\0\0', 'latin1')) > 0, true);
+  });
+
+  it('devuelve como llegó cualquier JPEG cortado o mal armado', () => {
+    const casos = [
+      Buffer.from([0xff, 0xd8]), // demasiado corto
+      Buffer.from([0x00, 0xd8, 0xff, 0xe0]), // no empieza con SOI
+      Buffer.from([0xff, 0xd8, 0x12, 0x34]), // después de SOI no viene un marcador
+      Buffer.from([0xff, 0xd8, 0xff, 0xff]), // sólo relleno hasta el final
+      Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00]), // la longitud no entra
+      Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x01]), // longitud menor a 2
+      Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x40, 0x01]), // segmento cortado
+      Buffer.concat([Buffer.from([0xff, 0xd8]), segmento(0xdb, Buffer.alloc(4))]), // sin SOS ni EOI
+    ];
+    for (const roto of casos) assert.deepEqual(quitarMetadatos(roto, TipoArchivo.JPEG), roto);
+  });
+
+  it('si algo inesperado falla al leer, devuelve el archivo original', () => {
+    const foto = jpeg();
+    foto.readUInt16BE = () => {
+      throw new RangeError('lectura imposible');
+    };
+    assert.equal(quitarMetadatos(foto, TipoArchivo.JPEG), foto);
+  });
+});
+
+describe('quitarMetadatos — PNG y WebP cortados', () => {
+  it('un PNG sin IEND, o con un chunk que se pasa del final, se devuelve como llegó', () => {
+    const sinFin = Buffer.concat([png().subarray(0, 8), chunkPng('IHDR', Buffer.alloc(13, 7))]);
+    assert.deepEqual(quitarMetadatos(sinFin, TipoArchivo.PNG), sinFin);
+    const largo = Buffer.concat([png().subarray(0, 8), Buffer.from([0, 0, 0, 0xff]), Buffer.from('IDAT', 'latin1'), Buffer.alloc(8)]);
+    assert.deepEqual(quitarMetadatos(largo, TipoArchivo.PNG), largo);
+  });
+
+  it('un WebP demasiado corto o con un chunk cortado se devuelve como llegó', () => {
+    const corto = Buffer.from('RIFF\0\0\0\0WEB', 'latin1');
+    assert.deepEqual(quitarMetadatos(corto, TipoArchivo.WEBP), corto);
+    const cabecera = webp().subarray(0, 12);
+    const chunkIncompleto = Buffer.concat([cabecera, Buffer.from('VP8 ', 'latin1')]);
+    assert.deepEqual(quitarMetadatos(chunkIncompleto, TipoArchivo.WEBP), chunkIncompleto);
+    const chunkLargo = Buffer.concat([cabecera, Buffer.from('VP8 ', 'latin1'), Buffer.from([0xff, 0, 0, 0]), Buffer.alloc(4)]);
+    assert.deepEqual(quitarMetadatos(chunkLargo, TipoArchivo.WEBP), chunkLargo);
+  });
+});
