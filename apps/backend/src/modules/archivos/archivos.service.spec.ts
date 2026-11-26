@@ -25,12 +25,12 @@ const comoArchivo = (buffer: Buffer, mimetype = 'image/jpeg'): ArchivoSubido => 
 });
 
 function crearEntorno() {
-  const subidos: { ruta: string; tipo: TipoArchivo }[] = [];
+  const subidos: { ruta: string; tipo: TipoArchivo; contenido: Buffer }[] = [];
   const borrados: string[] = [];
 
   const storage = {
-    subir: async (ruta: string, _c: Buffer, tipo: TipoArchivo) => {
-      subidos.push({ ruta, tipo });
+    subir: async (ruta: string, contenido: Buffer, tipo: TipoArchivo) => {
+      subidos.push({ ruta, tipo, contenido });
       return `${PREFIJO}${ruta}`;
     },
     borrar: async (ruta: string) => { borrados.push(ruta); },
@@ -55,6 +55,21 @@ describe('ArchivosService', () => {
       assert.equal(r.tipo, TipoArchivo.JPEG);
       assert.ok(r.url.startsWith(PREFIJO));
       assert.ok(r.url.endsWith('.jpg'));
+    });
+
+    it('guarda la foto sin la posición GPS ni los demás metadatos (ARC06)', async () => {
+      const gps = Buffer.from('Exif\0\0MM\0*GPS-34.6037S-58.3816W', 'latin1');
+      const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, 0, gps.length + 2]), gps]);
+      const conGps = Buffer.concat([
+        Buffer.from([0xff, 0xd8]),
+        app1,
+        Buffer.from([0xff, 0xda, 0, 2, 0x11, 0x22, 0xff, 0xd9]),
+      ]);
+      const r = await service.subir(vecino, DestinoArchivo.RECLAMOS, comoArchivo(conGps));
+      const guardado = entorno.subidos[0].contenido;
+      assert.equal(guardado.includes(Buffer.from('GPS', 'latin1')), false);
+      assert.deepEqual(guardado, Buffer.from([0xff, 0xd8, 0xff, 0xda, 0, 2, 0x11, 0x22, 0xff, 0xd9]));
+      assert.equal(r.tamanio, guardado.length);
     });
 
     it('la ruta lleva destino, dueño y un uuid, nunca el nombre original', async () => {
