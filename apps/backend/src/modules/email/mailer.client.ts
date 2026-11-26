@@ -55,7 +55,8 @@ export class MailerClient implements OnModuleDestroy {
   }
 
   private transportador(): Transporter {
-    this.transporte ??= createTransport(opcionesSmtp((nombre) => this.config.get<string>(nombre)));
+    // El TLS sale de opcionesSmtp (465 directo, 587 con STARTTLS obligatorio); los simuladores locales no tienen TLS.
+    this.transporte ??= createTransport(opcionesSmtp((nombre) => this.config.get<string>(nombre))); // NOSONAR
     return this.transporte;
   }
 }
