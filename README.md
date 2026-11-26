@@ -144,5 +144,5 @@ Atajos: `pnpm back <script>` y `pnpm front <script>` corren scripts de cada app
 | [Mensajería](docs/mensajeria.md) | Eventos, consumidores y topología RabbitMQ |
 | [CI](docs/ci.md) | Validaciones automatizadas |
 | [Operación y resiliencia](docs/operacion-resiliencia.md) | Procedimientos de diagnóstico y recuperación |
-| [Domus - Documentacion](<docs/Domus - Documentacion.docx>) | Documento de la entrega: alcance, BRD, documentación funcional, QA y testing, e IA ([en Drive](https://docs.google.com/document/d/1wkKXFamLStn9kIv_WIBYFhEKJTWsuIBTAGT9kvbUwc8/edit)) |
+| [Domus - Documentacion](<docs/documentacion-final/Domus - Documentacion.docx>) | Documento de la entrega: alcance, BRD, documentación funcional, QA y testing, e IA ([en Drive](https://docs.google.com/document/d/1wkKXFamLStn9kIv_WIBYFhEKJTWsuIBTAGT9kvbUwc8/edit)) |
 | [Manual de usuario](docs/checkpoint-3/pdf/manual-usuario.pdf) | Uso de los portales del vecino, la administración y la plataforma |
