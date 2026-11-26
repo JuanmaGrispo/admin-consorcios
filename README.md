@@ -145,4 +145,4 @@ Atajos: `pnpm back <script>` y `pnpm front <script>` corren scripts de cada app
 | [CI](docs/ci.md) | Validaciones automatizadas |
 | [Operación y resiliencia](docs/operacion-resiliencia.md) | Procedimientos de diagnóstico y recuperación |
 | [Clase15_Grupo_Domus_Testing](docs/documentacion-final/Clase15_Grupo_Domus_Testing.pdf) | Documento de la entrega: alcance, BRD, documentación funcional, QA y testing, e IA |
-| [Manual de usuario](docs/checkpoint-3/pdf/manual-usuario.pdf) | Uso de los portales del vecino, la administración y la plataforma |
+| [Manual de usuario](docs/documentacion-final/manual-usuario.pdf) | Uso de los portales del vecino, la administración y la plataforma |
