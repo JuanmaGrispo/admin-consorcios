@@ -53,10 +53,13 @@ export function SesionProvider({ roles, esqueleto, children }: SesionProviderPro
       .catch(() => {
         // Cookie vencida o inválida: el backend dijo 401, de vuelta al login.
         if (!cancelado) {
-          authService.logout().finally(() => {
-            router.replace('/login');
-            router.refresh();
-          });
+          authService
+            .logout()
+            .finally(() => {
+              router.replace('/login');
+              router.refresh();
+            })
+            .catch(() => {});
         }
       });
     return () => {

@@ -80,7 +80,7 @@ export class ArchivosClient {
     if (!url.startsWith(prefijo)) return null;
     try {
       const ruta = decodeURIComponent(url.slice(prefijo.length));
-      if (/[\\\x00]/.test(ruta) || ruta.split('/').some((s) => !s || s === '.' || s === '..')) return null;
+      if (ruta.includes('\\') || ruta.includes('\0') || ruta.split('/').some((s) => !s || s === '.' || s === '..')) return null;
       return ruta;
     } catch {
       return null;

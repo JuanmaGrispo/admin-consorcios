@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 
 /** El servicio público de DataAccess. Se puede cambiar por .env si alguna vez se muda. */
 const URL_POR_DEFECTO = 'https://www.dataaccess.com/webservicesserver/NumberConversion.wso';
-const NAMESPACE = 'http://www.dataaccess.com/webservicesserver/';
+const NAMESPACE = 'http://www.dataaccess.com/webservicesserver/'; // NOSONAR: es el nombre del namespace XML, no una conexión
 
 /**
  * Es cosmético: un PDF no puede quedar esperando a un servicio externo. Si no

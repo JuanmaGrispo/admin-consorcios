@@ -23,6 +23,7 @@ export function opcionesSmtp(valor: (nombre: string) => string | undefined): SMT
     host: valor('SMTP_HOST'),
     port: puerto,
     secure: puerto === 465,
+    requireTLS: puerto === 587,
     auth: { user: valor('SMTP_USER'), pass: valor('SMTP_PASS') },
     connectionTimeout: 10_000,
   };

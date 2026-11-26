@@ -68,6 +68,9 @@ const plural = (s: string) => (/[aeiou]$/i.test(s) ? `${s}s` : `${s}es`);
 /** `administrador_id` → `administrador`, para nombrar la relación. */
 const sinSufijoId = (col: string) => col.replace(/_id$/, '');
 
+/** El mismo orden que `sort()` sin argumentos: por código, sin depender del idioma. */
+const porCodigo = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 // ── Mapeo de tipos ───────────────────────────────────────────────────────────
 
 /** udt_name de Postgres → tipo de TypeScript. */
@@ -315,15 +318,15 @@ function generarEntidad(
     '// GENERADO por `pnpm back db:generate-entities` — no editar a mano.',
     `// Refleja la tabla \`${tabla}\` de la base.`,
     '',
-    `import { ${[...typeorm].sort().join(', ')} } from 'typeorm';`,
+    `import { ${[...typeorm].sort(porCodigo).join(', ')} } from 'typeorm';`,
   ];
   if (importsEnums.size) {
-    lineas.push(`import { ${[...importsEnums].sort().join(', ')} } from './enums';`);
+    lineas.push(`import { ${[...importsEnums].sort(porCodigo).join(', ')} } from './enums';`);
   }
   if (usaTransformer) {
     lineas.push(`import { numericTransformer } from '../transformers';`);
   }
-  for (const [clase, archivo] of [...importsEntidades].sort()) {
+  for (const [clase, archivo] of [...importsEntidades].sort(([a], [b]) => porCodigo(a, b))) {
     if (archivo === tabla) continue;
     lineas.push(`import { ${clase} } from './${archivo}.entity';`);
   }
@@ -397,7 +400,7 @@ async function main() {
 
   const archivos = new Map<string, string>();
   archivos.set('enums.ts', generarEnums(enumDefs));
-  for (const [tabla, columnas] of [...porTabla].sort()) {
+  for (const [tabla, columnas] of [...porTabla].sort(([a], [b]) => porCodigo(a, b))) {
     archivos.set(
       `${tabla}.entity.ts`,
       generarEntidad(tabla, columnas, constraints, nombresEnum),
@@ -411,7 +414,7 @@ async function main() {
       '// GENERADO por `pnpm back db:generate-entities` — no editar a mano.',
       '',
       `export * from './enums';`,
-      ...[...porTabla.keys()].sort().map((t) => `export * from './${t}.entity';`),
+      ...[...porTabla.keys()].sort(porCodigo).map((t) => `export * from './${t}.entity';`),
       '',
     ].join('\n'),
   );
